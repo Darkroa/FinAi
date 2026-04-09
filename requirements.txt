@@ -29,7 +29,7 @@ apscheduler==3.11.0
 pandas==2.2.3
 numpy==2.2.1
 yfinance==0.2.48
-alpaca-py==2.3.0
+alpaca-py==0.43.2
 plotly==5.24.0
 
 # Notifications & Integrations
