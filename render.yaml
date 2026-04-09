@@ -1,14 +1,35 @@
 version: 1
 
+# ====================== Databases ======================
+databases:
+  - name: finforge-db
+    plan: starter          # Change to "free" if you want the free tier (limited)
+    region: oregon         # or frankfurt, singapore, etc.
+    databaseName: finforge
+    user: finuser
+    ipAllowList: []        # Add your IP if needed for external access
+
+# ====================== Redis (Key Value) ======================
 services:
-  - type: web
+  - type: keyvalue
+    name: finforge-redis
+    plan: free             # or starter
+    region: oregon
+    ipAllowList: []
+
+# ====================== Main Services ======================
+
+  # --- API (FastAPI) ---
+  - type: websites 
     name: finforge-api
     runtime: docker
-    dockerfilePath: Dockerfile
-    dockerCommand: uvicorn src.api.main:app --host 0.0.0.0 --port $PORT
+    plan: starter
     region: oregon
-    plan: free
+    dockerfilePath: ./Dockerfile
+    dockerContext: .
     envVars:
+      - key: PORT
+        value: 8000
       - key: DATABASE_URL
         fromDatabase:
           name: finforge-db
@@ -19,23 +40,98 @@ services:
           name: finforge-redis
           property: connectionString
       - key: GROK_API_KEY
-        sync: false
+        sync: false          # Set this manually in Render Dashboard
       - key: OPENAI_API_KEY
         sync: false
-      - key: JWT_SECRET_KEY
-        generateValue: true
+      - key: API_BASE_URL
+        value: /api
+    healthCheckPath: /docs
+    autoDeploy: true
 
+  # --- Main Chat UI (Gradio on port 7860) ---
+  - type: web
+    name: finforge-chat
+    runtime: docker
+    plan: starter
+    region: oregon
+    dockerfilePath: ./Dockerfile
+    dockerContext: .
+    dockerCommand: python -m src.frontend.chat_ui
+    envVars:
+      - key: PORT
+        value: 7860
+      - key: API_URL
+        value: https://finforge-api.onrender.com   # Update after first deploy
+    healthCheckPath: /
 
+  # --- Trading Dashboard (Gradio on port 7861) ---
+  - type: web
+    name: finforge-trading
+    runtime: docker
+    plan: starter
+    region: oregon
+    dockerfilePath: ./Dockerfile
+    dockerContext: .
+    dockerCommand: python -m src.frontend.bot_dashboard
+    envVars:
+      - key: PORT
+        value: 7861
+      - key: API_URL
+        value: https://finforge-api.onrender.com
+    healthCheckPath: /
 
-  - type: keyvalue
-    name: finforge-redis
-    plan: free
-    ipAllowList:
-      - source: 0.0.0.0/0
-        description: Allow all (restrict in production)
+  # --- User Dashboard (Streamlit) ---
+  - type: web
+    name: finforge-user-dashboard
+    runtime: docker
+    plan: starter
+    region: oregon
+    dockerfilePath: ./Dockerfile
+    dockerContext: .
+    dockerCommand: streamlit run src/frontend/user_dashboard.py --server.port $PORT --server.address 0.0.0.0 --server.headless true
+    envVars:
+      - key: PORT
+        value: 8501
+      - key: API_URL
+        value: https://finforge-api.onrender.com
+    healthCheckPath: /healthz   # Streamlit usually responds on root, adjust if needed
 
-databases:
-  - name: finforge-db
-    databaseName: finforge
-    user: finuser
-    plan: free
+  # --- Admin Panel (Streamlit) ---
+  - type: web
+    name: finforge-admin
+    runtime: docker
+    plan: starter
+    region: oregon
+    dockerfilePath: ./Dockerfile
+    dockerContext: .
+    dockerCommand: streamlit run admin/admin_dashboard.py --server.port $PORT --server.address 0.0.0.0 --server.headless true
+    envVars:
+      - key: PORT
+        value: 8502
+      - key: API_URL
+        value: https://finforge-api.onrender.com
+
+  # --- Landing Page (Static HTML served via Nginx) ---
+  - type: web
+    name: finforge-landing
+    runtime: docker
+    plan: free             # Static sites are very cheap
+    region: oregon
+    dockerfilePath: ./Dockerfile
+    dockerContext: .
+    dockerCommand: |
+      apk add --no-cache nginx && \
+      nginx -g 'daemon off;'
+    envVars:
+      - key: PORT
+        value: 80
+    # Optional: You can also use Render's native Static Site runtime if you prefer
+     runtime: static
+     staticPublishPath: ./src/frontend/landing
+    healthCheckPath: /
+
+# Optional: Add a background worker if you have one later
+#  - type: worker
+#    name: finforge-worker
+#    runtime: docker
+#    ...
