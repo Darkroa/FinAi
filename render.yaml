@@ -40,20 +40,24 @@ services:
     name: finforge-dashboard
     runtime: docker
     dockerfilePath: Dockerfile
-    # Best practice: Use shell wrapper so $PORT works and streamlit is found reliably
-    dockerCommand: /bin/sh -c "streamlit run src/frontend/user_dashboard.py --server.port=$PORT --server.address=0.0.0.0 --server.headless=true --server.enableCORS=false"
+    # Fixed with shell wrapper — this solves the PATH issue
+    dockerCommand: /bin/sh -c "streamlit run src/frontend/user_dashboard.py --server.port=$PORT --server.address=0.0.0.0 --server.headless=true"
     region: oregon
     plan: free
     envVars:
       - key: GROK_API_KEY
         sync: false
+      - key: STREAMLIT_SERVER_HEADLESS
+        value: "true"
+      - key: STREAMLIT_SERVER_ENABLE_CORS
+        value: "false"
 
   - type: keyvalue
     name: finforge-redis
     plan: free
     ipAllowList:
       - source: 0.0.0.0/0
-        description: Allow all (tighten this in production)
+        description: Allow all (restrict in production)
 
 databases:
   - name: finforge-db
