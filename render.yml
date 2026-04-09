@@ -1,0 +1,61 @@
+version: 1
+
+services:
+  - type: web
+    name: finforge-api
+    runtime: docker          # Changed from env: docker (both work, but runtime is preferred)
+    dockerfilePath: Dockerfile
+    dockerCommand: uvicorn src.api.main:app --host 0.0.0.0 --port $PORT
+    region: oregon
+    plan: free
+    envVars:
+      - key: DATABASE_URL
+        fromDatabase:
+          name: finforge-db
+          property: connectionString
+      - key: REDIS_URL
+        fromService:
+          type: keyvalue
+          name: finforge-redis
+          property: connectionString
+      - key: GROK_API_KEY
+        sync: false
+      - key: OPENAI_API_KEY
+        sync: false
+      - key: JWT_SECRET_KEY
+        generateValue: true
+
+  - type: web
+    name: finforge-chat
+    runtime: docker
+    dockerfilePath: Dockerfile
+    dockerCommand: python -m src.frontend.chat_ui
+    region: oregon
+    plan: free
+    envVars:
+      - key: GROK_API_KEY
+        sync: false
+
+  - type: web
+    name: finforge-dashboard
+    runtime: docker
+    dockerfilePath: Dockerfile
+    dockerCommand: streamlit run src/frontend/user_dashboard.py --server.port $PORT --server.address 0.0.0.0
+    region: oregon
+    plan: free
+    envVars:
+      - key: GROK_API_KEY
+        sync: false
+
+  - type: keyvalue
+    name: finforge-redis
+    plan: free
+    ipAllowList:
+      - source: 0.0.0.0/0
+        description: Allow all (restrict in production if needed)
+
+databases:
+  - name: finforge-db
+    databaseName: finforge
+    user: finuser
+    plan: free

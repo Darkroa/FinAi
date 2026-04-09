@@ -1,0 +1,64 @@
+# Core API & Server
+fastapi==0.135.2
+uvicorn[standard]==0.34.0
+pydantic==2.10.0
+python-multipart==0.0.20
+
+# LLM & LangChain (newer stable versions)
+langchain==1.2.13
+langchain-community==1.0.0
+langchain-openai==1.1.12
+langchain-core==1.2.21
+langchain-groq==0.2.0
+tiktoken==0.8.0
+
+# Vector DB & Embeddings
+chromadb==0.6.0
+
+# Database & Migrations
+sqlalchemy==2.0.38
+psycopg2-binary==2.9.10
+alembic==1.14.0
+
+# Task Queue & Scheduler
+celery[redis]==5.4.0
+redis==5.2.1
+apscheduler==3.11.0
+
+# Data & Finance
+pandas==2.2.3
+numpy==2.2.1
+yfinance==0.2.48
+alpaca-py==2.3.0
+plotly==5.24.0
+
+# Notifications & Integrations
+twilio==9.0.0
+python-telegram-bot==21.0.1
+slack-sdk==3.33.0
+
+# Auth & Security
+bcrypt==4.2.0
+passlib[bcrypt]==1.7.4
+python-jose[cryptography]==3.3.0
+
+# Frontend / Dashboards
+gradio==5.0.0
+streamlit==1.39.0
+
+# Ingestion & Parsing
+beautifulsoup4==4.12.3
+feedparser==6.0.11
+newspaper3k==0.2.8
+requests==2.32.3
+
+# Monitoring & Utils
+prometheus-fastapi-instrumentator==7.0.0
+prometheus-client==0.21.0
+loguru==0.7.3
+python-dotenv==1.0.1
+pyyaml==6.0.2
+httpx==0.28.1
+slowapi==0.1.9
+qrcode==7.4.2
+Pillow==10.4.0

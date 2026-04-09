@@ -1,0 +1,32 @@
+{
+  "title": "FinEventAI - Financial Events & System Monitoring",
+  "tags": ["finance", "events"],
+  "panels": [
+    {
+      "title": "Events Detected (Last 24h)",
+      "type": "stat",
+      "targets": [{ "expr": "sum(increase(finevent_events_detected_total[24h]))" }]
+    },
+    {
+      "title": "High Impact Events",
+      "type": "table",
+      "targets": [{ "expr": "finevent_events_impact_score > 7" }]
+    },
+    {
+      "title": "API Request Rate",
+      "type": "graph",
+      "targets": [{ "expr": "rate(http_requests_total[5m])" }]
+    },
+    {
+      "title": "Event Ingestion Latency",
+      "type": "graph",
+      "targets": [{ "expr": "histogram_quantile(0.95, sum(rate(finevent_ingestion_duration_seconds_bucket[5m])) by (le))" }]
+    },
+    {
+      "title": "Celery Task Success Rate",
+      "type": "gauge",
+      "targets": [{ "expr": "sum(celery_tasks_succeeded_total) / sum(celery_tasks_total)" }]
+    }
+  ],
+  "time": { "from": "now-24h", "to": "now" }
+}

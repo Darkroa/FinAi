@@ -1,0 +1,56 @@
+import requests
+from loguru import logger
+from typing import List, Dict
+import os
+
+class NewsAPIClient:
+    def __init__(self):
+        self.api_key = os.getenv("NEWSAPI_KEY")
+        self.base_url = "https://newsapi.org/v2"
+
+    def fetch_financial_news(self, q: str = "finance OR stock OR market", limit: int = 20) -> List[Dict]:
+        if not self.api_key:
+            logger.warning("NEWSAPI_KEY not set – skipping NewsAPI")
+            return []
+        params = {
+            "q": q,
+            "language": "en",
+            "sortBy": "publishedAt",
+            "pageSize": limit,
+            "apiKey": self.api_key
+        }
+        try:
+            resp = requests.get(f"{self.base_url}/everything", params=params, timeout=10)
+            resp.raise_for_status()
+            articles = resp.json().get("articles", [])
+            logger.info(f"✅ NewsAPI returned {len(articles)} articles")
+            return articles
+        except Exception as e:
+            logger.error(f"NewsAPI error: {e}")
+            return []
+
+class AlphaVantageClient:
+    def __init__(self):
+        self.api_key = os.getenv("ALPHA_VANTAGE_KEY")
+        self.base_url = "https://www.alphavantage.co/query"
+
+    def fetch_news_sentiment(self, tickers: str = "", limit: int = 20) -> List[Dict]:
+        if not self.api_key:
+            logger.warning("ALPHA_VANTAGE_KEY not set – skipping")
+            return []
+        params = {
+            "function": "NEWS_SENTIMENT",
+            "tickers": tickers,
+            "limit": limit,
+            "apikey": self.api_key
+        }
+        try:
+            resp = requests.get(self.base_url, params=params, timeout=10)
+            resp.raise_for_status()
+            data = resp.json()
+            articles = data.get("feed", [])
+            logger.info(f" Alpha Vantage returned {len(articles)} sentiment articles")
+            return articles
+        except Exception as e:
+            logger.error(f"Alpha Vantage error: {e}")
+            return [] []
