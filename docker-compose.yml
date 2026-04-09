@@ -64,7 +64,7 @@ services:
 
   streamlit:
     build: .
-    command: streamlit run src/frontend/user_dashboard.py --server.port 8503 --server.address 0.0.0.0
+    command: streamlit run src/frontend/user_dashboard.py 
     ports:
       - "8503:8503"
     depends_on:
