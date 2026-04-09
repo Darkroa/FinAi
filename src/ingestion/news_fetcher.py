@@ -49,4 +49,4 @@ class NewsFetcher:
 
     def run(self):
         """Sync wrapper for Celery / scheduler"""
-        return asyncio.run(self.fetch_all()))
+        return asyncio.run(self.fetch_all())
