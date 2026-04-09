@@ -9,42 +9,76 @@ from src.notifications.scheduler import scheduler
 from src.database.models import Base
 from src.database.session import engine
 
-app = FastAPI(title="FinForgeAI API", version="1.0.0")
+app = FastAPI(
+    title="FinAi API",           # Changed to match your repo name
+    version="1.0.0",
+    description="AI-Powered Financial News Ingestion & Automated Trading Platform",
+    docs_url="/docs",
+    redoc_url="/redoc"
+)
 
-# CORS
+# ===================== Middleware =====================
+# CORS - Be more restrictive in production!
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=["*"],                    # Change to specific domains in production
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-# Rate Limiting + Usage Logging Middleware
+# Custom Rate Limiting + API Usage Logging Middleware
 app.add_middleware(APIRateLimitMiddleware)
 
-# Prometheus monitoring
+# Prometheus metrics
 Instrumentator().instrument(app).expose(app, endpoint="/metrics")
 
-# Include all routes
+# Include API routes with prefix
 app.include_router(router, prefix="/api")
 
-# Create tables on startup (development)
+
+# ===================== Startup & Shutdown Events =====================
 @app.on_event("startup")
 async def startup_event():
+    # Create database tables (only for development - use Alembic in production!)
     Base.metadata.create_all(bind=engine)
+    
+    # Start notification scheduler
     scheduler.start()
-    logger.success("🚀 FinForgeAI API started with rate limiting and API key support")
+    
+    logger.success("🚀 FinAi API started successfully")
+    logger.info("📊 Docs available at: http://localhost:8000/docs")
+    logger.info("📈 Metrics available at: http://localhost:8000/metrics")
 
+
+@app.on_event("shutdown")
+async def shutdown_event():
+    try:
+        scheduler.shutdown()
+        logger.info("🛑 Scheduler shut down gracefully")
+    except Exception as e:
+        logger.error(f"Error during shutdown: {e}")
+
+
+# ===================== Root Endpoint =====================
 @app.get("/")
 async def root():
     return {
-        "message": "FinForgeAI API is running",
+        "message": "Welcome to FinAi - AI Powered Trading Platform",
         "version": "1.0.0",
+        "status": "healthy",
         "docs": "/docs",
-        "status": "healthy"
+        "metrics": "/metrics",
+        "api_prefix": "/api"
     }
+
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+    uvicorn.run(
+        "main:app", 
+        host="0.0.0.0", 
+        port=8000,
+        reload=True,           # Enable auto-reload during development
+        log_level="info"
+    )
