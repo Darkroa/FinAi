@@ -40,7 +40,7 @@ services:
     name: finforge-dashboard
     runtime: docker
     dockerfilePath: Dockerfile
-    dockerCommand: streamlit run src/frontend/user_dashboard.py --server.port $PORT --server.address 0.0.0.0
+    dockerCommand: streamlit run src/frontend/user_dashboard.py 
     region: oregon
     plan: free
     envVars:
