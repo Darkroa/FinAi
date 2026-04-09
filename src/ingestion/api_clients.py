@@ -1,59 +1,67 @@
-import feedparser
 import requests
-from bs4 import BeautifulSoup
 from loguru import logger
 from typing import List, Dict
-from datetime import datetime
+import os
 
-def parse_rss_feed(url: str, limit: int = 15) -> List[Dict]:
-    """Parse RSS feed and return clean article dicts"""
-    try:
-        feed = feedparser.parse(url)
-        articles = []
+class NewsAPIClient:
+    def __init__(self):
+        self.api_key = os.getenv("NEWSAPI_KEY")
+        self.base_url = "https://newsapi.org/v2"
 
-        for entry in feed.entries[:limit]:
-            # Try to get full text if summary is short
-            summary = entry.get("summary", entry.get("description", ""))
-            if len(summary) < 100 and entry.get("link"):
-                try:
-                    resp = requests.get(entry.link, timeout=8)
-                    soup = BeautifulSoup(resp.text, "html.parser")
-                    paragraphs = soup.find_all("p")
-                    full_text = " ".join(p.get_text() for p in paragraphs[:5])
-                except:
-                    full_text = summary
-            else:
-                full_text = summary
+    def fetch_financial_news(self, q: str = "finance OR stock OR market", limit: int = 20) -> List[Dict]:
+        if not self.api_key:
+            logger.warning("NEWSAPI_KEY not set – skipping NewsAPI")
+            return []
 
-            article = {
-                "title": entry.get("title", "No Title"),
-                "link": entry.get("link"),
-                "summary": summary[:500],
-                "full_text": full_text[:2000],
-                "published": entry.get("published_parsed") or entry.get("updated_parsed"),
-                "source": feed.feed.get("title", "Unknown"),
-                "source_url": url
-            }
-            articles.append(article)
+        params = {
+            "q": q,
+            "language": "en",
+            "sortBy": "publishedAt",
+            "pageSize": limit,
+            "apiKey": self.api_key
+        }
 
-        logger.info(f"✅ RSS {feed.feed.get('title', 'Unknown')} → {len(articles)} articles")
-        return articles
-
-    except Exception as e:
-        logger.error(f"Failed to parse RSS feed {url}: {e}")
-        return []
+        try:
+            resp = requests.get(f"{self.base_url}/everything", params=params, timeout=12)
+            resp.raise_for_status()
+            articles = resp.json().get("articles", [])
+            logger.info(f"✅ NewsAPI returned {len(articles)} articles")
+            return articles
+        except requests.exceptions.RequestException as e:
+            logger.error(f"NewsAPI request failed: {e}")
+            return []
+        except Exception as e:
+            logger.error(f"Unexpected NewsAPI error: {e}")
+            return []
 
 
-def save_articles(articles: List[Dict]):
-    """Save articles to JSON (temporary) – later replace with DB save"""
-    import json
-    from pathlib import Path
+class AlphaVantageClient:
+    def __init__(self):
+        self.api_key = os.getenv("ALPHA_VANTAGE_KEY")
+        self.base_url = "https://www.alphavantage.co/query"
 
-    try:
-        Path("data").mkdir(exist_ok=True)
-        filename = f"data/articles_{datetime.now().strftime('%Y%m%d_%H%M')}.json"
-        with open(filename, "w", encoding="utf-8") as f:
-            json.dump(articles, f, ensure_ascii=False, indent=2)
-        logger.info(f"Articles saved to {filename}")
-    except Exception as e:
-        logger.error(f"Failed to save articles: {e}")
+    def fetch_news_sentiment(self, tickers: str = "AAPL,MSFT,GOOGL", limit: int = 20) -> List[Dict]:
+        if not self.api_key:
+            logger.warning("ALPHA_VANTAGE_KEY not set – skipping Alpha Vantage")
+            return []
+
+        params = {
+            "function": "NEWS_SENTIMENT",
+            "tickers": tickers,
+            "limit": limit,
+            "apikey": self.api_key
+        }
+
+        try:
+            resp = requests.get(self.base_url, params=params, timeout=12)
+            resp.raise_for_status()
+            data = resp.json()
+            articles = data.get("feed", [])
+            logger.info(f"✅ Alpha Vantage returned {len(articles)} sentiment articles")
+            return articles
+        except requests.exceptions.RequestException as e:
+            logger.error(f"Alpha Vantage request failed: {e}")
+            return []
+        except Exception as e:
+            logger.error(f"Unexpected Alpha Vantage error: {e}")
+            return []
