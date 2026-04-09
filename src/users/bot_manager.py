@@ -1,41 +1,50 @@
 from src.trading.trade_bot import TradingBotInstance
 from loguru import logger
-from typing import Dict
+from typing import Dict, List
+
 
 class UserBotManager:
-    """Per-user isolated bot manager"""
+    """Manages trading bots per user (isolated per user)"""
+
     def __init__(self, user_id: int, user_email: str):
         self.user_id = user_id
         self.user_email = user_email
-        self.bots: Dict[str, TradingBotInstance] = {}   # ticker -> bot
+        self.bots: Dict[str, TradingBotInstance] = {}   # ticker -> bot instance
 
-    def start_bot(self, ticker: str, paper: bool = True):
+    def start_bot(self, ticker: str, paper: bool = True) -> str:
         if ticker in self.bots and self.bots[ticker].running:
-            return f"Bot for {ticker} already running for this user"
-        
-        bot = TradingBotInstance(ticker, paper=paper)
-        self.bots[ticker] = bot
-        bot.start(ticker)
-        logger.info(f"User {self.user_email} started bot on {ticker} (Paper: {paper})")
-        return f"✅ Started bot on {ticker} for your account"
+            return f"Bot for {ticker} is already running."
 
-    def stop_bot(self, ticker: str = "ALL"):
+        bot = TradingBotInstance(ticker=ticker, paper=paper, user_id=self.user_id)
+        self.bots[ticker] = bot
+        bot.start()
+
+        logger.info(f"User {self.user_email} started {'paper' if paper else 'LIVE'} bot on {ticker}")
+        return f"✅ Bot started successfully on {ticker} (Paper Trading: {paper})"
+
+    def stop_bot(self, ticker: str = "ALL") -> str:
         if ticker == "ALL":
-            for t in list(self.bots.keys()):
-                self.bots[t].stop()
+            for t, bot in list(self.bots.items()):
+                bot.stop()
             self.bots.clear()
-            return "All your bots stopped"
+            return "All bots stopped successfully."
+
         if ticker in self.bots:
             self.bots[ticker].stop()
             del self.bots[ticker]
-            return f"Stopped bot on {ticker}"
-        return "Bot not found for your account"
+            return f"Bot on {ticker} stopped."
 
-    def get_status(self):
-        return {ticker: bot.get_status() for ticker, bot in self.bots.items()}
+        return f"No active bot found for ticker {ticker}."
 
-    def get_trades(self):
+    def get_status(self) -> dict:
+        return {
+            ticker: bot.get_status() 
+            for ticker, bot in self.bots.items()
+        }
+
+    def get_trades(self, limit: int = 50) -> List[dict]:
         all_trades = []
         for bot in self.bots.values():
             all_trades.extend(bot.trades)
-        return sorted(all_trades, key=lambda x: x.get("time"), reverse=True)
+        # Sort by time (newest first)
+        return sorted(all_trades, key=lambda x: x.get("time", ""), reverse=True)[:limit]
