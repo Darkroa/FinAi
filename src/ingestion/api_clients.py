@@ -53,4 +53,4 @@ class AlphaVantageClient:
             return articles
         except Exception as e:
             logger.error(f"Alpha Vantage error: {e}")
-            return [] []
+            return [] 
