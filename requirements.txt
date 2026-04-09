@@ -1,64 +1,64 @@
 # Core API & Server
-fastapi==0.135.3
-uvicorn[standard]==0.44.0
-pydantic==2.12.5
-python-multipart==0.0.20
+fastapi
+uvicorn[standard]
+pydantic
+python-multipart
 
 # LLM & LangChain
-langchain==1.2.15
-langchain-community==0.4.1
-langchain-openai==1.1.12
-langchain-core==1.2.21
-langchain-groq==0.2.0
-tiktoken==0.8.0
+langchain
+langchain-community
+langchain-openai
+langchain-core
+langchain-groq
+tiktoken
 
 # Vector DB & Embeddings
-chromadb==1.5.7
+chromadb
 
 # Database & Migrations
-sqlalchemy==2.0.49
-psycopg2-binary==2.9.10
-alembic==1.14.0
+sqlalchemy
+psycopg2-binary
+alembic
 
 # Task Queue & Scheduler
-celery[redis]==5.6.3
-redis==5.2.1
-apscheduler==3.11.0
+celery[redis]
+redis
+apscheduler
 
 # Data & Finance
-pandas==2.2.3
-numpy==2.2.1
-yfinance==0.2.48
-alpaca-py==0.43.2
-plotly==5.24.0
+pandas
+numpy
+yfinance
+alpaca-py
+plotly
 
 # Notifications & Integrations
-twilio==9.0.0
-python-telegram-bot==21.0.1
-slack-sdk==3.33.0
+twilio
+python-telegram-bot
+slack-sdk
 
 # Auth & Security
-bcrypt==4.2.0
-passlib[bcrypt]==1.7.4
-python-jose[cryptography]==3.3.0
+bcrypt
+passlib[bcrypt]
+python-jose[cryptography]
 
 # Frontend / Dashboards
-gradio==6.11.0
-streamlit==1.56.0
+gradio
+streamlit
 
 # Ingestion & Parsing
-beautifulsoup4==4.12.3
-feedparser==6.0.11
-newspaper3k==0.2.8
-requests==2.32.3
+beautifulsoup4
+feedparser
+newspaper3k
+requests
 
 # Monitoring & Utils
-prometheus-fastapi-instrumentator==7.0.0
-prometheus-client==0.21.0
-loguru==0.7.3
-python-dotenv==1.0.1
-pyyaml==6.0.2
-httpx==0.28.1
-slowapi==0.1.9
-qrcode==7.4.2
-Pillow==10.4.0
+prometheus-fastapi-instrumentator
+prometheus-client
+loguru
+python-dotenv
+pyyaml
+httpx
+slowapi
+qrcode
+Pillow
