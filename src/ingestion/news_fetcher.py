@@ -18,35 +18,39 @@ class NewsFetcher:
         self.news_api = NewsAPIClient()
         self.alpha = AlphaVantageClient()
 
-    async def fetch_all(self, limit_per_source: int = 15):
+    async def fetch_all(self, limit_per_source: int = 12):
         logger.info("🚀 Starting full financial news ingestion...")
         all_articles = []
 
-        # 1. RSS Feeds (fastest)
+        # 1. RSS Feeds (synchronous but fast)
         for feed in RSS_FEEDS:
             articles = parse_rss_feed(feed["url"], limit=limit_per_source)
             all_articles.extend(articles)
 
         # 2. NewsAPI
         newsapi_articles = self.news_api.fetch_financial_news(limit=limit_per_source)
-        all_articles.extend([{
-            "title": a["title"],
-            "link": a["url"],
-            "summary": a["description"],
-            "published": a["publishedAt"],
-            "full_text": "",  # full text later if needed
-            "source": a["source"]["name"]
-        } for a in newsapi_articles])
+        all_articles.extend([
+            {
+                "title": a.get("title"),
+                "link": a.get("url"),
+                "summary": a.get("description"),
+                "published": a.get("publishedAt"),
+                "full_text": "",  
+                "source": a.get("source", {}).get("name", "NewsAPI")
+            }
+            for a in newsapi_articles
+        ])
 
-        # 3. Alpha Vantage News Sentiment
+        # 3. Alpha Vantage
         av_articles = self.alpha.fetch_news_sentiment(limit=limit_per_source)
         all_articles.extend(av_articles)
 
-        # Save everything
+        # Save
         save_articles(all_articles)
-        logger.success(f"🎉 Ingestion complete! Total articles: {len(all_articles)}")
+
+        logger.success(f"🎉 Ingestion complete! Total articles collected: {len(all_articles)}")
         return all_articles
 
     def run(self):
-        """Sync wrapper for Celery / scheduler"""
-        return asyncio.run(self.fetch_all())
+        """Synchronous wrapper used by Celery"""
+        return asyncio.run(self.fetch_all()
