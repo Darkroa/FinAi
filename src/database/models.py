@@ -1,427 +1,183 @@
-import streamlit as st
-import pandas as pd
+from sqlalchemy import Column, Integer, String, Float, Boolean, DateTime, JSON, Text, DECIMAL, ForeignKey
+from sqlalchemy.orm import relationship
+from sqlalchemy.ext.declarative import declarative_base
 from datetime import datetime
-import io
-from src.database.session import SessionLocal
-from src.database.models import User
+import bcrypt
 
-st.set_page_config(page_title="FinForgeAI Admin", layout="wide")
-
-st.title("🔧 FinForgeAI Admin Panel")
-
-db = SessionLocal()
+Base = declarative_base()
 
 
+# ===================== USER MODEL =====================
+class User(Base):
+    __tablename__ = "users"
 
-if "admin_jwt" not in st.session_state:
-    st.session_state.admin_jwt = None
+    id = Column(Integer, primary_key=True, index=True)
+    email = Column(String(255), unique=True, nullable=False, index=True)
+    hashed_password = Column(String(255), nullable=False)
+    full_name = Column(String(100))
 
-if not st.session_state.admin_jwt:
-    st.title("🔧 Admin Login")
-    email = st.text_input("Admin Email")
-    password = st.text_input("Password", type="password")
-    if st.button("Login as Admin"):
-        resp = requests.post(f"{API_BASE}/auth/login", json={"email": email, "password": password})
-        if resp.status_code == 200:
-            st.session_state.admin_jwt = resp.json()["access_token"]
-            st.rerun()
-        else:
-            st.error("Invalid admin credentials")
-    st.stop()
+    # Verification & Security
+    is_active = Column(Boolean, default=True)           # Changed default to True (better UX)
+    is_mail_verified = Column(Boolean, default=False)
+    is_banned = Column(Boolean, default=False)
+    is_admin = Column(Boolean, default=False)
 
-st.title("🔧 FinForgeAI Admin Panel")
+    # Personal Information
+    username = Column(String(50), unique=True, nullable=True)
+    first_name = Column(String(100), nullable=True)
+    middle_name = Column(String(100), nullable=True)
+    last_name = Column(String(100), nullable=True)
+    sex = Column(String(20), nullable=True)
+    phone = Column(String(30), nullable=True)
+    country = Column(String(100), nullable=True)
+    dob = Column(DateTime, nullable=True)
+    address = Column(Text, nullable=True)
 
-headers = {"Authorization": f"Bearer {st.session_state.admin_jwt}"}
+    # Trading Preferences
+    default_capital = Column(Float, default=10000.0)
+    risk_per_trade = Column(Float, default=1.0)      # 1% risk per trade
+    max_drawdown = Column(Float, default=10.0)
+    preferred_tickers = Column(JSON, default=list)   # Better default
+    notification_preferences = Column(JSON, default=dict)
 
-# ===================== ALL USERS TABLE WITH SEARCH & FILTER =====================
-st.subheader("All Users")
+    # Broker API Keys (store encrypted in production!)
+    alpaca_api_key = Column(String(255), nullable=True)
+    alpaca_secret_key = Column(String(255), nullable=True)
 
-users = db.query(User).all()
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    # Relationships
+    api_keys = relationship("APIKey", back_populates="user", cascade="all, delete-orphan")
+    complaints = relationship("Complaint", back_populates="user", cascade="all, delete-orphan")
+    money_transactions = relationship("UserMoney", back_populates="user", cascade="all, delete-orphan")
+
+    def verify_password(self, plain_password: str) -> bool:
+        """Verify plain password against hashed one"""
+        if not self.hashed_password:
+            return False
+        return bcrypt.checkpw(plain_password.encode('utf-8'), self.hashed_password.encode('utf-8'))
+
+    @staticmethod
+    def hash_password(password: str) -> str:
+        """Hash password using bcrypt"""
+        return bcrypt.hashpw(password.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
 
 
-tab1, tab2 = st.tabs(["Users", "Complaints"])
+# ===================== FINANCIAL EVENTS =====================
+class FinancialEvent(Base):
+    __tablename__ = "financial_events"
 
-# ===================== USERS TAB =====================
-with tab1:
-    st.subheader("All Users")
-    resp = requests.get(f"{API_BASE}/admin/users", headers=headers)
-    users = resp.json() if resp.status_code == 200 else []
-    df = pd.DataFrame(users)
-    st.dataframe(df, use_container_width=True)
+    id = Column(Integer, primary_key=True, index=True)
+    event_type = Column(String(100), nullable=False)
+    title = Column(String(500), nullable=False)
+    description = Column(Text)
+    tickers_affected = Column(JSON, default=list)
+    impact_score = Column(Integer, default=0)
+    sentiment = Column(String(20))          # positive, negative, neutral
+    confidence = Column(Float, default=0.0)
+    short_term_impact = Column(Text)
+    medium_term_impact = Column(Text)
+    risk_level = Column(String(20))         # low, medium, high
+    published_date = Column(DateTime)
+    source_url = Column(String(500))
+    created_at = Column(DateTime, default=datetime.utcnow)
 
-# ===================== COMPLAINTS TAB =====================
-with tab2:
-    st.subheader("User Complaints & Messages")
+
+# ===================== TREND ANALYSIS =====================
+class TrendAnalysis(Base):
+    __tablename__ = "trend_analyses"
+
+    id = Column(Integer, primary_key=True, index=True)
+    ticker = Column(String(20), nullable=False, index=True)
+    timestamp = Column(DateTime, default=datetime.utcnow)
+    current_price = Column(Float, nullable=False)
+    upper_trend = Column(Float)
+    lower_trend = Column(Float)
+    breakout_up = Column(Boolean, default=False)
+    breakout_dn = Column(Boolean, default=False)
+    predicted_price = Column(Float)
+    confidence = Column(Float, default=0.0)
+    prediction_text = Column(Text)
+    trend_state = Column(String(20))        # bullish, bearish, sideways
+    atr = Column(Float)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+
+# ===================== API KEYS =====================
+class APIKey(Base):
+    __tablename__ = "api_keys"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    key_name = Column(String(100), nullable=False)
+    api_key = Column(String(64), unique=True, nullable=False, index=True)
+    is_active = Column(Boolean, default=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    last_used_at = Column(DateTime, nullable=True)
+    expires_at = Column(DateTime, nullable=True)
+    allowed_scopes = Column(JSON, default=list)
+
+    # Relationship
+    user = relationship("User", back_populates="api_keys")
+
+
+# ===================== API USAGE LOGS =====================
+class APIUsageLog(Base):
+    __tablename__ = "api_usage_logs"
+
+    id = Column(Integer, primary_key=True, index=True)
+    api_key_id = Column(Integer, ForeignKey("api_keys.id"), nullable=False, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    endpoint = Column(String(200), nullable=False)
+    method = Column(String(10))
+    status_code = Column(Integer)
+    timestamp = Column(DateTime, default=datetime.utcnow)
+    response_time_ms = Column(Float, nullable=True)
+
+
+# ===================== COMPLAINTS / CONTACT =====================
+class Complaint(Base):
+    __tablename__ = "complaints"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    user_email = Column(String(255), nullable=False)
+    subject = Column(String(200), nullable=False)
+    message = Column(Text, nullable=False)
+    status = Column(String(20), default="pending")   # pending, replied, closed
+    created_at = Column(DateTime, default=datetime.utcnow)
+    replied_at = Column(DateTime, nullable=True)
+    admin_reply = Column(Text, nullable=True)
+
+    # Relationship
+    user = relationship("User", back_populates="complaints")
+
+
+# ===================== USER MONEY (Deposits & Withdrawals) =====================
+class UserMoney(Base):
+    __tablename__ = "usermoney"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    user_email = Column(String(255), nullable=False)
+    amount_usd = Column(DECIMAL(15, 2), nullable=False)
+    crypto = Column(String(10), nullable=False)          # BTC, ETH, USDT, etc.
+    status = Column(String(20), default="pending")       # pending, approved, completed, failed
+    created_at = Column(DateTime, default=datetime.utcnow)
+    expires_at = Column(DateTime, nullable=True)
+    tx_hash = Column(String(100), nullable=True)
+
+    # Relationship
+    user = relationship("User", back_populates="money_transactions")
+
+
+# ===================== HELPER (Development Only) =====================
+def init_db():
+    """Create all tables - Use Alembic migrations in production"""
+    from sqlalchemy import create_engine
+    from src.database.session import DATABASE_URL
     
-    resp = requests.get(f"{API_BASE}/admin/complaints", headers=headers)
-    complaints = resp.json() if resp.status_code == 200 else []
-    
-    if complaints:
-        for c in complaints:
-            with st.expander(f"📩 {c['subject']} - {c['user_email']} ({c['status']})"):
-                st.write(f"**Message:** {c['message']}")
-                st.write(f"**Submitted:** {c['created_at']}")
-                
-                reply = st.text_area("Your Reply (will be sent via email)", key=f"reply_{c['id']}")
-                col1, col2 = st.columns(2)
-                with col1:
-                    if st.button("Send Reply", key=f"send_{c['id']}"):
-                        if reply:
-                            requests.post(f"{API_BASE}/admin/reply-complaint", 
-                                        json={"complaint_id": c['id'], "reply": reply},
-                                        headers=headers)
-                            st.success("Reply sent!")
-                            st.rerun()
-                with col2:
-                    if st.button("Mark as Closed", key=f"close_{c['id']}"):
-                        requests.post(f"{API_BASE}/admin/close-complaint", 
-                                    json={"complaint_id": c['id']}, headers=headers)
-                        st.success("Complaint closed")
-                        st.rerun()
-    else:
-        st.info("No complaints yet.")
-
-
-# Search and Filter
-search_term = st.text_input("Search by Email or Name", "")
-filter_status = st.selectbox("Filter by Status", ["All", "Active", "Inactive", "Banned", "Mail Not Verified"])
-
-# Apply filters
-filtered_users = users
-if search_term:
-    filtered_users = [u for u in filtered_users if search_term.lower() in (u.email or "").lower() or 
-                      search_term.lower() in (u.full_name or "").lower()]
-
-if filter_status != "All":
-    if filter_status == "Active":
-        filtered_users = [u for u in filtered_users if u.is_active]
-    elif filter_status == "Inactive":
-        filtered_users = [u for u in filtered_users if not u.is_active]
-    elif filter_status == "Banned":
-        filtered_users = [u for u in filtered_users if u.is_banned]
-    elif filter_status == "Mail Not Verified":
-        filtered_users = [u for u in filtered_users if not u.is_mail_verified]
-
-# Display table
-data = []
-for u in filtered_users:
-    data.append({
-        "ID": u.id,
-        "Email": u.email,
-        "Full Name": u.full_name or "-",
-        "Username": u.username or "-",
-        "Active": "✅" if u.is_active else "❌",
-        "Mail Verified": "✅" if u.is_mail_verified else "❌",
-        "Banned": "🚫" if u.is_banned else "✅",
-        "Capital (USD)": f"${u.default_capital:,.2f}",
-        "Risk %": u.risk_per_trade,
-        "Max DD %": u.max_drawdown,
-        "Created": u.created_at.strftime("%Y-%m-%d")
-    })
-
-df = pd.DataFrame(data)
-
-# Select rows for bulk actions
-selected_rows = st.data_editor(
-    df,
-    hide_index=True,
-    use_container_width=True,
-    column_config={
-        "ID": st.column_config.NumberColumn(disabled=True),
-        "Email": st.column_config.TextColumn(disabled=True),
-    }
-)
-
-# ===================== BULK ACTIONS =====================
-st.subheader("Bulk Actions")
-col1, col2, col3, col4 = st.columns(4)
-
-with col1:
-    if st.button("Ban Selected Users"):
-        selected_ids = selected_rows[selected_rows["Banned"] == "✅"]["ID"].tolist()  # Only non-banned
-        for uid in selected_ids:
-            user = db.query(User).filter(User.id == uid).first()
-            if user:
-                user.is_banned = True
-        db.commit()
-        st.success("Selected users banned.")
-        st.rerun()
-
-with col2:
-    if st.button("Unban Selected Users"):
-        selected_ids = selected_rows[selected_rows["Banned"] == "🚫"]["ID"].tolist()
-        for uid in selected_ids:
-            user = db.query(User).filter(User.id == uid).first()
-            if user:
-                user.is_banned = False
-        db.commit()
-        st.success("Selected users unbanned.")
-        st.rerun()
-
-with col3:
-    if st.button("Activate Selected"):
-        selected_ids = selected_rows["ID"].tolist()
-        for uid in selected_ids:
-            user = db.query(User).filter(User.id == uid).first()
-            if user:
-                user.is_active = True
-        db.commit()
-        st.success("Selected users activated.")
-        st.rerun()
-
-with col4:
-    if st.button("Deactivate Selected"):
-        selected_ids = selected_rows["ID"].tolist()
-        for uid in selected_ids:
-            user = db.query(User).filter(User.id == uid).first()
-            if user:
-                user.is_active = False
-        db.commit()
-        st.success("Selected users deactivated.")
-        st.rerun()
-
-# ===================== SINGLE USER UPDATE & DELETE =====================
-st.divider()
-st.subheader("Update or Delete User")
-
-email_to_edit = st.text_input("Enter Email to Edit or Delete")
-
-if email_to_edit:
-    user = db.query(User).filter(User.email == email_to_edit).first()
-    if user:
-        st.write(f"Editing: **{user.email}**")
-        
-        col1, col2 = st.columns(2)
-        with col1:
-            new_full_name = st.text_input("Full Name", value=user.full_name or "")
-            new_capital = st.number_input("Default Capital (USD)", value=user.default_capital)
-            new_risk = st.slider("Risk per Trade (%)", 0.5, 5.0, float(user.risk_per_trade), 0.1)
-            new_max_dd = st.slider("Max Drawdown (%)", 5.0, 25.0, float(user.max_drawdown), 1.0)
-
-        with col2:
-            new_active = st.checkbox("Is Active", value=user.is_active)
-            new_mail_verified = st.checkbox("Mail Verified", value=user.is_mail_verified)
-            new_banned = st.checkbox("Is Banned", value=user.is_banned)
-
-        if st.button("Update User"):
-            user.full_name = new_full_name
-            user.default_capital = new_capital
-            user.risk_per_trade = new_risk
-            user.max_drawdown = new_max_dd
-            user.is_active = new_active
-            user.is_mail_verified = new_mail_verified
-            user.is_banned = new_banned
-            db.commit()
-            st.success("User updated!")
-            st.rerun()
-
-        if st.button("🗑 Delete User", type="secondary"):
-            if st.checkbox("Confirm deletion of this user?"):
-                db.delete(user)
-                db.commit()
-                st.success("User deleted.")
-                st.rerun()
-    else:
-        st.error("User not found.")
-
-# ===================== EXPORT TO CSV =====================
-if st.button("📥 Export All Users to CSV"):
-    csv = df.to_csv(index=False).encode('utf-8')
-    st.download_button(
-        label="Download CSV",
-        data=csv,
-        file_name=f"users_{datetime.now().strftime('%Y%m%d')}.csv",
-        mime="text/csv"
-    )
-import streamlit as st
-import pandas as pd
-import requests
-from datetime import datetime
-from src.database.session import SessionLocal
-from src.database.models import User, Complaint
-
-st.set_page_config(page_title="FinForgeAI Admin", layout="wide")
-
-st.title("🔧 FinForgeAI Admin Panel")
-
-API_BASE = "http://localhost:8000/api"
-
-# Admin JWT Login
-if "admin_jwt" not in st.session_state:
-    st.session_state.admin_jwt = None
-
-if not st.session_state.admin_jwt:
-    st.subheader("Admin Login")
-    email = st.text_input("Admin Email")
-    password = st.text_input("Password", type="password")
-    if st.button("Login as Admin"):
-        resp = requests.post(f"{API_BASE}/auth/login", json={"email": email, "password": password})
-        if resp.status_code == 200:
-            st.session_state.admin_jwt = resp.json()["access_token"]
-            st.rerun()
-        else:
-            st.error("Invalid admin credentials")
-    st.stop()
-
-headers = {"Authorization": f"Bearer {st.session_state.admin_jwt}"}
-
-tab1, tab2 = st.tabs(["Users", "Complaints"])
-
-# ===================== USERS TAB =====================
-with tab1:
-    st.subheader("All Users")
-    resp = requests.get(f"{API_BASE}/admin/users", headers=headers)
-    users = resp.json() if resp.status_code == 200 else []
-    df = pd.DataFrame(users)
-    st.dataframe(df, use_container_width=True)
-
-# ===================== COMPLAINTS TAB =====================
-with tab2:
-    st.subheader("User Complaints & Messages")
-    
-    resp = requests.get(f"{API_BASE}/admin/complaints", headers=headers)
-    complaints = resp.json() if resp.status_code == 200 else []
-    
-    if complaints:
-        for c in complaints:
-            with st.expander(f"📩 {c['subject']} - {c['user_email']} ({c['status']})"):
-                st.write(f"**Message:** {c['message']}")
-                st.write(f"**Submitted:** {c['created_at']}")
-                
-                reply = st.text_area("Your Reply (will be sent via email)", key=f"reply_{c['id']}")
-                col1, col2 = st.columns(2)
-                with col1:
-                    if st.button("Send Reply", key=f"send_{c['id']}"):
-                        if reply:
-                            requests.post(f"{API_BASE}/admin/reply-complaint", 
-                                        json={"complaint_id": c['id'], "reply": reply},
-                                        headers=headers)
-                            st.success("Reply sent!")
-                            st.rerun()
-                with col2:
-                    if st.button("Mark as Closed", key=f"close_{c['id']}"):
-                        requests.post(f"{API_BASE}/admin/close-complaint", 
-                                    json={"complaint_id": c['id']}, headers=headers)
-                        st.success("Complaint closed")
-                        st.rerun()
-    else:
-        st.info("No complaints yet.")
-        
-        
-db.close()
-
-import streamlit as st
-import pandas as pd
-import requests
-from datetime import datetime
-from src.database.session import SessionLocal
-from src.database.models import User, Complaint
-
-st.set_page_config(page_title="FinForgeAI Admin", layout="wide")
-
-st.title("🔧 FinForgeAI Admin Panel")
-
-API_BASE = "http://localhost:8000/api"
-
-# Admin Login with JWT
-if "admin_jwt" not in st.session_state:
-    st.session_state.admin_jwt = None
-
-if not st.session_state.admin_jwt:
-    st.subheader("Admin Login")
-    email = st.text_input("Admin Email")
-    password = st.text_input("Password", type="password")
-    if st.button("Login as Admin"):
-        resp = requests.post(f"{API_BASE}/auth/login", json={"email": email, "password": password})
-        if resp.status_code == 200:
-            st.session_state.admin_jwt = resp.json()["access_token"]
-            st.rerun()
-        else:
-            st.error("Invalid admin credentials")
-    st.stop()
-
-headers = {"Authorization": f"Bearer {st.session_state.admin_jwt}"}
-
-tab1, tab2 = st.tabs(["👥 Users Management", "📩 Complaints & Messages"])
-
-# ===================== USERS TAB =====================
-with tab1:
-    st.subheader("All Users")
-    resp = requests.get(f"{API_BASE}/admin/users", headers=headers)
-    users = resp.json() if resp.status_code == 200 else []
-    
-    if users:
-        df = pd.DataFrame(users)
-        st.dataframe(df, use_container_width=True, hide_index=True)
-        
-        st.divider()
-        st.subheader("Update or Delete User")
-        email_to_edit = st.text_input("Enter User Email")
-        
-        if email_to_edit:
-            user = next((u for u in users if u["email"] == email_to_edit), None)
-            if user:
-                col1, col2 = st.columns(2)
-                with col1:
-                    new_full_name = st.text_input("Full Name", value=user.get("full_name", ""))
-                    new_capital = st.number_input("Default Capital ($)", value=user.get("default_capital", 10000.0))
-                    new_risk = st.slider("Risk %", 0.5, 5.0, float(user.get("risk_per_trade", 1.0)), 0.1)
-                with col2:
-                    new_active = st.checkbox("Is Active", value=user.get("is_active", False))
-                    new_verified = st.checkbox("Mail Verified", value=user.get("is_mail_verified", False))
-                    new_banned = st.checkbox("Is Banned", value=user.get("is_banned", False))
-                
-                if st.button("Update User"):
-                    requests.post(f"{API_BASE}/admin/update-user", 
-                                json={"email": email_to_edit, "full_name": new_full_name, 
-                                      "default_capital": new_capital, "risk_per_trade": new_risk,
-                                      "is_active": new_active, "is_mail_verified": new_verified, 
-                                      "is_banned": new_banned},
-                                headers=headers)
-                    st.success("User updated successfully!")
-                    st.rerun()
-                
-                if st.button("🗑 Delete User", type="secondary"):
-                    if st.checkbox("Confirm deletion?"):
-                        requests.post(f"{API_BASE}/admin/delete-user?email={email_to_edit}", headers=headers)
-                        st.success("User deleted")
-                        st.rerun()
-            else:
-                st.error("User not found")
-    else:
-        st.info("No users found.")
-
-# ===================== COMPLAINTS TAB =====================
-with tab2:
-    st.subheader("📩 User Complaints & Messages")
-    
-    resp = requests.get(f"{API_BASE}/admin/complaints", headers=headers)
-    complaints = resp.json() if resp.status_code == 200 else []
-    
-    if complaints:
-        for c in complaints:
-            with st.expander(f"📨 {c['subject']} — {c['user_email']} ({c['status']})"):
-                st.write(f"**Message:** {c['message']}")
-                st.write(f"**Submitted:** {c['created_at']}")
-                
-                reply_text = st.text_area("Write Reply (will be sent via email)", key=f"reply_{c['id']}")
-                
-                col1, col2 = st.columns(2)
-                with col1:
-                    if st.button("📧 Send Reply", key=f"send_{c['id']}"):
-                        if reply_text:
-                            requests.post(f"{API_BASE}/admin/reply-complaint", 
-                                        json={"complaint_id": c['id'], "reply": reply_text},
-                                        headers=headers)
-                            st.success("Reply sent successfully!")
-                            st.rerun()
-                with col2:
-                    if st.button("✅ Mark as Closed", key=f"close_{c['id']}"):
-                        requests.post(f"{API_BASE}/admin/close-complaint", 
-                                    json={"complaint_id": c['id']}, headers=headers)
-                        st.success("Complaint closed")
-                        st.rerun()
-    else:
-        st.info("No complaints or messages from users yet.")
-
-st.sidebar.success("Admin Panel Active")
+    engine = create_engine(DATABASE_URL)
+    Base.metadata.create_all(bind=engine)
+    print("✅ All database tables created successfully.")
