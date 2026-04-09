@@ -3,6 +3,7 @@ version: '3.9'
 services:
   postgres:
     image: postgres:16-alpine
+    container_name: finai-postgres
     environment:
       POSTGRES_USER: finuser
       POSTGRES_PASSWORD: finpass
@@ -15,20 +16,23 @@ services:
 
   redis:
     image: redis:7-alpine
+    container_name: finai-redis
     ports:
       - "6379:6379"
     restart: unless-stopped
 
-  # ====================== Backend API ======================
   api:
     build: .
-    command: uvicorn src.api.main:app --host 0.0.0.0 --port 8000 --reload
+    container_name: finai-api
+    command: uvicorn src.api.main:app --host 0.0.0.0 --port 8000
+    ports:
+      - "8000:8000"
     environment:
       - DATABASE_URL=postgresql://finuser:finpass@postgres:5432/finforge
       - REDIS_URL=redis://redis:6379/0
       - GROK_API_KEY=${GROK_API_KEY}
       - OPENAI_API_KEY=${OPENAI_API_KEY}
-      - API_BASE_URL=/api   # Optional: helps if your app needs to know the public path
+      - JWT_SECRET_KEY=${JWT_SECRET_KEY}
     depends_on:
       - postgres
       - redis
@@ -36,60 +40,45 @@ services:
       - .:/app
     restart: unless-stopped
 
-  # ====================== Chat UI (Gradio) ======================
   chat-ui:
     build: .
+    container_name: finai-chat
     command: python -m src.frontend.chat_ui
+    ports:
+      - "7860:7860"
+    environment:
+      - GROK_API_KEY=${GROK_API_KEY}
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
     depends_on:
       - api
-    volumes:
-      - .:/app
     restart: unless-stopped
 
-  # ====================== Trading Dashboard ======================
-  trading-dashboard:
-    build: .
-    command: python -m src.frontend.bot_dashboard
-    depends_on:
-      - api
-    volumes:
-      - .:/app
-    restart: unless-stopped
-
-  # ====================== User Dashboard (Streamlit) ======================
   user-dashboard:
     build: .
-    command: streamlit run src/frontend/user_dashboard.py --server.port 8501 --server.address 0.0.0.0 --server.headless true
-    depends_on:
-      - api
-    volumes:
-      - .:/app
-    restart: unless-stopped
-
-  # ====================== Admin Panel (Streamlit) ======================
-  admin:
-    build: .
-    command: streamlit run admin/admin_dashboard.py --server.port 8502 --server.address 0.0.0.0 --server.headless true
-    depends_on:
-      - api
-    volumes:
-      - .:/app
-    restart: unless-stopped
-
-  # ====================== Nginx Reverse Proxy (Single Entry Point) ======================
-  nginx:
-    image: nginx:alpine
+    container_name: finai-dashboard
+    command: streamlit run src/frontend/user_dashboard.py --server.port 8503 --server.address 0.0.0.0
     ports:
-      - "80:80"          # Main access port → http://localhost
-    volumes:
-      - ./nginx.conf:/etc/nginx/conf.d/default.conf:ro
-      - ./src/frontend/landing:/usr/share/nginx/html:ro   # Static landing page
+      - "8503:8503"
+    environment:
+      - GROK_API_KEY=${GROK_API_KEY}
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
     depends_on:
       - api
-      - chat-ui
-      - trading-dashboard
-      - user-dashboard
-      - admin
+    restart: unless-stopped
+
+  worker:
+    build: .
+    container_name: finai-worker
+    command: celery -A src.celery_app.tasks worker --loglevel=info --beat
+    environment:
+      - DATABASE_URL=postgresql://finuser:finpass@postgres:5432/finforge
+      - REDIS_URL=redis://redis:6379/0
+      - GROK_API_KEY=${GROK_API_KEY}
+    depends_on:
+      - redis
+      - postgres
+    volumes:
+      - .:/app
     restart: unless-stopped
 
 volumes:
