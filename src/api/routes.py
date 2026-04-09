@@ -1,4 +1,3 @@
-
 from fastapi import (
     APIRouter,
     BackgroundTasks,
@@ -13,6 +12,15 @@ from datetime import datetime
 from sqlalchemy.orm import Session
 from typing import Optional
 
+# External
+import yfinance as yf
+from loguru import logger
+from slowapi import Limiter
+from slowapi.util import get_remote_address
+from celery.result import AsyncResult
+
+# Internal imports
+from src.celery_app.celery_app import celery_app  # Adjust if your celery_app is in a different location
 from src.celery_app.tasks import ingest_and_detect_events
 from src.rag.vector_store import FinancialRAG
 from src.ingestion.news_fetcher import NewsFetcher
@@ -22,15 +30,13 @@ from src.notifications.notifier import Notifier
 from src.users.schemas import UserCreate, UserResponse
 from src.auth.auth import create_access_token
 from src.users.crud import create_user, get_user_by_email
-from src.database.session import get_db   # Make sure this uses yield!
+from src.database.session import get_db
 from src.users.api_keys import create_api_key, revoke_api_key, get_user_by_api_key
 from src.users.bot_manager import get_user_bot_manager
 from src.auth.dependencies import get_current_user, require_admin
+from src.database.models import User, APIKey, UserMoney, Event   # Add your models here
 
-import yfinance as yf
-from loguru import logger
-
-# ===================== Models (Pydantic) =====================
+# ===================== Pydantic Models =====================
 from pydantic import BaseModel, Field
 
 class PaymentNotification(BaseModel):
@@ -48,7 +54,7 @@ class VerifyAccount(BaseModel):
     sex: Optional[str] = None
     phone: Optional[str] = None
     country: Optional[str] = None
-    dob: Optional[str] = None  # ISO format
+    dob: Optional[str] = None
     address: Optional[str] = None
 
 class ApproveTransaction(BaseModel):
@@ -60,19 +66,22 @@ class RejectTransaction(BaseModel):
 
 class UpdateUser(BaseModel):
     email: str
-    # add other updatable fields as needed
+    # Add other fields you want to allow updating
 
-# ===================== Router Setup =====================
+
+# ===================== Router & Globals =====================
 router = APIRouter()
 notifier = Notifier()
 rag = FinancialRAG()
-limiter = Limiter(key_func=get_remote_address)  # from slowapi
 
-# ===================== API Key Authentication Helper =====================
+# Rate Limiter
+limiter = Limiter(key_func=get_remote_address)
+
+
+# ===================== API Key Authentication =====================
 def authenticate_api_key(
     authorization: str = Header(None),
     db: Session = Depends(get_db),
-    required_scope: Optional[str] = None,
 ):
     """Reusable dependency for public API key auth"""
     if not authorization or not authorization.startswith("Bearer "):
@@ -86,10 +95,6 @@ def authenticate_api_key(
 
     if not user:
         raise HTTPException(status_code=401, detail="Invalid or expired API key")
-
-    # Optional: Implement scope checking here
-    # if required_scope and not check_scope(...):
-    #     raise HTTPException(403, f"Missing scope: {required_scope}")
 
     return user
 
@@ -138,8 +143,12 @@ async def login(user_data: UserCreate, db: Session = Depends(get_db)):
     db_user = get_user_by_email(db, user_data.email)
     if not db_user:
         raise HTTPException(status_code=400, detail="Invalid credentials")
-    # TODO: Implement proper password verification with bcrypt/passlib
-    token = create_access_token({"sub": user_data.email})
+
+    # TODO: Implement proper password verification (use passlib or bcrypt)
+    # if not verify_password(user_data.password, db_user.hashed_password):
+    #     raise HTTPException(status_code=400, detail="Invalid credentials")
+
+    token = create_access_token({"sub": db_user.email})
     return {"access_token": token, "token_type": "bearer"}
 
 
@@ -174,6 +183,7 @@ async def list_api_keys(db: Session = Depends(get_db), current_user=Depends(get_
     user = db.query(User).filter(User.email == current_user["email"]).first()
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
+
     keys = db.query(APIKey).filter(APIKey.user_id == user.id).all()
     return [
         {
@@ -248,24 +258,46 @@ async def admin_delete_user(email: str, db: Session = Depends(get_db)):
 @router.get("/admin/transactions", dependencies=[Depends(require_admin)])
 async def get_all_transactions(db: Session = Depends(get_db)):
     transactions = db.query(UserMoney).order_by(UserMoney.created_at.desc()).all()
-    # ... (same formatting as before)
-    return [...]  # keep your existing list comprehension
+    return [
+        {
+            "id": t.id,
+            "user_email": t.user.email if t.user else None,
+            "amount": t.amount,
+            "status": t.status,
+            "created_at": t.created_at,
+        }
+        for t in transactions
+    ]
 
 
 @router.post("/admin/approve-transaction", dependencies=[Depends(require_admin)])
 async def approve_transaction(
     data: ApproveTransaction, db: Session = Depends(get_db)
 ):
-    # ... (updated version from previous response, using Pydantic model)
-    pass  # replace with your logic
+    # TODO: Implement your approval logic here (update status, add tx_hash, etc.)
+    transaction = db.query(UserMoney).filter(UserMoney.id == data.transaction_id).first()
+    if not transaction:
+        raise HTTPException(status_code=404, detail="Transaction not found")
+    
+    transaction.status = "approved"
+    if data.tx_hash:
+        transaction.tx_hash = data.tx_hash
+    db.commit()
+    return {"status": "approved", "transaction_id": data.transaction_id}
 
 
 @router.post("/admin/reject-transaction", dependencies=[Depends(require_admin)])
 async def reject_transaction(
     data: RejectTransaction, db: Session = Depends(get_db)
 ):
-    # similar update
-    pass
+    # TODO: Implement rejection logic
+    transaction = db.query(UserMoney).filter(UserMoney.id == data.transaction_id).first()
+    if not transaction:
+        raise HTTPException(status_code=404, detail="Transaction not found")
+    
+    transaction.status = "rejected"
+    db.commit()
+    return {"status": "rejected", "transaction_id": data.transaction_id}
 
 
 # ===================== User Features =====================
@@ -275,8 +307,9 @@ async def notify_payment(
     db: Session = Depends(get_db),
     current_user=Depends(get_current_user),
 ):
-    # ... your existing logic
-    pass
+    # TODO: Add your payment notification logic
+    logger.info(f"Payment notification received for tx: {data.transaction_id}")
+    return {"status": "received"}
 
 
 @router.post("/contact")
@@ -285,8 +318,9 @@ async def submit_contact(
     db: Session = Depends(get_db),
     current_user=Depends(get_current_user),
 ):
-    # create Complaint model instance
-    pass
+    # TODO: Create Complaint model instance and save
+    logger.info(f"Contact form submitted by {current_user['email']}: {form.subject}")
+    return {"status": "submitted"}
 
 
 @router.post("/verify-account")
@@ -295,15 +329,21 @@ async def verify_account(
     db: Session = Depends(get_db),
     current_user=Depends(get_current_user),
 ):
-    # update user fields
-    pass
+    # TODO: Update user verification fields
+    logger.info(f"Account verification data received for {current_user['email']}")
+    return {"status": "verification_data_received"}
 
 
-# ===================== Ingestion, RAG, Analysis =====================
+# ===================== Core FinAi Features =====================
 @router.post("/ingest")
 async def trigger_ingestion(background_tasks: BackgroundTasks):
+    """Trigger news ingestion + event detection via Celery"""
     task = ingest_and_detect_events.delay()
-    return {"status": "triggered", "task_id": task.id}
+    return {
+        "status": "triggered",
+        "task_id": task.id,
+        "message": "Ingestion task queued. Monitor with /celery/task/{task_id}",
+    }
 
 
 @router.get("/analyze-trendline")
@@ -314,12 +354,13 @@ async def analyze_trendline(
     try:
         df = yf.download(ticker, period=period, interval="1h", progress=False)
         if df.empty:
-            raise HTTPException(status_code=404, detail="No data returned")
+            raise HTTPException(status_code=404, detail="No data returned from yfinance")
+
         analyzer = TrendlineAnalyzer(length=14, mult=1.0, calc_method="Atr")
         result = analyzer.analyze(df, ticker=ticker.upper())
         return result
     except Exception as e:
-        logger.error(f"Trendline analysis error: {e}")
+        logger.error(f"Trendline analysis error for {ticker}: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 
@@ -343,108 +384,52 @@ async def health():
 
 @router.get("/events")
 async def get_recent_events(limit: int = 20, db: Session = Depends(get_db)):
-    from src.database.models import Event
     events = (
         db.query(Event)
         .order_by(Event.created_at.desc())
         .limit(limit)
         .all()
     )
-    return {"events": [e.to_dict() for e in events]}  # better if you add .to_dict() method on model
-
-# ===================== Celery Monitoring & Background Tasks =====================
-
-@router.post("/ingest")
-async def trigger_ingestion(background_tasks: BackgroundTasks):
-    """Trigger heavy ingestion + event detection via Celery (recommended for long tasks)"""
-    task = ingest_and_detect_events.delay()
-    return {
-        "status": "triggered",
-        "task_id": task.id,
-        "message": "Ingestion task queued. Use /celery/task/{task_id} to check status.",
-        "monitor_url": f"/celery/task/{task.id}"
-    }
+    return {"events": [e.to_dict() if hasattr(e, "to_dict") else vars(e) for e in events]}
 
 
+# ===================== Celery Monitoring =====================
 @router.get("/celery/task/{task_id}")
 async def get_celery_task_status(task_id: str):
-    """Get status and result of any Celery task"""
     task_result = AsyncResult(task_id, app=celery_app)
-
     response = {
         "task_id": task_id,
-        "status": task_result.status,          # PENDING, STARTED, SUCCESS, FAILURE, RETRY, REVOKED
+        "status": task_result.status,
         "successful": task_result.successful(),
         "failed": task_result.failed(),
     }
-
     if task_result.ready():
         try:
             response["result"] = task_result.get() if task_result.successful() else str(task_result.result)
         except Exception as e:
-            response["result"] = f"Error retrieving result: {str(e)}"
+            response["result"] = f"Error: {str(e)}"
         response["date_done"] = task_result.date_done.isoformat() if task_result.date_done else None
-
     return response
-
-
-@router.get("/celery/tasks/recent")
-async def get_recent_celery_tasks(limit: int = 20):
-    """Simple list of recent tasks (requires Celery events enabled or custom tracking)"""
-    # Basic version using inspect (works if events are enabled)
-    try:
-        i = celery_app.control.inspect()
-        active = i.active() or {}
-        reserved = i.reserved() or {}
-        scheduled = i.scheduled() or {}
-
-        return {
-            "active_tasks": active,
-            "reserved_tasks": reserved,
-            "scheduled_tasks": scheduled,
-            "note": "For full history, use Flower dashboard or implement custom task tracking in Redis/DB"
-        }
-    except Exception as e:
-        logger.warning(f"Celery inspect failed: {e}")
-        return {"error": "Could not fetch task info. Make sure Celery workers are running and events are enabled."}
 
 
 @router.get("/celery/workers")
 async def get_celery_workers():
-    """Check status of connected Celery workers"""
     try:
         i = celery_app.control.inspect()
         stats = i.stats() or {}
-        ping = i.ping() or {}
-
         return {
             "workers": list(stats.keys()),
+            "active_workers": len(stats),
             "stats": stats,
-            "ping": ping,
-            "active_workers": len(stats)
         }
     except Exception as e:
-        return {"error": f"Could not inspect workers: {str(e)}", "hint": "Ensure workers are running with 'celery -A src.celery_app worker -l info'"}
+        return {"error": f"Could not inspect workers: {str(e)}"}
 
 
 @router.post("/celery/revoke/{task_id}")
 async def revoke_celery_task(task_id: str, terminate: bool = False):
-    """Revoke (cancel) a running or queued Celery task"""
     try:
-        celery_app.control.revoke(task_id, terminate=terminate, signal="SIGKILL" if terminate else None)
+        celery_app.control.revoke(task_id, terminate=terminate)
         return {"status": "revoked", "task_id": task_id, "terminated": terminate}
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to revoke task: {str(e)}")
-
-
-# Optional: Simple BackgroundTasks example (for quick/light tasks)
-@router.post("/background/example")
-async def example_background_task(background_tasks: BackgroundTasks):
-    """Demonstration of FastAPI's built-in BackgroundTasks (lighter than Celery)"""
-    def send_notification():
-        logger.info("Sending background notification...")
-        # notifier.send_email(...) or any quick task
-        pass
-
-    background_tasks.add_task(send_notification)
-    return {"status": "background task added", "message": "This runs after response is sent"}
