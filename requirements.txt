@@ -3,6 +3,8 @@ fastapi
 uvicorn[standard]
 pydantic
 python-multipart
+lxml-html-clean
+
 
 # LLM & LangChain
 langchain
