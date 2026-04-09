@@ -1,11 +1,11 @@
 # Core API & Server
-fastapi==0.135.2
-uvicorn[standard]==0.34.0
-pydantic==2.10.0
+fastapi==0.135.3
+uvicorn[standard]==0.44.0
+pydantic==2.12.5
 python-multipart==0.0.20
 
-# LLM & LangChain (newer stable versions)
-langchain==1.2.13
+# LLM & LangChain
+langchain==1.2.15
 langchain-community==0.4.1
 langchain-openai==1.1.12
 langchain-core==1.2.21
@@ -13,15 +13,15 @@ langchain-groq==0.2.0
 tiktoken==0.8.0
 
 # Vector DB & Embeddings
-chromadb==0.6.0
+chromadb==1.5.7
 
 # Database & Migrations
-sqlalchemy==2.0.38
+sqlalchemy==2.0.49
 psycopg2-binary==2.9.10
 alembic==1.14.0
 
 # Task Queue & Scheduler
-celery[redis]==5.4.0
+celery[redis]==5.6.3
 redis==5.2.1
 apscheduler==3.11.0
 
@@ -43,8 +43,8 @@ passlib[bcrypt]==1.7.4
 python-jose[cryptography]==3.3.0
 
 # Frontend / Dashboards
-gradio==5.0.0
-streamlit==1.39.0
+gradio==6.11.0
+streamlit==1.56.0
 
 # Ingestion & Parsing
 beautifulsoup4==4.12.3
