@@ -1,57 +1,57 @@
 # Core Framework
-fastapi==0.115.0
-uvicorn[standard]==0.34.0
-pydantic==2.10.0
+fastapi
+uvicorn[standard]
+pydantic
 
 # LLM & LangChain (Grok primary)
-langchain==0.3.0
-langchain-openai==0.2.0
-langchain-community==0.3.0
-langchain-groq==0.2.0
+langchain
+langchain-openai
+langchain-community
+langchain-groq
 
 # Vector DB & Embeddings
-chromadb==0.5.0
+chromadb
 
 # Database
-sqlalchemy==2.0.35
-psycopg2-binary==2.9.10
-alembic==1.14.0
+sqlalchemy
+psycopg2-binary
+alembic
 
 # Task Queue
-celery[redis]==5.4.0
-redis==5.2.0
+celery[redis]
+redis
 
 # Ingestion & Parsing
-feedparser==6.0.11
-beautifulsoup4==4.12.3
-newspaper3k==0.2.8
-requests==2.32.3
+feedparser
+beautifulsoup4
+newspaper3k
+requests
 
 # Frontend
-gradio==5.0.0
-streamlit==1.39.0
+gradio
+streamlit
 
 # Trading & Data
-alpaca-py==2.3.0
-yfinance==0.2.48
-python-binance==1.0.19
+alpaca-py
+yfinance
+python-binance
 
 # Notifications
-twilio==9.0.0
-python-telegram-bot==21.0.1
-slack-sdk==3.33.0
+twilio
+python-telegram-bot
+slack-sdk
 
 # Security & Utils
-bcrypt==4.2.0
-passlib[bcrypt]==1.7.4
-python-jose[cryptography]==3.3.0
-python-multipart==0.0.20
-prometheus-fastapi-instrumentator==7.0.0
-apscheduler==3.11.0
-loguru==0.7.3
-python-dotenv==1.0.1
-pandas==2.2.3
-plotly==5.24.0
-qrcode==7.4.2
-Pillow==10.4.0
-slowapi==0.1.9
+bcrypt
+passlib[bcrypt]
+python-jose[cryptography]
+python-multipart
+prometheus-fastapi-instrumentator
+apscheduler
+loguru
+python-dotenv
+pandas
+plotly
+qrcode
+Pillow
+slowapi
