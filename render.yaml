@@ -18,10 +18,7 @@ services:
     region: oregon
     plan: free
 
-  api:
-    build: .
-    command: python app.py --mode api
-    
+  
   # FastAPI Backend (API + Admin)
   api:
     type: web
