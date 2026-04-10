@@ -54,4 +54,4 @@ class NewsFetcher:
     def run(self):
         """Synchronous wrapper used by Celery"""
         return asyncio.run(self.fetch_all()
-(
+()
