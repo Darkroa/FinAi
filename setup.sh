@@ -6,7 +6,7 @@
 
 set -e  # Exit on any error
 
-echo "🚀 Starting FinForgeAI Setup..."
+echo "🚀 Starting FinForgeAI Setup...."
 
 # Wait for PostgreSQL to be ready
 echo "⏳ Waiting for PostgreSQL to be ready..."
