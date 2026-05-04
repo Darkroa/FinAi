@@ -1,0 +1,31 @@
+@import "tailwindcss";
+
+@theme {
+  --color-binance-bg: #0b0e11;
+  --color-binance-surface: #161a1e;
+  --color-binance-card: #1e2329;
+  --color-binance-border: #2b3139;
+  --color-binance-yellow: #f0b90b;
+  --color-binance-yellow-hover: #d4a30a;
+  --color-binance-green: #0ecb81;
+  --color-binance-red: #f6465d;
+  --color-binance-text: #eaecef;
+  --color-binance-muted: #848e9c;
+  --color-binance-highlight: #2b3139;
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  background-color: #0b0e11;
+  color: #eaecef;
+  font-family: 'IBM Plex Sans', 'Inter', system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+#root { width: 100%; min-height: 100vh; }
+
+::-webkit-scrollbar { width: 5px; height: 5px; }
+::-webkit-scrollbar-track { background: #161a1e; }
+::-webkit-scrollbar-thumb { background: #2b3139; border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: #3c4451; }

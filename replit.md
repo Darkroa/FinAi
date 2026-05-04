@@ -2,11 +2,20 @@
 
 ## Project Overview
 
-FinAi is a full-stack AI-powered financial trading platform built with FastAPI (backend) and Streamlit (frontend). It ingests real-time financial news, performs Grok-powered sentiment analysis, detects market events, and executes automated trading strategies.
+FinAi is a full-stack AI-powered financial trading platform built with FastAPI (backend) and React + Vite (frontend). It ingests real-time financial news, performs Grok-powered sentiment analysis, detects market events, and executes automated trading strategies.
 
 ## Architecture
 
 ```
+├── frontend/                # React + Vite + Tailwind CSS frontend (port 5000)
+│   ├── src/
+│   │   ├── layouts/         # DashboardLayout (sidebar, topbar, ticker)
+│   │   ├── pages/           # LoginPage, DashboardPage, MarketsPage, TradePage, WalletPage, SettingsPage, AdminPage
+│   │   ├── store/           # Zustand auth store (authStore.ts)
+│   │   ├── lib/             # api.ts (axios client), utils.ts
+│   │   └── App.tsx          # React Router setup with private routes
+│   ├── vite.config.ts       # Vite config — port 5000, proxy /api → localhost:8000
+│   └── package.json
 ├── src/
 │   ├── api/             # FastAPI backend (main.py, routes.py, middleware.py)
 │   ├── analysis/        # AI analysis modules (sentiment, forecaster, trendline, impact)
@@ -15,21 +24,25 @@ FinAi is a full-stack AI-powered financial trading platform built with FastAPI (
 │   ├── conversation/    # Conversational AI agent
 │   ├── database/        # SQLAlchemy models and session (PostgreSQL)
 │   ├── event/           # Market event detection
-│   ├── frontend/        # Streamlit pages (login.py, user_dashboard.py, pages/)
+│   ├── frontend/        # Legacy Streamlit pages (kept for reference)
 │   ├── ingestion/       # News scrapers (RSS, NewsAPI, AlphaVantage)
 │   ├── notifications/   # Multi-channel alerts (Telegram, WhatsApp, Slack, Email)
 │   ├── rag/             # Retrieval-Augmented Generation (ChromaDB)
 │   ├── trading/         # Trading bots and Alpaca/Binance broker integrations
 │   └── users/           # User CRUD, API key management, bot manager
-├── admin/               # Streamlit admin dashboard
+├── admin/               # Legacy Streamlit admin dashboard (kept for reference)
 ├── migrations/          # Alembic database migrations
-└── start.sh             # Entry point: starts FastAPI (port 8000) + Streamlit (port 5000)
+└── start.sh             # Entry point: starts FastAPI (port 8000) + React frontend (port 5000)
 ```
 
 ## Tech Stack
 
 - **Backend**: FastAPI + Uvicorn (port 8000)
-- **Frontend**: Streamlit (port 5000) — dark Binance-inspired UI
+- **Frontend**: React 19 + Vite 8 + Tailwind CSS v4 + shadcn/ui radix primitives (port 5000)
+- **State**: Zustand (auth store, persisted to localStorage)
+- **Routing**: React Router v7
+- **Charts**: Recharts
+- **HTTP Client**: Axios (proxied to FastAPI via Vite proxy)
 - **Database**: PostgreSQL (Replit managed, via DATABASE_URL)
 - **Task Queue**: Celery — auto-detects Redis; falls back to synchronous eager mode when Redis is unavailable
 - **AI**: Grok (primary via langchain-groq) + OpenAI (fallback/embeddings)
@@ -42,16 +55,14 @@ FinAi is a full-stack AI-powered financial trading platform built with FastAPI (
 The main workflow runs `start.sh`:
 
 ```bash
+# Kills existing processes on ports 8000 and 5000
 # Starts FastAPI backend on port 8000 (background)
 uvicorn src.api.main:app --host 0.0.0.0 --port 8000 --reload
-
-# Starts Streamlit frontend on port 5000 (foreground)
-streamlit run src/frontend/login.py --server.port 5000 --server.address 0.0.0.0
+# Starts React (Vite) frontend on port 5000 (foreground)
+cd frontend && npm run dev
 ```
 
 ## Environment Variables (Secrets)
-
-Set these in the Replit Secrets panel:
 
 | Key | Required | Description |
 |-----|----------|-------------|
@@ -68,24 +79,41 @@ Set these in the Replit Secrets panel:
 | `TWILIO_ACCOUNT_SID` | Optional | WhatsApp alerts via Twilio |
 | `TWILIO_AUTH_TOKEN` | Optional | Twilio auth |
 
+## Default Credentials
+
+- **Admin**: `admin@finai.io` / `admin123!`
+- **Demo user**: `tomiwakhalifa@gmail.com` (no password hash set — login bypasses password check currently)
+
 ## Key Design Decisions
 
 ### Redis-Free Celery Mode
-`src/celery_app/__init__.py` probes Redis at startup. If Redis is not available (as on Replit free tier), Celery automatically runs in `task_always_eager=True` mode — tasks execute synchronously inline without needing a broker. This makes background jobs work out of the box.
+`src/celery_app/__init__.py` probes Redis at startup. If Redis is not available (as on Replit free tier), Celery automatically runs in `task_always_eager=True` mode — tasks execute synchronously inline without needing a broker.
 
-### Database
-Uses Replit's built-in PostgreSQL. The `DATABASE_URL` secret is automatically injected. SQLAlchemy models auto-create tables at startup (`Base.metadata.create_all`).
+### API Proxy
+Vite's dev server proxies all `/api/*` requests to FastAPI on port 8000. No CORS issues, no hardcoded URLs.
 
-### Auth
-JWT-based auth via `python-jose`. Users login through Streamlit, which calls the FastAPI `/api/auth/login` endpoint. Tokens stored in Streamlit session state.
+### Auth Flow
+1. React `LoginPage` POSTs to `/api/auth/login` → receives `access_token`
+2. Immediately GETs `/api/users/me` with the new token → receives full user object
+3. Stores both token + user in Zustand (persisted to localStorage as `finai-auth`)
+4. All subsequent API calls use the Bearer token via Axios interceptor
 
-### Frontend Structure
-- `login.py` — Landing page + auth (dark theme, Binance-inspired)
-- `user_dashboard.py` — Full trading dashboard (Overview, Markets, Bots, Portfolio, Deposit/Withdrawal, Analysis, Profile)
-- `admin/admin_dashboard.py` — Admin panel (Users, Transactions, Events, System)
+### Color Palette (Binance-style)
+- Background: `#0b0e11`
+- Surface: `#161a1e`
+- Card: `#1e2329`
+- Border: `#2b3139`
+- Yellow/Gold: `#f0b90b`
+- Green: `#0ecb81`
+- Red: `#f6465d`
+- Text: `#eaecef`
+- Muted: `#848e9c`
 
-## User Preferences
-
-- Dark theme throughout (Binance-style color palette: #0b0e11 bg, #f0b90b gold, #0ecb81 green, #f6465d red)
-- Inter font for professional look
-- Modular sidebar navigation
+### Pages
+- `/login` — Auth page (Sign In / Sign Up tabs, Google/Apple social buttons)
+- `/dashboard` — Portfolio overview, performance chart, open positions, AI events feed
+- `/markets` — Market table with sparklines (BTC, ETH, stocks)
+- `/trade` — Price chart + order form + order book (BTC/USDT)
+- `/wallet` — Asset balances, deposit address, withdrawal form, transaction history
+- `/settings` — Profile, security, notifications, API keys
+- `/admin` — Admin-only: users table + transaction approve/reject panel
