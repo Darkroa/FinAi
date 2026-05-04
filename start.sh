@@ -1,6 +1,6 @@
 #!/bin/bash
 # Start FastAPI backend in background
-uvicorn src.api.main:app --host localhost --port 8000 --reload &
+uvicorn src.api.main:app --host 0.0.0.0 --port 8000 --reload &
 BACKEND_PID=$!
 echo "Backend started (PID: $BACKEND_PID)"
 
@@ -13,4 +13,5 @@ exec streamlit run src/frontend/login.py \
   --server.address 0.0.0.0 \
   --server.headless true \
   --server.enableCORS false \
-  --server.enableXsrfProtection false
+  --server.enableXsrfProtection false \
+  --server.allowedHosts all
