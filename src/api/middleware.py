@@ -12,59 +12,70 @@ from src.database.models import APIKey
 # In-memory rate limit store: api_key -> list of timestamps
 rate_limit_store = defaultdict(list)
 
+def _is_jwt(token: str) -> bool:
+    """JWTs have 3 base64 segments separated by dots and start with eyJ."""
+    parts = token.split(".")
+    return len(parts) == 3 and token.startswith("eyJ")
+
 
 class APIRateLimitMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next):
-        # Skip rate limiting for public/auth/docs routes
+        # Skip rate limiting for public/auth/docs/admin routes
         if request.url.path.startswith((
-            "/api/auth/", 
-            "/api/docs", 
-            "/api/redoc", 
+            "/api/auth/",
+            "/api/admin/",
+            "/api/users/",
+            "/api/wallet/",
+            "/api/support/",
+            "/api/bots/",
+            "/api/events",
+            "/api/notifications",
+            "/api/docs",
+            "/api/redoc",
             "/api/openapi",
             "/metrics",
             "/health"
         )):
             return await call_next(request)
 
-        # Extract API key from Authorization header
+        # Extract Authorization header
         authorization = request.headers.get("Authorization")
         if not authorization or not authorization.startswith("Bearer "):
-            # Allow requests without API key (they will be handled by route-level auth)
             return await call_next(request)
 
-        api_key = authorization.split(" ")[1].strip()
+        token = authorization.split(" ")[1].strip()
 
-        # Rate limiting: 10 requests per minute per API key
+        # Only rate-limit FinAi public API keys, NOT JWT session tokens
+        if _is_jwt(token):
+            return await call_next(request)
+
+        # Rate limiting: 60 requests per minute per public API key
         now = datetime.utcnow()
         minute_ago = now - timedelta(minutes=1)
 
-        # Clean old timestamps
-        rate_limit_store[api_key] = [
-            ts for ts in rate_limit_store[api_key] if ts > minute_ago
+        rate_limit_store[token] = [
+            ts for ts in rate_limit_store[token] if ts > minute_ago
         ]
 
-        if len(rate_limit_store[api_key]) >= 10:
-            logger.warning(f"Rate limit exceeded for API key: {api_key[:8]}...")
+        if len(rate_limit_store[token]) >= 60:
+            logger.warning(f"Rate limit exceeded for API key: {token[:8]}...")
             raise HTTPException(
                 status_code=429,
-                detail="Rate limit exceeded. Maximum 10 requests per minute per API key."
+                detail="Rate limit exceeded. Maximum 60 requests per minute per API key."
             )
 
-        # Record this request timestamp
-        rate_limit_store[api_key].append(now)
+        rate_limit_store[token].append(now)
 
-        # Process the request
         start_time = time.time()
         response = await call_next(request)
         duration_ms = (time.time() - start_time) * 1000
 
-        # Log usage
+        # Update last_used_at for public API keys
         try:
             db = SessionLocal()
-            key_record = db.query(APIKey).filter(APIKey.api_key == api_key).first()
+            key_record = db.query(APIKey).filter(APIKey.api_key == token).first()
             if key_record:
-                from datetime import datetime as dt
-                key_record.last_used_at = dt.utcnow()
+                key_record.last_used_at = datetime.utcnow()
                 db.commit()
         except Exception as e:
             logger.error(f"Failed to update API key last_used: {e}")
