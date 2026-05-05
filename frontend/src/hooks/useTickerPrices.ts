@@ -8,8 +8,7 @@ export interface TickerItem {
   live: boolean
 }
 
-const COINGECKO_URL =
-  'https://api.coingecko.com/api/v3/simple/price?ids=bitcoin,ethereum,binancecoin,solana&vs_currencies=usd&include_24hr_change=true'
+const PRICES_URL = '/api/public/prices'
 
 const STATIC_STOCKS: TickerItem[] = [
   { symbol: 'NVDA',  price: '$875.00', change: '+3.1%', up: true,  live: false },
@@ -39,7 +38,7 @@ export function useTickerPrices(intervalMs = 45000) {
 
   const fetchPrices = useCallback(async () => {
     try {
-      const res = await fetch(COINGECKO_URL)
+      const res = await fetch(PRICES_URL)
       if (!res.ok) return
       const data = await res.json()
 

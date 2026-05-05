@@ -2,7 +2,7 @@ import { useEffect, useState, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuthStore } from '../store/authStore'
 import { getEvents, getBotStatus } from '../lib/api'
-import { useLivePrices } from '../hooks/useLivePrices'
+import { useTickerPrices } from '../hooks/useTickerPrices'
 import {
   TrendingUp, TrendingDown, Zap, Activity, ArrowDownLeft,
   ArrowUpRight, History, Bot, BarChart2, RefreshCw, Eye, EyeOff,
@@ -26,7 +26,7 @@ function getGreeting() {
 export default function DashboardPage() {
   const navigate = useNavigate()
   const { user } = useAuthStore()
-  const { btcPrice, btcChange, ethPrice, ethChange, loading: priceLoading, refetch } = useLivePrices(60000)
+  const tickerItems = useTickerPrices(60000)
   const [events, setEvents] = useState<{ id: number; description: string; event_type: string; tickers_affected: string[]; created_at: string }[]>([])
   const [botRunning, setBotRunning] = useState(false)
   const [hideBalance, setHideBalance] = useState(false)
@@ -35,8 +35,20 @@ export default function DashboardPage() {
   const balance = user?.balance_usdt ?? 0
   const todayPnl = 324.20
   const todayPct = 2.57
-  const displayPrice  = (btcToggle === 'BTC' ? btcPrice  : ethPrice)  ?? (btcToggle === 'BTC' ? 67432.10 : 3521.80)
-  const displayChange = (btcToggle === 'BTC' ? btcChange : ethChange) ?? (btcToggle === 'BTC' ? 2.4 : 1.8)
+
+  const btcItem  = tickerItems.find(t => t.symbol === 'BTC/USDT')
+  const ethItem  = tickerItems.find(t => t.symbol === 'ETH/USDT')
+  const parsePrice  = (s: string) => parseFloat(s.replace(/[$,]/g, '')) || 0
+  const parseChange = (s: string) => parseFloat(s.replace('%', '')) || 0
+  const btcPrice  = btcItem  ? parsePrice(btcItem.price)   : 0
+  const ethPrice  = ethItem  ? parsePrice(ethItem.price)   : 0
+  const btcChange = btcItem  ? parseChange(btcItem.change) : 0
+  const ethChange = ethItem  ? parseChange(ethItem.change) : 0
+  const priceLoading = !btcItem?.live
+  const refetch = () => {}
+
+  const displayPrice  = (btcToggle === 'BTC' ? btcPrice  : ethPrice)  || (btcToggle === 'BTC' ? 67432.10 : 3521.80)
+  const displayChange = (btcToggle === 'BTC' ? btcChange : ethChange) || (btcToggle === 'BTC' ? 2.4 : 1.8)
   const btcEquiv      = displayPrice > 0 ? (balance / displayPrice).toFixed(6) : '—'
 
   const fetchData = useCallback(async () => {

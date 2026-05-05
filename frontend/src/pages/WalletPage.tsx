@@ -34,9 +34,8 @@ const VPS_PLANS = [
 
 const ASSETS = [
   { name: 'Bitcoin (BTC)', price: 67432, icon: '₿' },
-  { name: 'Ethereum (ETH)', price: 3521, icon: 'Ξ' },
-  { name: 'Solana (SOL)', price: 182, icon: '◎' },
-  { name: 'BNB', price: 598, icon: 'B' },
+  { name: 'Ethereum (ETH)', price: 3521,  icon: 'Ξ' },
+  { name: 'BNB',           price: 598,   icon: 'B' },
 ]
 
 function txIcon(type: string) {
@@ -213,14 +212,14 @@ export default function WalletPage() {
 
               <div>
                 <label className="text-xs text-[#848e9c] mb-1.5 block">Payment Method</label>
-                <div className="grid grid-cols-2 gap-2">
+                <select
+                  value={depMethod}
+                  onChange={e => setDepMethod(e.target.value)}
+                  className="w-full bg-[#0b0e11] border border-[#2b3139] rounded-xl px-3 py-2.5 text-xs text-[#eaecef] focus:outline-none focus:border-[#f0b90b] transition">
                   {METHODS.map(m => (
-                    <button key={m.key} type="button" onClick={() => setDepMethod(m.key)}
-                      className={`text-xs px-3 py-2 rounded-xl border transition text-left ${depMethod === m.key ? 'border-[#f0b90b] bg-[#f0b90b]/10 text-[#f0b90b]' : 'border-[#2b3139] text-[#848e9c] hover:border-[#3c4451]'}`}>
-                      <span className="font-mono mr-1">{m.icon}</span>{m.label}
-                    </button>
+                    <option key={m.key} value={m.key}>{m.icon} {m.label}</option>
                   ))}
-                </div>
+                </select>
               </div>
 
               {depAddress && isCrypto(depMethod) && (
@@ -289,14 +288,14 @@ export default function WalletPage() {
 
               <div>
                 <label className="text-xs text-[#848e9c] mb-1.5 block">Withdrawal Method</label>
-                <div className="grid grid-cols-2 gap-2">
+                <select
+                  value={wdMethod}
+                  onChange={e => setWdMethod(e.target.value)}
+                  className="w-full bg-[#0b0e11] border border-[#2b3139] rounded-xl px-3 py-2.5 text-xs text-[#eaecef] focus:outline-none focus:border-[#f0b90b] transition">
                   {METHODS.map(m => (
-                    <button key={m.key} type="button" onClick={() => setWdMethod(m.key)}
-                      className={`text-xs px-3 py-2 rounded-xl border transition ${wdMethod === m.key ? 'border-[#f0b90b] bg-[#f0b90b]/10 text-[#f0b90b]' : 'border-[#2b3139] text-[#848e9c] hover:border-[#3c4451]'}`}>
-                      <span className="font-mono mr-1">{METHODS.find(x => x.key === m.key)?.icon}</span>{m.label}
-                    </button>
+                    <option key={m.key} value={m.key}>{m.icon} {m.label}</option>
                   ))}
-                </div>
+                </select>
               </div>
 
               <div>
