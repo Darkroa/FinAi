@@ -187,37 +187,39 @@ export default function LandingPage() {
             <p className="text-[#848e9c] text-sm max-w-sm mx-auto">Start free, scale as you grow. No hidden fees.</p>
           </div>
 
-          <div className="grid sm:grid-cols-3 gap-4">
+          <div className="grid sm:grid-cols-3 gap-5 sm:items-start">
             {plans.map(p => (
-              <div key={p.name} className={`relative rounded-2xl p-6 border transition-all ${p.highlight
-                ? 'bg-[#f0b90b] border-[#f0b90b] text-black shadow-2xl shadow-[#f0b90b]/20 scale-[1.02]'
-                : 'bg-[#0b0e11] border-[#2b3139] text-[#eaecef]'}`}>
+              <div key={p.name} className={`relative rounded-2xl border flex flex-col overflow-hidden transition-all ${p.highlight
+                ? 'bg-gradient-to-b from-[#1e2329] to-[#161a1e] border-[#f0b90b] shadow-2xl shadow-[#f0b90b]/10'
+                : 'bg-[#0b0e11] border-[#2b3139]'}`}>
                 {p.highlight && (
-                  <div className="absolute -top-3 left-1/2 -translate-x-1/2 bg-black text-[#f0b90b] text-[10px] font-bold px-3 py-1 rounded-full border border-[#f0b90b]/30">
-                    MOST POPULAR
+                  <div className="bg-[#f0b90b] text-black text-[10px] font-extrabold tracking-widest py-1.5 text-center uppercase">
+                    ★ Most Popular
                   </div>
                 )}
-                <h3 className={`font-bold text-lg mb-1 ${p.highlight ? 'text-black' : 'text-[#eaecef]'}`}>{p.name}</h3>
-                <div className="flex items-end gap-1 mb-1">
-                  <span className={`text-4xl font-extrabold font-mono ${p.highlight ? 'text-black' : 'text-[#eaecef]'}`}>
-                    {p.price === 0 ? 'Free' : `$${p.price}`}
-                  </span>
-                  {p.price > 0 && <span className={`text-sm mb-1 ${p.highlight ? 'text-black/70' : 'text-[#848e9c]'}`}>{p.period}</span>}
+                <div className="p-6 flex flex-col flex-1">
+                  <h3 className={`font-bold text-base mb-0.5 ${p.highlight ? 'text-[#f0b90b]' : 'text-[#eaecef]'}`}>{p.name}</h3>
+                  <div className="flex items-end gap-1 mb-5">
+                    <span className={`text-4xl font-extrabold font-mono ${p.highlight ? 'text-[#eaecef]' : 'text-[#eaecef]'}`}>
+                      {p.price === 0 ? 'Free' : `$${p.price}`}
+                    </span>
+                    {p.price > 0 && <span className="text-sm mb-1.5 text-[#848e9c]">{p.period}</span>}
+                  </div>
+                  <ul className="space-y-2.5 flex-1">
+                    {p.features.map(f => (
+                      <li key={f} className="flex items-center gap-2.5 text-xs">
+                        <Check size={13} className="text-[#0ecb81] flex-shrink-0" />
+                        <span className="text-[#848e9c]">{f}</span>
+                      </li>
+                    ))}
+                  </ul>
+                  <button onClick={() => navigate('/login')}
+                    className={`mt-6 w-full py-3 rounded-xl text-sm font-bold transition-all ${p.highlight
+                      ? 'bg-[#f0b90b] hover:bg-[#d4a30a] text-black shadow-lg shadow-[#f0b90b]/25'
+                      : 'bg-[#f0b90b]/10 hover:bg-[#f0b90b]/20 text-[#f0b90b] border border-[#f0b90b]/20'}`}>
+                    {p.cta}
+                  </button>
                 </div>
-                <ul className="space-y-2 my-5">
-                  {p.features.map(f => (
-                    <li key={f} className="flex items-center gap-2 text-xs">
-                      <Check size={13} className={p.highlight ? 'text-black' : 'text-[#0ecb81]'} />
-                      <span className={p.highlight ? 'text-black/80' : 'text-[#848e9c]'}>{f}</span>
-                    </li>
-                  ))}
-                </ul>
-                <button onClick={() => navigate('/login')}
-                  className={`w-full py-3 rounded-xl text-sm font-bold transition-all ${p.highlight
-                    ? 'bg-black text-[#f0b90b] hover:bg-[#0b0e11]'
-                    : 'bg-[#f0b90b]/10 hover:bg-[#f0b90b]/20 text-[#f0b90b] border border-[#f0b90b]/20'}`}>
-                  {p.cta}
-                </button>
               </div>
             ))}
           </div>

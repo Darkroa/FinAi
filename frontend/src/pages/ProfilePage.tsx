@@ -50,21 +50,24 @@ export default function ProfilePage() {
   }
 
   return (
-    <div className="space-y-5 max-w-3xl">
+    <div className="space-y-4 max-w-3xl">
       <h1 className="text-xl font-bold text-[#eaecef]">My Profile</h1>
 
       {/* ── Tier banner ── */}
-      <div className={`flex items-center gap-3 rounded-2xl border px-4 py-3 ${tier.bg} border-current/10`}>
-        <Star size={16} className={tier.color} />
-        <div className="flex-1">
+      <div className={`rounded-2xl border p-4 ${tier.bg} border-current/10`}>
+        <div className="flex items-center gap-2 mb-2">
+          <Star size={15} className={tier.color} />
           <span className={`font-bold text-sm ${tier.color}`}>{tier.label}</span>
-          <span className="text-xs text-[#848e9c] ml-3">{tier.limits}</span>
+          <span className="text-xs text-[#848e9c] hidden sm:inline">· {tier.limits}</span>
         </div>
-        {kycBadge()}
-        {user?.is_mail_verified
-          ? <span className="inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full bg-[#0ecb81]/10 text-[#0ecb81]"><CheckCircle size={10}/>Email verified</span>
-          : <span className="inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full bg-[#f6465d]/10 text-[#f6465d]">Email unverified</span>
-        }
+        <p className="text-xs text-[#848e9c] sm:hidden mb-2">{tier.limits}</p>
+        <div className="flex flex-wrap gap-1.5">
+          {kycBadge()}
+          {user?.is_mail_verified
+            ? <span className="inline-flex items-center gap-1 text-xs px-2.5 py-1 rounded-full bg-[#0ecb81]/10 text-[#0ecb81] font-medium"><CheckCircle size={10}/>Email verified</span>
+            : <span className="inline-flex items-center gap-1 text-xs px-2.5 py-1 rounded-full bg-[#f6465d]/10 text-[#f6465d] font-medium">Email unverified</span>
+          }
+        </div>
       </div>
 
       {/* ── Tab bar ── */}
@@ -75,7 +78,7 @@ export default function ProfilePage() {
           ['security', 'Security',  Shield],
         ] as const).map(([id, label, Icon]) => (
           <button key={id} onClick={() => setTab(id as Tab)}
-            className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl text-sm font-medium transition-all ${tab === id ? 'bg-[#f0b90b] text-black' : 'text-[#848e9c] hover:text-[#eaecef]'}`}>
+            className={`flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-xl text-sm font-semibold transition-all ${tab === id ? 'bg-[#f0b90b] text-black shadow-lg shadow-[#f0b90b]/20' : 'text-[#848e9c] hover:text-[#eaecef]'}`}>
             <Icon size={14}/>{label}
           </button>
         ))}
@@ -254,73 +257,98 @@ function PersonalTab({ user, setUser, kycBadge }: { user: ReturnType<typeof useA
       )}
 
       {/* ── Personal info form ── */}
-      <form onSubmit={handleSave} className="bg-[#161a1e] border border-[#2b3139] rounded-xl p-5">
-        <div className="flex items-center gap-2 mb-5">
+      <form onSubmit={handleSave} className="bg-[#161a1e] border border-[#2b3139] rounded-2xl overflow-hidden">
+        <div className="flex items-center gap-2 px-5 py-4 border-b border-[#2b3139] bg-[#1a1f25]">
           <User size={15} className="text-[#f0b90b]" />
           <h2 className="text-sm font-semibold text-[#eaecef]">Personal Information</h2>
-          <span className="text-xs text-[#848e9c] ml-auto">{user?.profile_locked ? 'Locked by admin' : 'Required for KYC *'}</span>
+          {user?.profile_locked
+            ? <span className="ml-auto text-[10px] px-2 py-0.5 rounded-full bg-[#f6465d]/10 text-[#f6465d] font-medium">Locked</span>
+            : <span className="ml-auto text-[10px] px-2 py-0.5 rounded-full bg-[#f0b90b]/10 text-[#f0b90b] font-medium">Required for KYC</span>
+          }
         </div>
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+
+        <div className="p-5 space-y-5">
+          {/* Name row */}
           <div>
-            <label className="text-xs text-[#848e9c] mb-1.5 block">First Name *</label>
-            <input value={form.first_name} onChange={e => setForm(f => ({ ...f, first_name: e.target.value }))}
-              disabled={!!user?.profile_locked} placeholder="First name" className={inp} />
+            <p className="text-[10px] font-semibold uppercase tracking-widest text-[#848e9c] mb-3">Full Name</p>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              <div className="relative">
+                <label className="absolute -top-2 left-3 bg-[#161a1e] px-1 text-[10px] text-[#f0b90b] font-semibold z-10">First *</label>
+                <input value={form.first_name} onChange={e => setForm(f => ({ ...f, first_name: e.target.value }))}
+                  disabled={!!user?.profile_locked} placeholder="First name" className={inp} />
+              </div>
+              <div className="relative">
+                <label className="absolute -top-2 left-3 bg-[#161a1e] px-1 text-[10px] text-[#848e9c] font-semibold z-10">Middle</label>
+                <input value={form.middle_name} onChange={e => setForm(f => ({ ...f, middle_name: e.target.value }))}
+                  disabled={!!user?.profile_locked} placeholder="Optional" className={inp} />
+              </div>
+              <div className="relative">
+                <label className="absolute -top-2 left-3 bg-[#161a1e] px-1 text-[10px] text-[#f0b90b] font-semibold z-10">Last *</label>
+                <input value={form.last_name} onChange={e => setForm(f => ({ ...f, last_name: e.target.value }))}
+                  disabled={!!user?.profile_locked} placeholder="Last name" className={inp} />
+              </div>
+            </div>
           </div>
+
+          {/* Account details */}
           <div>
-            <label className="text-xs text-[#848e9c] mb-1.5 block">Middle Name</label>
-            <input value={form.middle_name} onChange={e => setForm(f => ({ ...f, middle_name: e.target.value }))}
-              disabled={!!user?.profile_locked} placeholder="Middle name (optional)" className={inp} />
+            <p className="text-[10px] font-semibold uppercase tracking-widest text-[#848e9c] mb-3">Account Details</p>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div className="relative">
+                <label className="absolute -top-2 left-3 bg-[#161a1e] px-1 text-[10px] text-[#848e9c] font-semibold z-10">Username</label>
+                <input value={form.username} onChange={e => setForm(f => ({ ...f, username: e.target.value }))}
+                  disabled={!!user?.profile_locked} placeholder="@username" className={inp} />
+              </div>
+              <div className="relative">
+                <label className="absolute -top-2 left-3 bg-[#161a1e] px-1 text-[10px] text-[#848e9c] font-semibold z-10">Email</label>
+                <input value={user?.email || ''} disabled className={`${inp} opacity-60 cursor-not-allowed`} />
+              </div>
+            </div>
           </div>
+
+          {/* Contact */}
           <div>
-            <label className="text-xs text-[#848e9c] mb-1.5 block">Last Name *</label>
-            <input value={form.last_name} onChange={e => setForm(f => ({ ...f, last_name: e.target.value }))}
-              disabled={!!user?.profile_locked} placeholder="Last name" className={inp} />
+            <p className="text-[10px] font-semibold uppercase tracking-widest text-[#848e9c] mb-3">Contact & Identity</p>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div className="relative">
+                <label className="absolute -top-2 left-3 bg-[#161a1e] px-1 text-[10px] text-[#f0b90b] font-semibold z-10">Phone *</label>
+                <input value={form.phone} onChange={e => setForm(f => ({ ...f, phone: e.target.value }))}
+                  disabled={!!user?.profile_locked} placeholder="+1 234 567 8900" className={inp} />
+              </div>
+              <div className="relative">
+                <label className="absolute -top-2 left-3 bg-[#161a1e] px-1 text-[10px] text-[#f0b90b] font-semibold z-10">Date of Birth *</label>
+                <input type="date" value={form.dob} onChange={e => setForm(f => ({ ...f, dob: e.target.value }))}
+                  disabled={!!user?.profile_locked} className={inp} />
+              </div>
+              <div className="relative">
+                <label className="absolute -top-2 left-3 bg-[#161a1e] px-1 text-[10px] text-[#848e9c] font-semibold z-10">Sex</label>
+                <select value={form.sex} onChange={e => setForm(f => ({ ...f, sex: e.target.value }))}
+                  disabled={!!user?.profile_locked} className={inp}>
+                  <option value="">Select</option>
+                  <option>Male</option><option>Female</option>
+                  <option>Other</option><option>Prefer not to say</option>
+                </select>
+              </div>
+              <div className="relative">
+                <label className="absolute -top-2 left-3 bg-[#161a1e] px-1 text-[10px] text-[#f0b90b] font-semibold z-10">Country *</label>
+                <input value={form.country} onChange={e => setForm(f => ({ ...f, country: e.target.value }))}
+                  disabled={!!user?.profile_locked} placeholder="Country" className={inp} />
+              </div>
+              <div className="relative sm:col-span-2">
+                <label className="absolute -top-2 left-3 bg-[#161a1e] px-1 text-[10px] text-[#848e9c] font-semibold z-10">Address</label>
+                <input value={form.address} onChange={e => setForm(f => ({ ...f, address: e.target.value }))}
+                  disabled={!!user?.profile_locked} placeholder="Street address" className={inp} />
+              </div>
+            </div>
           </div>
-          <div>
-            <label className="text-xs text-[#848e9c] mb-1.5 block">Username</label>
-            <input value={form.username} onChange={e => setForm(f => ({ ...f, username: e.target.value }))}
-              disabled={!!user?.profile_locked} placeholder="@username" className={inp} />
-          </div>
-          <div>
-            <label className="text-xs text-[#848e9c] mb-1.5 block">Email</label>
-            <input value={user?.email || ''} disabled className={inp} />
-          </div>
-          <div>
-            <label className="text-xs text-[#848e9c] mb-1.5 block">Phone Number *</label>
-            <input value={form.phone} onChange={e => setForm(f => ({ ...f, phone: e.target.value }))}
-              disabled={!!user?.profile_locked} placeholder="+1 234 567 8900" className={inp} />
-          </div>
-          <div>
-            <label className="text-xs text-[#848e9c] mb-1.5 block">Date of Birth *</label>
-            <input type="date" value={form.dob} onChange={e => setForm(f => ({ ...f, dob: e.target.value }))}
-              disabled={!!user?.profile_locked} className={inp} />
-          </div>
-          <div>
-            <label className="text-xs text-[#848e9c] mb-1.5 block">Sex</label>
-            <select value={form.sex} onChange={e => setForm(f => ({ ...f, sex: e.target.value }))}
-              disabled={!!user?.profile_locked} className={inp}>
-              <option value="">Select</option>
-              <option>Male</option><option>Female</option>
-              <option>Other</option><option>Prefer not to say</option>
-            </select>
-          </div>
-          <div>
-            <label className="text-xs text-[#848e9c] mb-1.5 block">Country *</label>
-            <input value={form.country} onChange={e => setForm(f => ({ ...f, country: e.target.value }))}
-              disabled={!!user?.profile_locked} placeholder="Country" className={inp} />
-          </div>
-          <div>
-            <label className="text-xs text-[#848e9c] mb-1.5 block">Address</label>
-            <input value={form.address} onChange={e => setForm(f => ({ ...f, address: e.target.value }))}
-              disabled={!!user?.profile_locked} placeholder="Street address" className={inp} />
-          </div>
+
+          {!user?.profile_locked && (
+            <button type="submit" disabled={saving}
+              className="w-full sm:w-auto bg-[#f0b90b] hover:bg-[#d4a30a] disabled:opacity-60 text-black font-bold px-8 py-3 rounded-xl text-sm transition shadow-lg shadow-[#f0b90b]/20">
+              {saving ? 'Saving…' : 'Save Changes'}
+            </button>
+          )}
         </div>
-        {!user?.profile_locked && (
-          <button type="submit" disabled={saving}
-            className="mt-5 bg-[#f0b90b] hover:bg-[#d4a30a] disabled:opacity-60 text-black font-semibold px-6 py-2.5 rounded-xl text-sm transition">
-            {saving ? 'Saving...' : 'Update Info'}
-          </button>
-        )}
       </form>
     </div>
   )
