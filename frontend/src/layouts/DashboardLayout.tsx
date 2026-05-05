@@ -247,8 +247,10 @@ export default function DashboardLayout() {
         </header>
 
         {/* Page content */}
-        <main className="flex-1 overflow-y-auto p-4 sm:p-5 lg:p-6">
-          <Outlet />
+        <main className="flex-1 overflow-y-auto">
+          <div className="max-w-5xl mx-auto w-full px-4 sm:px-5 lg:px-6 py-4 sm:py-5 lg:py-6">
+            <Outlet />
+          </div>
         </main>
       </div>
 

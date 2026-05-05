@@ -70,7 +70,7 @@ export default function ProfilePage() {
 
   return (
     <div className="space-y-4 max-w-2xl">
-      <h1 className="text-base font-bold text-[#eaecef]">My Profile</h1>
+      <h1 className="text-xl font-bold text-[#eaecef]">My Profile</h1>
 
       {/* Tier banner */}
       <div className={`rounded-xl border ${tier.border} ${tier.bg} px-4 py-3`}>

@@ -4,6 +4,12 @@
 
 FinAi is a full-stack AI-powered financial trading platform built with FastAPI (backend) and React + Vite (frontend). It provides real-time market intelligence, automated trading bots, a full wallet system, KYC/profile management, exchange connections, and a comprehensive admin panel.
 
+## CSS / Styling Notes
+
+- **Tailwind v4 + CSS Layer**: `index.css` puts the `box-sizing` reset inside `@layer base` so Tailwind utility classes (`mx-auto`, `px-*`, `gap-*`, etc.) in `@layer utilities` always take precedence. Never write bare CSS resets outside a layer — they would silently override all Tailwind spacing/margin/padding utilities.
+- **DashboardLayout**: `<main>` wraps `<Outlet />` in `max-w-5xl mx-auto w-full px-4 sm:px-5 lg:px-6 py-4 sm:py-5 lg:py-6` — all app pages are automatically constrained and centered. Individual pages do NOT need their own outer centering wrappers (ProfilePage keeps `max-w-2xl` for its narrower form layout).
+- **Page h1 headings**: All app pages use `text-xl font-bold text-[#eaecef]` as the standard page title style.
+
 ## Architecture
 
 ```
