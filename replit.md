@@ -92,6 +92,20 @@ Binance, Bybit, KuCoin, OKX, Kraken, Coinbase — connect via Settings page with
 - **Notification** — broadcast to all users or specific user
 - **Event**, **TrendAnalysis**, **TradeLog** — market intelligence
 
+## UI Design System
+
+All pages use a consistent mobile-first design with:
+- **LandingPage**: Full navbar + hero with grid bg + glow blobs, stats bar, features grid (3-col), live market snapshot, pricing cards, CTA, footer
+- **DashboardPage**: Balance hero card with gradient, 4 quick-stat cards (2-col mobile / 4-col desktop), portfolio chart + live BTC/ETH price widget, Bot status + AI Events + Open Positions row
+- **MarketsPage**: Toggle between table/grid views; mobile shows card list (no scroll overflow); filter by crypto/stocks/all
+- **TradePage**: Pair selector dropdown, 24h stats bar, chart with TF buttons, order form with % quick-fill, order book with depth bars, open orders tab
+- **WalletPage**: Balance hero card with deposit/withdraw quick buttons, 5-tab grid (Deposit/Withdraw/P2P/VPS/Asset), mobile-friendly tab labels (icon + text stacked)
+- **TransactionHistoryPage**: 3 summary stat cards, mobile = card list view, desktop = table view; filter bar with search + type chips
+- **BotsPage**: Bot control card + 4 P&L stat cards + AI training banner + trade log table
+- **ProfilePage**: 3-tab (Personal/FinAPI/Security) with Tier banner — unchanged from previous rewrite
+- **SettingsPage**: Simplified to Notifications toggles + App Preferences + Language/Region + Security redirect note (exchange/API moved to Profile)
+- **SupportPage**: 3-col grid (1/3 ticket list + 2/3 chat panel) — unchanged
+
 ## Key API Endpoints
 
 ### Auth

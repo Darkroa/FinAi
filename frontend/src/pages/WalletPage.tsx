@@ -167,23 +167,37 @@ export default function WalletPage() {
   ] as const
 
   return (
-    <div className="space-y-5">
-      {/* Balance header */}
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <h1 className="text-xl font-bold text-[#eaecef]">Wallet</h1>
-        <div className="bg-gradient-to-br from-[#1e2329] to-[#161a1e] border border-[#2b3139] rounded-xl px-5 py-3 text-right">
-          <p className="text-xs text-[#848e9c]">Available Balance</p>
-          <p className="text-2xl font-bold font-mono text-[#eaecef]">${(user?.balance_usdt ?? 0).toLocaleString('en-US', { minimumFractionDigits: 2 })}</p>
-          <p className="text-xs text-[#848e9c]">USDT</p>
+    <div className="space-y-4 sm:space-y-5">
+      {/* Balance hero card */}
+      <div className="relative bg-gradient-to-br from-[#1e2329] via-[#181d22] to-[#161a1e] border border-[#2b3139] rounded-2xl p-5 overflow-hidden">
+        <div className="absolute inset-0 pointer-events-none" style={{
+          backgroundImage: 'radial-gradient(ellipse at top right, rgba(14,203,129,0.07) 0%, transparent 60%)',
+        }} />
+        <div className="relative flex flex-wrap items-center justify-between gap-4">
+          <div>
+            <p className="text-xs text-[#848e9c] font-medium mb-1">Available Balance</p>
+            <p className="text-3xl font-bold font-mono text-[#eaecef]">
+              ${(user?.balance_usdt ?? 0).toLocaleString('en-US', { minimumFractionDigits: 2 })}
+            </p>
+            <p className="text-xs text-[#848e9c] mt-1">USDT · Updated just now</p>
+          </div>
+          <div className="flex gap-2">
+            <button onClick={() => setTab('deposit')} className="flex items-center gap-1.5 bg-[#0ecb81] hover:bg-[#0ab56f] text-black font-semibold text-xs px-4 py-2.5 rounded-xl transition">
+              <ArrowDownLeft size={13} /> Deposit
+            </button>
+            <button onClick={() => setTab('withdraw')} className="flex items-center gap-1.5 bg-[#0b0e11] hover:bg-[#2b3139] text-[#848e9c] hover:text-[#eaecef] font-semibold text-xs px-4 py-2.5 rounded-xl border border-[#2b3139] transition">
+              <ArrowUpRight size={13} /> Withdraw
+            </button>
+          </div>
         </div>
       </div>
 
       {/* Action tabs */}
-      <div className="flex flex-wrap gap-1 bg-[#161a1e] border border-[#2b3139] rounded-xl p-1">
+      <div className="grid grid-cols-5 gap-1 bg-[#161a1e] border border-[#2b3139] rounded-xl p-1">
         {tabs.map(({ key, label, icon: Icon }) => (
           <button key={key} onClick={() => setTab(key as WalletTab)}
-            className={`flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-medium transition whitespace-nowrap flex-1 justify-center sm:flex-none ${tab === key ? 'bg-[#f0b90b] text-black' : 'text-[#848e9c] hover:text-[#eaecef]'}`}>
-            <Icon size={12} />{label}
+            className={`flex flex-col sm:flex-row items-center justify-center gap-1 sm:gap-1.5 px-2 py-2.5 rounded-lg text-[10px] sm:text-xs font-medium transition ${tab === key ? 'bg-[#f0b90b] text-black' : 'text-[#848e9c] hover:text-[#eaecef]'}`}>
+            <Icon size={13} /><span className="leading-tight text-center">{label}</span>
           </button>
         ))}
       </div>

@@ -126,5 +126,9 @@ export const saveWebhookSettings = (data: {
   whatsapp_number?: string
 }) => api.post('/users/save-webhook', data)
 
+// Notification preferences
+export const updateNotificationPreferences = (prefs: { email?: boolean; whatsapp?: boolean; telegram?: boolean }) =>
+  api.post('/users/update-profile', { notification_preferences: prefs })
+
 // Health
 export const getHealth = () => api.get('/health')

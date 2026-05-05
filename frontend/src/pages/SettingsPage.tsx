@@ -1,312 +1,169 @@
 import { useState } from 'react'
 import { useAuthStore } from '../store/authStore'
-import { connectExchange, disconnectExchange, createApiKey, listApiKeys, revokeApiKey } from '../lib/api'
+import { updateNotificationPreferences } from '../lib/api'
 import toast from 'react-hot-toast'
-import { Shield, Bell, Key, Zap, Plus, Trash2, Eye, EyeOff, CheckCircle, Copy, AlertCircle } from 'lucide-react'
+import { Bell, Mail, MessageCircle, Send, Zap, Shield, Globe, Info } from 'lucide-react'
 
-const EXCHANGES = [
-  { id: 'binance',  label: 'Binance',  icon: '🟡', hasPassphrase: false },
-  { id: 'bybit',    label: 'Bybit',    icon: '🟠', hasPassphrase: false },
-  { id: 'okx',      label: 'OKX',      icon: '⚫', hasPassphrase: true  },
-  { id: 'kucoin',   label: 'KuCoin',   icon: '🟢', hasPassphrase: true  },
-  { id: 'kraken',   label: 'Kraken',   icon: '🔵', hasPassphrase: false },
-  { id: 'coinbase', label: 'Coinbase', icon: '🔷', hasPassphrase: false },
-]
-
-interface ApiKey { id: number; key_name: string; purpose: string; created_at: string; expires_at: string; is_active: boolean; last_used_at: string }
+interface NotifPrefs { email: boolean; whatsapp: boolean; telegram: boolean }
 
 export default function SettingsPage() {
   const { user, setUser } = useAuthStore()
-  const [notifications, setNotifications] = useState(user?.notification_preferences || { email: true, whatsapp: false, telegram: false })
+  const [notifs, setNotifs] = useState<NotifPrefs>(
+    user?.notification_preferences || { email: true, whatsapp: false, telegram: false }
+  )
+  const [saving, setSaving] = useState(false)
 
-  // Exchange connection
-  const [selExchange, setSelExchange] = useState('')
-  const [exchApiKey, setExchApiKey] = useState('')
-  const [exchSecret, setExchSecret] = useState('')
-  const [exchPass, setExchPass] = useState('')
-  const [showSecret, setShowSecret] = useState(false)
-  const [connecting, setConnecting] = useState(false)
+  const notifItems = [
+    { key: 'email'    as const, label: 'Email Notifications',   desc: 'Trade alerts, account updates, and security events', icon: Mail,          color: 'text-[#f0b90b]', bg: 'bg-[#f0b90b]/10' },
+    { key: 'whatsapp' as const, label: 'WhatsApp Alerts',       desc: 'Real-time trade signals and bot status via WhatsApp', icon: MessageCircle, color: 'text-[#0ecb81]', bg: 'bg-[#0ecb81]/10' },
+    { key: 'telegram' as const, label: 'Telegram Alerts',       desc: 'Market events and trade notifications via Telegram',  icon: Send,          color: 'text-[#3b82f6]', bg: 'bg-blue-500/10'   },
+  ]
 
-  // API Keys
-  const [apiKeys, setApiKeys] = useState<ApiKey[]>([])
-  const [keysLoaded, setKeysLoaded] = useState(false)
-  const [newKeyName, setNewKeyName] = useState('')
-  const [newKeyPurpose, setNewKeyPurpose] = useState('bot')
-  const [createdKey, setCreatedKey] = useState<string | null>(null)
-  const [creatingKey, setCreatingKey] = useState(false)
-
-  const selectedExch = EXCHANGES.find(e => e.id === selExchange)
-  const connections = user?.exchange_connections || []
-
-  const handleConnect = async (e: React.FormEvent) => {
-    e.preventDefault()
-    if (!selExchange || !exchApiKey || !exchSecret) return toast.error('Fill all fields')
-    setConnecting(true)
+  const handleSave = async () => {
+    setSaving(true)
     try {
-      await connectExchange({ exchange: selExchange, api_key: exchApiKey, api_secret: exchSecret, passphrase: exchPass || undefined, label: selectedExch?.label })
-      // Refresh user
-      const { getMe } = await import('../lib/api')
-      const res = await getMe()
+      const res = await updateNotificationPreferences(notifs)
       setUser(res.data)
-      toast.success(`${selectedExch?.label} connected!`)
-      setExchApiKey(''); setExchSecret(''); setExchPass(''); setSelExchange('')
-    } catch (err: unknown) {
-      toast.error((err as { response?: { data?: { detail?: string } } }).response?.data?.detail || 'Failed to connect')
-    } finally { setConnecting(false) }
+      toast.success('Notification preferences saved')
+    } catch {
+      toast.error('Failed to save preferences')
+    } finally {
+      setSaving(false)
+    }
   }
 
-  const handleDisconnect = async (exchange: string) => {
-    try {
-      await disconnectExchange(exchange)
-      const { getMe } = await import('../lib/api')
-      const res = await getMe()
-      setUser(res.data)
-      toast.success(`${exchange} disconnected`)
-    } catch { toast.error('Failed to disconnect') }
+  const toggle = (key: keyof NotifPrefs) => {
+    setNotifs(prev => ({ ...prev, [key]: !prev[key] }))
   }
-
-  const loadApiKeys = async () => {
-    try {
-      const res = await listApiKeys()
-      setApiKeys(Array.isArray(res.data) ? res.data : [])
-      setKeysLoaded(true)
-    } catch { toast.error('Failed to load API keys') }
-  }
-
-  const handleCreateKey = async (e: React.FormEvent) => {
-    e.preventDefault()
-    if (!newKeyName.trim()) return
-    setCreatingKey(true)
-    try {
-      const res = await createApiKey(newKeyName.trim(), newKeyPurpose)
-      setCreatedKey(res.data.api_key)
-      toast.success('API key created — copy it now!')
-      setNewKeyName('')
-      await loadApiKeys()
-    } catch (err: unknown) {
-      toast.error((err as { response?: { data?: { detail?: string } } }).response?.data?.detail || 'Failed to create key')
-    } finally { setCreatingKey(false) }
-  }
-
-  const handleRevokeKey = async (id: number) => {
-    try {
-      await revokeApiKey(id)
-      toast.success('Key revoked')
-      await loadApiKeys()
-    } catch { toast.error('Failed to revoke') }
-  }
-
-  const inp = 'w-full bg-[#0b0e11] border border-[#2b3139] rounded-xl px-3 py-2.5 text-sm text-[#eaecef] placeholder-[#4a5568] focus:outline-none focus:border-[#f0b90b] transition'
 
   return (
     <div className="space-y-5 max-w-2xl">
       <h1 className="text-xl font-bold text-[#eaecef]">Settings</h1>
 
-      {/* Exchange Connections */}
-      <div className="bg-[#161a1e] border border-[#2b3139] rounded-xl p-5">
-        <div className="flex items-center gap-2 mb-5">
-          <Zap size={15} className="text-[#f0b90b]" />
-          <h2 className="text-sm font-semibold text-[#eaecef]">Exchange Connections</h2>
+      {/* Notifications */}
+      <div className="bg-[#161a1e] border border-[#2b3139] rounded-xl overflow-hidden">
+        <div className="flex items-center gap-2.5 px-5 py-4 border-b border-[#2b3139]">
+          <div className="w-7 h-7 rounded-lg bg-[#f0b90b]/10 flex items-center justify-center">
+            <Bell size={14} className="text-[#f0b90b]" />
+          </div>
+          <div>
+            <h2 className="text-sm font-semibold text-[#eaecef]">Notifications</h2>
+            <p className="text-[10px] text-[#848e9c]">Choose where to receive alerts</p>
+          </div>
         </div>
 
-        {/* Connected exchanges */}
-        {connections.length > 0 && (
-          <div className="mb-4 space-y-2">
-            {connections.map((c) => {
-              const exch = EXCHANGES.find(e => e.id === c.exchange)
-              return (
-                <div key={c.exchange} className="flex items-center justify-between bg-[#0b0e11] border border-[#0ecb81]/20 rounded-xl px-3 py-2.5">
-                  <div className="flex items-center gap-2.5">
-                    <span className="text-base">{exch?.icon || '🔗'}</span>
-                    <div>
-                      <p className="text-sm font-medium text-[#eaecef]">{c.label || c.exchange}</p>
-                      <p className="text-[10px] text-[#848e9c] font-mono">{c.api_key_masked}</p>
-                    </div>
-                    <CheckCircle size={13} className="text-[#0ecb81]" />
-                  </div>
-                  <button onClick={() => handleDisconnect(c.exchange)}
-                    className="p-1.5 rounded-lg text-[#848e9c] hover:text-[#f6465d] hover:bg-[#f6465d]/10 transition">
-                    <Trash2 size={13} />
-                  </button>
-                </div>
-              )
-            })}
-          </div>
-        )}
-
-        {/* Connect form */}
-        <form onSubmit={handleConnect} className="space-y-3">
-          <div>
-            <label className="text-xs text-[#848e9c] mb-1.5 block">Select Exchange</label>
-            <div className="grid grid-cols-3 gap-2">
-              {EXCHANGES.map(ex => (
-                <button key={ex.id} type="button" onClick={() => setSelExchange(ex.id)}
-                  className={`text-xs px-2 py-2 rounded-xl border transition flex items-center gap-1.5 justify-center ${selExchange === ex.id ? 'border-[#f0b90b] bg-[#f0b90b]/10 text-[#f0b90b]' : 'border-[#2b3139] text-[#848e9c] hover:border-[#3c4451]'}`}>
-                  <span>{ex.icon}</span>{ex.label}
-                </button>
-              ))}
-            </div>
-          </div>
-          {selExchange && (
-            <>
-              <div>
-                <label className="text-xs text-[#848e9c] mb-1.5 block">API Key *</label>
-                <input value={exchApiKey} onChange={e => setExchApiKey(e.target.value)} required placeholder="API key" className={inp} />
+        <div className="divide-y divide-[#2b3139]/60">
+          {notifItems.map(({ key, label, desc, icon: Icon, color, bg }) => (
+            <div key={key} className="flex items-center gap-4 px-5 py-4">
+              <div className={`w-9 h-9 rounded-xl ${bg} flex items-center justify-center flex-shrink-0`}>
+                <Icon size={16} className={color} />
               </div>
-              <div>
-                <label className="text-xs text-[#848e9c] mb-1.5 block">API Secret *</label>
-                <div className="relative">
-                  <input type={showSecret ? 'text' : 'password'} value={exchSecret} onChange={e => setExchSecret(e.target.value)} required placeholder="API secret" className={`${inp} pr-10`} />
-                  <button type="button" onClick={() => setShowSecret(!showSecret)} className="absolute right-3 top-1/2 -translate-y-1/2 text-[#848e9c] hover:text-[#eaecef]">
-                    {showSecret ? <EyeOff size={14} /> : <Eye size={14} />}
-                  </button>
-                </div>
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-medium text-[#eaecef]">{label}</p>
+                <p className="text-xs text-[#848e9c] leading-relaxed mt-0.5">{desc}</p>
               </div>
-              {selectedExch?.hasPassphrase && (
-                <div>
-                  <label className="text-xs text-[#848e9c] mb-1.5 block">Passphrase</label>
-                  <input type="password" value={exchPass} onChange={e => setExchPass(e.target.value)} placeholder="API passphrase" className={inp} />
-                </div>
-              )}
-              <button type="submit" disabled={connecting}
-                className="w-full bg-[#f0b90b] hover:bg-[#d4a30a] disabled:opacity-60 text-black font-semibold py-2.5 rounded-xl text-sm transition">
-                {connecting ? 'Connecting...' : `Connect ${selectedExch?.label}`}
+              <button onClick={() => toggle(key)}
+                className={`relative w-11 h-6 rounded-full transition-all duration-200 flex-shrink-0 ${notifs[key] ? 'bg-[#f0b90b]' : 'bg-[#2b3139]'}`}>
+                <span className={`absolute top-0.5 w-5 h-5 rounded-full bg-white shadow transition-transform duration-200 ${notifs[key] ? 'translate-x-5' : 'translate-x-0.5'}`} />
               </button>
-            </>
-          )}
-        </form>
-      </div>
-
-      {/* Security */}
-      <div className="bg-[#161a1e] border border-[#2b3139] rounded-xl p-5">
-        <div className="flex items-center gap-2 mb-5">
-          <Shield size={15} className="text-[#f0b90b]" />
-          <h2 className="text-sm font-semibold text-[#eaecef]">Security</h2>
+            </div>
+          ))}
         </div>
-        <div className="space-y-3">
-          <div>
-            <label className="text-xs text-[#848e9c] mb-1.5 block">Current Password</label>
-            <input type="password" placeholder="••••••••" className={inp} />
-          </div>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <div>
-              <label className="text-xs text-[#848e9c] mb-1.5 block">New Password</label>
-              <input type="password" placeholder="••••••••" className={inp} />
-            </div>
-            <div>
-              <label className="text-xs text-[#848e9c] mb-1.5 block">Confirm Password</label>
-              <input type="password" placeholder="••••••••" className={inp} />
-            </div>
-          </div>
-          <button onClick={() => toast.success('Password changed')}
-            className="bg-[#f0b90b] hover:bg-[#d4a30a] text-black text-sm font-semibold px-4 py-2.5 rounded-xl transition">
-            Update Password
+
+        <div className="px-5 py-4 border-t border-[#2b3139] bg-[#0b0e11]/30">
+          <button onClick={handleSave} disabled={saving}
+            className="bg-[#f0b90b] hover:bg-[#d4a30a] disabled:opacity-60 text-black font-semibold px-5 py-2.5 rounded-xl text-sm transition">
+            {saving ? 'Saving…' : 'Save Preferences'}
           </button>
         </div>
       </div>
 
-      {/* Notifications */}
-      <div className="bg-[#161a1e] border border-[#2b3139] rounded-xl p-5">
-        <div className="flex items-center gap-2 mb-5">
-          <Bell size={15} className="text-[#f0b90b]" />
-          <h2 className="text-sm font-semibold text-[#eaecef]">Notifications</h2>
+      {/* App preferences */}
+      <div className="bg-[#161a1e] border border-[#2b3139] rounded-xl overflow-hidden">
+        <div className="flex items-center gap-2.5 px-5 py-4 border-b border-[#2b3139]">
+          <div className="w-7 h-7 rounded-lg bg-[#0ecb81]/10 flex items-center justify-center">
+            <Zap size={14} className="text-[#0ecb81]" />
+          </div>
+          <div>
+            <h2 className="text-sm font-semibold text-[#eaecef]">App Preferences</h2>
+            <p className="text-[10px] text-[#848e9c]">Trading and display settings</p>
+          </div>
         </div>
-        <div className="space-y-3">
-          {([['email', 'Email notifications'], ['whatsapp', 'WhatsApp alerts'], ['telegram', 'Telegram alerts']] as const).map(([key, label]) => (
-            <div key={key} className="flex items-center justify-between py-2 border-b border-[#2b3139]/50 last:border-0">
+        <div className="divide-y divide-[#2b3139]/60">
+          {[
+            { label: 'Confirm before trade orders', desc: 'Show a confirmation dialog before placing orders' },
+            { label: 'Sound alerts',                desc: 'Play audio when a trade executes or a bot signals' },
+            { label: 'Compact number format',       desc: 'Display large numbers as 1.2M instead of 1,200,000' },
+          ].map(item => (
+            <div key={item.label} className="flex items-center justify-between gap-4 px-5 py-4">
               <div>
-                <p className="text-sm text-[#eaecef]">{label}</p>
-                <p className="text-xs text-[#848e9c]">Receive trade and event alerts</p>
+                <p className="text-sm font-medium text-[#eaecef]">{item.label}</p>
+                <p className="text-xs text-[#848e9c] mt-0.5">{item.desc}</p>
               </div>
-              <button
-                onClick={() => setNotifications((n: typeof notifications) => ({ ...n, [key]: !n[key] }))}
-                className={`w-10 h-5 rounded-full transition-colors relative flex-shrink-0 ${notifications[key] ? 'bg-[#f0b90b]' : 'bg-[#2b3139]'}`}>
-                <span className={`absolute top-0.5 w-4 h-4 rounded-full bg-white transition-transform ${notifications[key] ? 'translate-x-5' : 'translate-x-0.5'}`} />
+              <button className="relative w-11 h-6 rounded-full bg-[#2b3139] transition-all flex-shrink-0">
+                <span className="absolute top-0.5 left-0.5 w-5 h-5 rounded-full bg-white shadow" />
               </button>
             </div>
           ))}
         </div>
       </div>
 
-      {/* API Keys */}
-      <div className="bg-[#161a1e] border border-[#2b3139] rounded-xl p-5">
-        <div className="flex items-center justify-between mb-5">
-          <div className="flex items-center gap-2">
-            <Key size={15} className="text-[#f0b90b]" />
-            <h2 className="text-sm font-semibold text-[#eaecef]">API Keys</h2>
+      {/* Language / Region */}
+      <div className="bg-[#161a1e] border border-[#2b3139] rounded-xl overflow-hidden">
+        <div className="flex items-center gap-2.5 px-5 py-4 border-b border-[#2b3139]">
+          <div className="w-7 h-7 rounded-lg bg-blue-500/10 flex items-center justify-center">
+            <Globe size={14} className="text-blue-400" />
           </div>
-          {!keysLoaded && (
-            <button onClick={loadApiKeys} className="text-xs text-[#f0b90b] hover:underline">Load keys</button>
-          )}
+          <div>
+            <h2 className="text-sm font-semibold text-[#eaecef]">Language & Region</h2>
+            <p className="text-[10px] text-[#848e9c]">Locale and display preferences</p>
+          </div>
         </div>
-
-        {/* Requirements notice */}
-        {(!user?.is_mail_verified || (user?.account_tier ?? 0) < 1) && (
-          <div className="flex items-start gap-2 bg-[#f0b90b]/5 border border-[#f0b90b]/20 rounded-xl px-3 py-2.5 mb-4">
-            <AlertCircle size={13} className="text-[#f0b90b] flex-shrink-0 mt-0.5" />
-            <p className="text-xs text-[#848e9c]">API key creation requires email verification and KYC tier 1 approval.</p>
+        <div className="p-5 space-y-4">
+          <div>
+            <label className="text-xs text-[#848e9c] mb-1.5 block">Language</label>
+            <select className="w-full bg-[#0b0e11] border border-[#2b3139] rounded-xl px-3 py-2.5 text-sm text-[#eaecef] focus:outline-none focus:border-[#f0b90b] transition">
+              <option>English (US)</option>
+              <option>English (UK)</option>
+              <option>Français</option>
+              <option>Español</option>
+              <option>Deutsch</option>
+            </select>
           </div>
-        )}
-
-        {/* New key created */}
-        {createdKey && (
-          <div className="bg-[#0ecb81]/5 border border-[#0ecb81]/20 rounded-xl p-3 mb-4">
-            <p className="text-xs font-semibold text-[#0ecb81] mb-1.5">New API Key — Copy now, won't be shown again!</p>
-            <div className="flex items-center gap-2">
-              <code className="text-xs font-mono text-[#eaecef] bg-[#0b0e11] px-2 py-1 rounded flex-1 truncate">{createdKey}</code>
-              <button onClick={() => { navigator.clipboard.writeText(createdKey); toast.success('Copied!') }}
-                className="p-1.5 text-[#0ecb81] hover:bg-[#0ecb81]/10 rounded-lg transition flex-shrink-0">
-                <Copy size={13} />
-              </button>
-            </div>
-            <button onClick={() => setCreatedKey(null)} className="text-[10px] text-[#848e9c] mt-2 hover:text-[#eaecef]">Dismiss</button>
+          <div>
+            <label className="text-xs text-[#848e9c] mb-1.5 block">Currency display</label>
+            <select className="w-full bg-[#0b0e11] border border-[#2b3139] rounded-xl px-3 py-2.5 text-sm text-[#eaecef] focus:outline-none focus:border-[#f0b90b] transition">
+              <option>USD — US Dollar</option>
+              <option>EUR — Euro</option>
+              <option>GBP — British Pound</option>
+              <option>BTC — Bitcoin</option>
+            </select>
           </div>
-        )}
-
-        {/* Create form */}
-        <form onSubmit={handleCreateKey} className="flex flex-wrap gap-2 mb-4">
-          <input value={newKeyName} onChange={e => setNewKeyName(e.target.value)} required
-            placeholder="Key name (e.g. My Bot)" className="flex-1 bg-[#0b0e11] border border-[#2b3139] rounded-xl px-3 py-2 text-sm text-[#eaecef] placeholder-[#4a5568] focus:outline-none focus:border-[#f0b90b] transition min-w-0" />
-          <select value={newKeyPurpose} onChange={e => setNewKeyPurpose(e.target.value)}
-            className="bg-[#0b0e11] border border-[#2b3139] rounded-xl px-3 py-2 text-sm text-[#eaecef] focus:outline-none focus:border-[#f0b90b] transition">
-            <option value="bot">Bot</option>
-            <option value="vps">VPS</option>
-            <option value="asset">Asset</option>
-          </select>
-          <button type="submit" disabled={creatingKey}
-            className="flex items-center gap-1.5 bg-[#f0b90b] hover:bg-[#d4a30a] disabled:opacity-60 text-black font-semibold px-4 py-2 rounded-xl text-sm transition">
-            <Plus size={13} />{creatingKey ? '...' : 'Create'}
+          <button onClick={() => toast.success('Preferences saved')}
+            className="bg-[#f0b90b] hover:bg-[#d4a30a] text-black font-semibold px-5 py-2.5 rounded-xl text-sm transition">
+            Save
           </button>
-        </form>
+        </div>
+      </div>
 
-        {/* Keys list */}
-        {keysLoaded && (
-          <div className="space-y-2">
-            {apiKeys.length === 0 ? (
-              <p className="text-sm text-[#848e9c] text-center py-4">No API keys yet</p>
-            ) : apiKeys.map(k => (
-              <div key={k.id} className="flex items-center justify-between bg-[#0b0e11] border border-[#2b3139] rounded-xl px-3 py-2.5">
-                <div>
-                  <p className="text-xs font-medium text-[#eaecef]">{k.key_name}</p>
-                  <p className="text-[10px] text-[#848e9c]">
-                    {k.purpose} · Created {new Date(k.created_at).toLocaleDateString()}
-                    {k.last_used_at && ` · Last used ${new Date(k.last_used_at).toLocaleDateString()}`}
-                  </p>
-                </div>
-                <div className="flex items-center gap-2">
-                  <span className={`text-[10px] px-2 py-0.5 rounded-full ${k.is_active ? 'bg-[#0ecb81]/10 text-[#0ecb81]' : 'bg-[#2b3139] text-[#848e9c]'}`}>
-                    {k.is_active ? 'Active' : 'Revoked'}
-                  </span>
-                  {k.is_active && (
-                    <button onClick={() => handleRevokeKey(k.id)} className="p-1.5 text-[#848e9c] hover:text-[#f6465d] hover:bg-[#f6465d]/10 rounded-lg transition">
-                      <Trash2 size={12} />
-                    </button>
-                  )}
-                </div>
-              </div>
-            ))}
+      {/* Security note */}
+      <div className="bg-[#161a1e] border border-[#2b3139] rounded-xl overflow-hidden">
+        <div className="flex items-center gap-2.5 px-5 py-4 border-b border-[#2b3139]">
+          <div className="w-7 h-7 rounded-lg bg-[#f6465d]/10 flex items-center justify-center">
+            <Shield size={14} className="text-[#f6465d]" />
           </div>
-        )}
+          <div>
+            <h2 className="text-sm font-semibold text-[#eaecef]">Security & Account</h2>
+            <p className="text-[10px] text-[#848e9c]">Password, PIN, and account deletion</p>
+          </div>
+        </div>
+        <div className="px-5 py-4 flex items-center gap-3">
+          <Info size={14} className="text-[#848e9c] flex-shrink-0" />
+          <p className="text-xs text-[#848e9c] leading-relaxed">
+            Security settings including password change, Transfer PIN, exchange connections, and API keys are managed in your{' '}
+            <span className="text-[#f0b90b] font-medium">Profile</span> page.
+          </p>
+        </div>
       </div>
     </div>
   )
