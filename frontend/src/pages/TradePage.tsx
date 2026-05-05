@@ -15,10 +15,10 @@ const orderBook = {
 }
 
 export default function TradePage() {
-  const [side, setSide] = useState<'buy' | 'sell'>('buy')
+  const [side, setSide]           = useState<'buy' | 'sell'>('buy')
   const [orderType, setOrderType] = useState<'market' | 'limit'>('limit')
-  const [price, setPrice] = useState('67432.10')
-  const [amount, setAmount] = useState('')
+  const [price, setPrice]         = useState('67432.10')
+  const [amount, setAmount]       = useState('')
   const chartData = generateCandles()
 
   const handleTrade = (e: React.FormEvent) => {
@@ -29,7 +29,8 @@ export default function TradePage() {
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center gap-3">
+      {/* Header */}
+      <div className="flex flex-wrap items-center gap-3">
         <h1 className="text-xl font-bold text-[#eaecef]">Trade</h1>
         <div className="flex items-center gap-2 bg-[#161a1e] border border-[#2b3139] rounded-xl px-3 py-1.5">
           <span className="text-sm font-medium text-[#eaecef]">BTC/USDT</span>
@@ -41,32 +42,37 @@ export default function TradePage() {
         </div>
       </div>
 
-      <div className="grid grid-cols-3 gap-4">
+      {/* Main grid: chart + order panel */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
         {/* Chart */}
-        <div className="col-span-2 bg-[#161a1e] border border-[#2b3139] rounded-xl p-4">
-          <div className="flex gap-2 mb-4">
+        <div className="lg:col-span-2 bg-[#161a1e] border border-[#2b3139] rounded-xl p-4">
+          <div className="flex flex-wrap gap-2 mb-4">
             {['1m', '5m', '15m', '1h', '4h', '1D'].map(tf => (
-              <button key={tf} className={`text-xs px-2.5 py-1 rounded-lg ${tf === '1h' ? 'bg-[#f0b90b] text-black font-medium' : 'text-[#848e9c] hover:text-[#eaecef]'}`}>{tf}</button>
+              <button key={tf}
+                className={`text-xs px-2.5 py-1 rounded-lg ${tf === '1h' ? 'bg-[#f0b90b] text-black font-medium' : 'text-[#848e9c] hover:text-[#eaecef]'}`}>
+                {tf}
+              </button>
             ))}
           </div>
           <ResponsiveContainer width="100%" height={280}>
             <AreaChart data={chartData}>
               <defs>
                 <linearGradient id="priceGrad" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="5%" stopColor="#0ecb81" stopOpacity={0.15} />
+                  <stop offset="5%"  stopColor="#0ecb81" stopOpacity={0.15} />
                   <stop offset="95%" stopColor="#0ecb81" stopOpacity={0} />
                 </linearGradient>
               </defs>
               <CartesianGrid strokeDasharray="3 3" stroke="#2b3139" />
               <XAxis dataKey="time" tick={{ fill: '#848e9c', fontSize: 9 }} tickLine={false} axisLine={false} interval={7} />
-              <YAxis tick={{ fill: '#848e9c', fontSize: 9 }} tickLine={false} axisLine={false} tickFormatter={v => `$${(v/1000).toFixed(1)}k`} domain={['auto', 'auto']} />
+              <YAxis tick={{ fill: '#848e9c', fontSize: 9 }} tickLine={false} axisLine={false}
+                tickFormatter={v => `$${((v as number) / 1000).toFixed(1)}k`} domain={['auto', 'auto']} width={42} />
               <Tooltip
                 contentStyle={{ background: '#1e2329', border: '1px solid #2b3139', borderRadius: 8 }}
                 labelStyle={{ color: '#848e9c', fontSize: 10 }}
                 itemStyle={{ color: '#0ecb81', fontSize: 10 }}
                 formatter={(v: unknown) => [`$${(v as number).toFixed(2)}`, 'Price']}
               />
-              <Area type="monotone" dataKey="price" stroke="#0ecb81" strokeWidth={1.5} fill="url(#priceGrad)" />
+              <Area type="monotone" dataKey="price" stroke="#0ecb81" strokeWidth={1.5} fill="url(#priceGrad)" dot={false} />
             </AreaChart>
           </ResponsiveContainer>
         </div>
@@ -76,13 +82,22 @@ export default function TradePage() {
           {/* Order form */}
           <div className="bg-[#161a1e] border border-[#2b3139] rounded-xl p-4">
             <div className="grid grid-cols-2 gap-1 mb-4 bg-[#0b0e11] p-1 rounded-xl">
-              <button onClick={() => setSide('buy')} className={`py-2 rounded-lg text-sm font-semibold transition ${side === 'buy' ? 'bg-[#0ecb81] text-black' : 'text-[#848e9c] hover:text-[#eaecef]'}`}>Buy</button>
-              <button onClick={() => setSide('sell')} className={`py-2 rounded-lg text-sm font-semibold transition ${side === 'sell' ? 'bg-[#f6465d] text-white' : 'text-[#848e9c] hover:text-[#eaecef]'}`}>Sell</button>
+              <button onClick={() => setSide('buy')}
+                className={`py-2 rounded-lg text-sm font-semibold transition ${side === 'buy' ? 'bg-[#0ecb81] text-black' : 'text-[#848e9c] hover:text-[#eaecef]'}`}>
+                Buy
+              </button>
+              <button onClick={() => setSide('sell')}
+                className={`py-2 rounded-lg text-sm font-semibold transition ${side === 'sell' ? 'bg-[#f6465d] text-white' : 'text-[#848e9c] hover:text-[#eaecef]'}`}>
+                Sell
+              </button>
             </div>
 
             <div className="flex gap-2 mb-4">
               {(['limit', 'market'] as const).map(t => (
-                <button key={t} onClick={() => setOrderType(t)} className={`text-xs px-3 py-1.5 rounded-lg capitalize ${orderType === t ? 'bg-[#2b3139] text-[#eaecef]' : 'text-[#848e9c]'}`}>{t}</button>
+                <button key={t} onClick={() => setOrderType(t)}
+                  className={`text-xs px-3 py-1.5 rounded-lg capitalize transition ${orderType === t ? 'bg-[#2b3139] text-[#eaecef]' : 'text-[#848e9c] hover:text-[#eaecef]'}`}>
+                  {t}
+                </button>
               ))}
             </div>
 
@@ -108,7 +123,7 @@ export default function TradePage() {
 
           {/* Order book */}
           <div className="bg-[#161a1e] border border-[#2b3139] rounded-xl p-3">
-            <p className="text-xs font-semibold text-[#848e9c] mb-2">Order Book</p>
+            <p className="text-xs font-semibold text-[#848e9c] mb-3">Order Book</p>
             <div className="space-y-0.5">
               {orderBook.asks.slice(0, 5).reverse().map((a, i) => (
                 <div key={i} className="flex justify-between text-[11px]">
@@ -116,7 +131,7 @@ export default function TradePage() {
                   <span className="text-[#848e9c] font-mono">{a.size}</span>
                 </div>
               ))}
-              <div className="py-1 text-center text-sm font-bold font-mono text-[#eaecef]">$67,432</div>
+              <div className="py-1.5 text-center text-sm font-bold font-mono text-[#eaecef] border-y border-[#2b3139] my-1">$67,432</div>
               {orderBook.bids.slice(0, 5).map((b, i) => (
                 <div key={i} className="flex justify-between text-[11px]">
                   <span className="text-[#0ecb81] font-mono">${b.price.toLocaleString()}</span>

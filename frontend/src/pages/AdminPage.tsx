@@ -19,18 +19,17 @@ interface AdminNotification {
 }
 
 export default function AdminPage() {
-  const [tab, setTab] = useState<Tab>('users')
-  const [users, setUsers] = useState<{ id: number; email: string; is_admin: boolean; is_active: boolean }[]>([])
+  const [tab, setTab]                   = useState<Tab>('users')
+  const [users, setUsers]               = useState<{ id: number; email: string; is_admin: boolean; is_active: boolean }[]>([])
   const [transactions, setTransactions] = useState<{ id: number; user_email: string; amount: number; status: string; created_at: string }[]>([])
   const [notifications, setNotifications] = useState<AdminNotification[]>([])
-  const [loading, setLoading] = useState(true)
+  const [loading, setLoading]           = useState(true)
 
-  // Notification form
-  const [notifTitle, setNotifTitle] = useState('')
+  const [notifTitle, setNotifTitle]     = useState('')
   const [notifMessage, setNotifMessage] = useState('')
-  const [notifTarget, setNotifTarget] = useState<'all' | 'user'>('all')
-  const [notifUserId, setNotifUserId] = useState('')
-  const [sending, setSending] = useState(false)
+  const [notifTarget, setNotifTarget]   = useState<'all' | 'user'>('all')
+  const [notifUserId, setNotifUserId]   = useState('')
+  const [sending, setSending]           = useState(false)
 
   useEffect(() => {
     setLoading(true)
@@ -85,13 +84,14 @@ export default function AdminPage() {
   }
 
   const tabs: { id: Tab; label: string; icon: typeof Users }[] = [
-    { id: 'users', label: 'Users', icon: Users },
-    { id: 'transactions', label: 'Transactions', icon: Receipt },
-    { id: 'notifications', label: 'Notifications', icon: Bell },
+    { id: 'users',         label: 'Users',         icon: Users   },
+    { id: 'transactions',  label: 'Transactions',  icon: Receipt },
+    { id: 'notifications', label: 'Notifications', icon: Bell    },
   ]
 
   return (
     <div className="space-y-5">
+      {/* Header */}
       <div className="flex items-center gap-3">
         <div className="w-8 h-8 rounded-lg bg-[#f6465d]/10 flex items-center justify-center">
           <ShieldCheck size={16} className="text-[#f6465d]" />
@@ -101,12 +101,12 @@ export default function AdminPage() {
       </div>
 
       {/* Stats */}
-      <div className="grid grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         {[
-          { label: 'Total Users', value: users.length, color: 'text-[#f0b90b]' },
-          { label: 'Active Users', value: users.filter(u => u.is_active).length, color: 'text-[#0ecb81]' },
-          { label: 'Pending Txns', value: transactions.filter(t => t.status === 'pending').length, color: 'text-[#f0b90b]' },
-          { label: 'Notifications Sent', value: notifications.length, color: 'text-[#848e9c]' },
+          { label: 'Total Users',        value: users.length,                                    color: 'text-[#f0b90b]' },
+          { label: 'Active Users',       value: users.filter(u => u.is_active).length,           color: 'text-[#0ecb81]' },
+          { label: 'Pending Txns',       value: transactions.filter(t => t.status === 'pending').length, color: 'text-[#f0b90b]' },
+          { label: 'Notifications Sent', value: notifications.length,                            color: 'text-[#848e9c]' },
         ].map(s => (
           <div key={s.label} className="bg-[#161a1e] border border-[#2b3139] rounded-xl p-4">
             <p className="text-xs text-[#848e9c] mb-2">{s.label}</p>
@@ -116,126 +116,129 @@ export default function AdminPage() {
       </div>
 
       {/* Tabs */}
-      <div className="flex gap-1 bg-[#161a1e] border border-[#2b3139] rounded-xl p-1 w-fit">
+      <div className="flex flex-wrap gap-1 bg-[#161a1e] border border-[#2b3139] rounded-xl p-1 w-fit">
         {tabs.map(({ id, label, icon: Icon }) => (
           <button key={id} onClick={() => setTab(id)}
             className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition ${tab === id ? 'bg-[#2b3139] text-[#eaecef]' : 'text-[#848e9c] hover:text-[#eaecef]'}`}>
-            <Icon size={14} />
-            {label}
+            <Icon size={14} />{label}
           </button>
         ))}
       </div>
 
-      {/* Users */}
+      {/* Users tab */}
       {tab === 'users' && (
         <div className="bg-[#161a1e] border border-[#2b3139] rounded-xl overflow-hidden">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="text-[#848e9c] text-xs border-b border-[#2b3139]">
-                <th className="text-left px-4 py-3 font-medium">User</th>
-                <th className="text-left px-4 py-3 font-medium">Role</th>
-                <th className="text-left px-4 py-3 font-medium">Status</th>
-                <th className="text-right px-4 py-3 font-medium">ID</th>
-                <th className="text-right px-4 py-3 font-medium">Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              {loading ? (
-                <tr><td colSpan={5} className="px-4 py-8 text-center text-[#848e9c] text-sm">Loading...</td></tr>
-              ) : users.length === 0 ? (
-                <tr><td colSpan={5} className="px-4 py-8 text-center text-[#848e9c] text-sm">No users found</td></tr>
-              ) : users.map((u) => (
-                <tr key={u.id} className="border-b border-[#2b3139]/50 hover:bg-[#1e2329] transition">
-                  <td className="px-4 py-3">
-                    <div className="flex items-center gap-2">
-                      <div className="w-7 h-7 rounded-full bg-[#f0b90b]/10 flex items-center justify-center text-xs font-bold text-[#f0b90b]">
-                        {u.email?.[0]?.toUpperCase()}
-                      </div>
-                      <span className="text-[#eaecef] text-sm">{u.email}</span>
-                    </div>
-                  </td>
-                  <td className="px-4 py-3">
-                    <span className={`text-xs px-2 py-0.5 rounded-full ${u.is_admin ? 'bg-[#f0b90b]/10 text-[#f0b90b]' : 'bg-[#2b3139] text-[#848e9c]'}`}>
-                      {u.is_admin ? 'Admin' : 'User'}
-                    </span>
-                  </td>
-                  <td className="px-4 py-3">
-                    <span className={`text-xs px-2 py-0.5 rounded-full ${u.is_active ? 'bg-[#0ecb81]/10 text-[#0ecb81]' : 'bg-[#f6465d]/10 text-[#f6465d]'}`}>
-                      {u.is_active ? 'Active' : 'Inactive'}
-                    </span>
-                  </td>
-                  <td className="px-4 py-3 text-right text-xs text-[#848e9c] font-mono">#{u.id}</td>
-                  <td className="px-4 py-3 text-right">
-                    <button onClick={() => toast('Delete user (coming soon)')}
-                      className="p-1.5 rounded-lg text-[#848e9c] hover:text-[#f6465d] hover:bg-[#f6465d]/10 transition">
-                      <Trash2 size={13} />
-                    </button>
-                  </td>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm min-w-[500px]">
+              <thead>
+                <tr className="text-[#848e9c] text-xs border-b border-[#2b3139]">
+                  <th className="text-left px-4 py-3 font-medium">User</th>
+                  <th className="text-left px-4 py-3 font-medium">Role</th>
+                  <th className="text-left px-4 py-3 font-medium">Status</th>
+                  <th className="text-right px-4 py-3 font-medium">ID</th>
+                  <th className="text-right px-4 py-3 font-medium">Actions</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {loading ? (
+                  <tr><td colSpan={5} className="px-4 py-8 text-center text-[#848e9c] text-sm">Loading...</td></tr>
+                ) : users.length === 0 ? (
+                  <tr><td colSpan={5} className="px-4 py-8 text-center text-[#848e9c] text-sm">No users found</td></tr>
+                ) : users.map(u => (
+                  <tr key={u.id} className="border-b border-[#2b3139]/50 hover:bg-[#1e2329] transition">
+                    <td className="px-4 py-3">
+                      <div className="flex items-center gap-2">
+                        <div className="w-7 h-7 rounded-full bg-[#f0b90b]/10 flex items-center justify-center text-xs font-bold text-[#f0b90b] flex-shrink-0">
+                          {u.email?.[0]?.toUpperCase()}
+                        </div>
+                        <span className="text-[#eaecef] text-sm truncate max-w-[200px]">{u.email}</span>
+                      </div>
+                    </td>
+                    <td className="px-4 py-3">
+                      <span className={`text-xs px-2 py-0.5 rounded-full ${u.is_admin ? 'bg-[#f0b90b]/10 text-[#f0b90b]' : 'bg-[#2b3139] text-[#848e9c]'}`}>
+                        {u.is_admin ? 'Admin' : 'User'}
+                      </span>
+                    </td>
+                    <td className="px-4 py-3">
+                      <span className={`text-xs px-2 py-0.5 rounded-full ${u.is_active ? 'bg-[#0ecb81]/10 text-[#0ecb81]' : 'bg-[#f6465d]/10 text-[#f6465d]'}`}>
+                        {u.is_active ? 'Active' : 'Inactive'}
+                      </span>
+                    </td>
+                    <td className="px-4 py-3 text-right text-xs text-[#848e9c] font-mono">#{u.id}</td>
+                    <td className="px-4 py-3 text-right">
+                      <button onClick={() => toast('Delete user (coming soon)')}
+                        className="p-1.5 rounded-lg text-[#848e9c] hover:text-[#f6465d] hover:bg-[#f6465d]/10 transition">
+                        <Trash2 size={13} />
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         </div>
       )}
 
-      {/* Transactions */}
+      {/* Transactions tab */}
       {tab === 'transactions' && (
         <div className="bg-[#161a1e] border border-[#2b3139] rounded-xl overflow-hidden">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="text-[#848e9c] text-xs border-b border-[#2b3139]">
-                <th className="text-left px-4 py-3 font-medium">ID</th>
-                <th className="text-left px-4 py-3 font-medium">User</th>
-                <th className="text-right px-4 py-3 font-medium">Amount</th>
-                <th className="text-right px-4 py-3 font-medium">Date</th>
-                <th className="text-right px-4 py-3 font-medium">Status</th>
-                <th className="text-right px-4 py-3 font-medium">Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              {loading ? (
-                <tr><td colSpan={6} className="px-4 py-8 text-center text-[#848e9c] text-sm">Loading...</td></tr>
-              ) : transactions.length === 0 ? (
-                <tr><td colSpan={6} className="px-4 py-8 text-center text-[#848e9c] text-sm">No transactions found</td></tr>
-              ) : transactions.map((tx) => (
-                <tr key={tx.id} className="border-b border-[#2b3139]/50 hover:bg-[#1e2329] transition">
-                  <td className="px-4 py-3 font-mono text-xs text-[#848e9c]">#{tx.id}</td>
-                  <td className="px-4 py-3 text-[#eaecef] text-sm">{tx.user_email ?? '—'}</td>
-                  <td className="px-4 py-3 text-right font-mono text-[#eaecef]">${tx.amount ?? '—'}</td>
-                  <td className="px-4 py-3 text-right text-xs text-[#848e9c]">{tx.created_at ? new Date(tx.created_at).toLocaleDateString() : '—'}</td>
-                  <td className="px-4 py-3 text-right">
-                    <span className={`text-xs px-2 py-0.5 rounded-full ${
-                      tx.status === 'approved' ? 'bg-[#0ecb81]/10 text-[#0ecb81]' :
-                      tx.status === 'rejected' ? 'bg-[#f6465d]/10 text-[#f6465d]' :
-                      'bg-[#f0b90b]/10 text-[#f0b90b]'
-                    }`}>{tx.status ?? 'pending'}</span>
-                  </td>
-                  <td className="px-4 py-3 text-right">
-                    {(!tx.status || tx.status === 'pending') && (
-                      <div className="flex justify-end gap-1">
-                        <button onClick={() => approve(tx.id)}
-                          className="p-1.5 rounded-lg text-[#0ecb81] hover:bg-[#0ecb81]/10 transition" title="Approve">
-                          <CheckCircle size={14} />
-                        </button>
-                        <button onClick={() => reject(tx.id)}
-                          className="p-1.5 rounded-lg text-[#f6465d] hover:bg-[#f6465d]/10 transition" title="Reject">
-                          <XCircle size={14} />
-                        </button>
-                      </div>
-                    )}
-                  </td>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm min-w-[560px]">
+              <thead>
+                <tr className="text-[#848e9c] text-xs border-b border-[#2b3139]">
+                  <th className="text-left px-4 py-3 font-medium">ID</th>
+                  <th className="text-left px-4 py-3 font-medium">User</th>
+                  <th className="text-right px-4 py-3 font-medium">Amount</th>
+                  <th className="text-right px-4 py-3 font-medium">Date</th>
+                  <th className="text-right px-4 py-3 font-medium">Status</th>
+                  <th className="text-right px-4 py-3 font-medium">Actions</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {loading ? (
+                  <tr><td colSpan={6} className="px-4 py-8 text-center text-[#848e9c] text-sm">Loading...</td></tr>
+                ) : transactions.length === 0 ? (
+                  <tr><td colSpan={6} className="px-4 py-8 text-center text-[#848e9c] text-sm">No transactions found</td></tr>
+                ) : transactions.map(tx => (
+                  <tr key={tx.id} className="border-b border-[#2b3139]/50 hover:bg-[#1e2329] transition">
+                    <td className="px-4 py-3 font-mono text-xs text-[#848e9c]">#{tx.id}</td>
+                    <td className="px-4 py-3 text-[#eaecef] text-sm truncate max-w-[160px]">{tx.user_email ?? '—'}</td>
+                    <td className="px-4 py-3 text-right font-mono text-[#eaecef]">${tx.amount ?? '—'}</td>
+                    <td className="px-4 py-3 text-right text-xs text-[#848e9c] whitespace-nowrap">{tx.created_at ? new Date(tx.created_at).toLocaleDateString() : '—'}</td>
+                    <td className="px-4 py-3 text-right">
+                      <span className={`text-xs px-2 py-0.5 rounded-full ${
+                        tx.status === 'approved' ? 'bg-[#0ecb81]/10 text-[#0ecb81]' :
+                        tx.status === 'rejected' ? 'bg-[#f6465d]/10 text-[#f6465d]' :
+                        'bg-[#f0b90b]/10 text-[#f0b90b]'
+                      }`}>{tx.status ?? 'pending'}</span>
+                    </td>
+                    <td className="px-4 py-3 text-right">
+                      {(!tx.status || tx.status === 'pending') && (
+                        <div className="flex justify-end gap-1">
+                          <button onClick={() => approve(tx.id)}
+                            className="p-1.5 rounded-lg text-[#0ecb81] hover:bg-[#0ecb81]/10 transition" title="Approve">
+                            <CheckCircle size={14} />
+                          </button>
+                          <button onClick={() => reject(tx.id)}
+                            className="p-1.5 rounded-lg text-[#f6465d] hover:bg-[#f6465d]/10 transition" title="Reject">
+                            <XCircle size={14} />
+                          </button>
+                        </div>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         </div>
       )}
 
-      {/* Notifications */}
+      {/* Notifications tab */}
       {tab === 'notifications' && (
-        <div className="grid grid-cols-5 gap-4">
+        <div className="grid grid-cols-1 lg:grid-cols-5 gap-4">
           {/* Compose form */}
-          <div className="col-span-2 bg-[#161a1e] border border-[#2b3139] rounded-xl p-5">
+          <div className="lg:col-span-2 bg-[#161a1e] border border-[#2b3139] rounded-xl p-5">
             <h2 className="text-sm font-semibold text-[#eaecef] mb-4 flex items-center gap-2">
               <Send size={14} className="text-[#f0b90b]" />
               Push Notification
@@ -300,11 +303,11 @@ export default function AdminPage() {
           </div>
 
           {/* Sent notifications list */}
-          <div className="col-span-3 bg-[#161a1e] border border-[#2b3139] rounded-xl overflow-hidden">
+          <div className="lg:col-span-3 bg-[#161a1e] border border-[#2b3139] rounded-xl overflow-hidden">
             <div className="px-4 py-3 border-b border-[#2b3139]">
               <h2 className="text-sm font-semibold text-[#eaecef]">Sent Notifications</h2>
             </div>
-            <div className="divide-y divide-[#2b3139]/50">
+            <div className="divide-y divide-[#2b3139]/50 max-h-[480px] overflow-y-auto">
               {notifications.length === 0 ? (
                 <div className="py-12 flex flex-col items-center gap-2">
                   <Bell size={28} className="text-[#2b3139]" />
@@ -314,12 +317,12 @@ export default function AdminPage() {
               ) : notifications.map(n => (
                 <div key={n.id} className="px-4 py-4 hover:bg-[#1e2329] transition">
                   <div className="flex items-start justify-between gap-3">
-                    <div className="flex-1">
-                      <p className="text-sm font-medium text-[#eaecef]">{n.title}</p>
-                      <p className="text-xs text-[#848e9c] mt-1 leading-relaxed">{n.message}</p>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium text-[#eaecef] truncate">{n.title}</p>
+                      <p className="text-xs text-[#848e9c] mt-1 leading-relaxed line-clamp-2">{n.message}</p>
                     </div>
                     <div className="flex flex-col items-end gap-1.5 flex-shrink-0">
-                      <span className={`text-[10px] px-2 py-0.5 rounded-full ${n.target_all ? 'bg-[#0ecb81]/10 text-[#0ecb81]' : 'bg-[#f0b90b]/10 text-[#f0b90b]'}`}>
+                      <span className={`text-[10px] px-2 py-0.5 rounded-full whitespace-nowrap ${n.target_all ? 'bg-[#0ecb81]/10 text-[#0ecb81]' : 'bg-[#f0b90b]/10 text-[#f0b90b]'}`}>
                         {n.target_all ? 'All users' : `User #${n.target_user_id}`}
                       </span>
                       <span className="text-[10px] text-[#4a5568]">{new Date(n.created_at).toLocaleString()}</span>

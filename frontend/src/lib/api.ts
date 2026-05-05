@@ -12,7 +12,9 @@ api.interceptors.request.use((config) => {
 api.interceptors.response.use(
   (res) => res,
   (err) => {
-    if (err.response?.status === 401) {
+    const url: string = err.config?.url ?? ''
+    // Don't auto-logout on 401s from public bot endpoints — they require API key auth
+    if (err.response?.status === 401 && !url.includes('/public/')) {
       useAuthStore.getState().logout()
       window.location.href = '/login'
     }
@@ -63,7 +65,7 @@ export const markNotificationRead = (id: number) =>
 export const markAllNotificationsRead = () =>
   api.post('/notifications/read-all')
 
-// Bot (uses API key auth via header)
+// Bot (uses API key auth via header — 401s do NOT trigger logout)
 export const getBotStatus = () => api.get('/public/bot/status')
 export const startBot = () => api.post('/public/bot/start')
 export const stopBot = () => api.post('/public/bot/stop')

@@ -22,17 +22,17 @@ interface BotStatus {
 }
 
 const mockTrades: TradeLog[] = [
-  { id: 1, ticker: 'BTC-USD', action: 'BUY', price: 66800, qty: 0.01, pnl: null, reason: 'Bullish breakout detected', paper: true, created_at: new Date(Date.now() - 3600000).toISOString() },
-  { id: 2, ticker: 'ETH-USD', action: 'SELL', price: 3480, qty: 0.5, pnl: 124.5, reason: 'Target price reached', paper: true, created_at: new Date(Date.now() - 7200000).toISOString() },
-  { id: 3, ticker: 'NVDA', action: 'BUY', price: 860, qty: 1, pnl: null, reason: 'AI event: earnings beat', paper: true, created_at: new Date(Date.now() - 14400000).toISOString() },
-  { id: 4, ticker: 'AAPL', action: 'SELL', price: 191.5, qty: 5, pnl: -32.5, reason: 'Stop loss triggered', paper: true, created_at: new Date(Date.now() - 28800000).toISOString() },
-  { id: 5, ticker: 'BTC-USD', action: 'SELL', price: 67200, qty: 0.01, pnl: 4.0, reason: 'Take profit', paper: true, created_at: new Date(Date.now() - 86400000).toISOString() },
+  { id: 1, ticker: 'BTC-USD', action: 'BUY',  price: 66800, qty: 0.01, pnl: null,  reason: 'Bullish breakout detected', paper: true, created_at: new Date(Date.now() - 3600000).toISOString() },
+  { id: 2, ticker: 'ETH-USD', action: 'SELL', price: 3480,  qty: 0.5,  pnl: 124.5, reason: 'Target price reached',      paper: true, created_at: new Date(Date.now() - 7200000).toISOString() },
+  { id: 3, ticker: 'NVDA',    action: 'BUY',  price: 860,   qty: 1,    pnl: null,  reason: 'AI event: earnings beat',   paper: true, created_at: new Date(Date.now() - 14400000).toISOString() },
+  { id: 4, ticker: 'AAPL',    action: 'SELL', price: 191.5, qty: 5,    pnl: -32.5, reason: 'Stop loss triggered',        paper: true, created_at: new Date(Date.now() - 28800000).toISOString() },
+  { id: 5, ticker: 'BTC-USD', action: 'SELL', price: 67200, qty: 0.01, pnl: 4.0,   reason: 'Take profit',               paper: true, created_at: new Date(Date.now() - 86400000).toISOString() },
 ]
 
 export default function BotsPage() {
-  const [status, setStatus] = useState<BotStatus>({ running: false })
-  const [trades, setTrades] = useState<TradeLog[]>([])
-  const [loading, setLoading] = useState(true)
+  const [status, setStatus]           = useState<BotStatus>({ running: false })
+  const [trades, setTrades]           = useState<TradeLog[]>([])
+  const [loading, setLoading]         = useState(true)
   const [actionLoading, setActionLoading] = useState(false)
 
   const fetchData = useCallback(async () => {
@@ -84,14 +84,15 @@ export default function BotsPage() {
     }
   }
 
-  const pnlTrades = trades.filter(t => t.pnl !== null)
-  const totalPnl = pnlTrades.reduce((sum, t) => sum + (t.pnl ?? 0), 0)
+  const pnlTrades     = trades.filter(t => t.pnl !== null)
+  const totalPnl      = pnlTrades.reduce((sum, t) => sum + (t.pnl ?? 0), 0)
   const winningTrades = pnlTrades.filter(t => (t.pnl ?? 0) > 0).length
-  const winRate = pnlTrades.length > 0 ? ((winningTrades / pnlTrades.length) * 100).toFixed(1) : '—'
+  const winRate       = pnlTrades.length > 0 ? ((winningTrades / pnlTrades.length) * 100).toFixed(1) : '—'
 
   return (
     <div className="space-y-5">
-      <div className="flex items-center justify-between">
+      {/* Header */}
+      <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-3">
           <h1 className="text-xl font-bold text-[#eaecef]">AI Trading Bots</h1>
           <span className={`text-xs px-2.5 py-1 rounded-full font-medium ${status.running ? 'bg-[#0ecb81]/10 text-[#0ecb81] border border-[#0ecb81]/20' : 'bg-[#2b3139] text-[#848e9c]'}`}>
@@ -105,10 +106,10 @@ export default function BotsPage() {
         </button>
       </div>
 
-      {/* Bot control card + P&L stats */}
-      <div className="grid grid-cols-3 gap-4">
-        {/* Main bot control */}
-        <div className="col-span-1 bg-[#161a1e] border border-[#2b3139] rounded-2xl p-5">
+      {/* Bot control + P&L stats */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        {/* Bot control card */}
+        <div className="md:col-span-1 bg-[#161a1e] border border-[#2b3139] rounded-2xl p-5">
           <div className="flex flex-col items-center text-center gap-4">
             <div className={`w-20 h-20 rounded-full flex items-center justify-center transition-all ${
               status.running
@@ -124,22 +125,14 @@ export default function BotsPage() {
             </div>
 
             {status.running ? (
-              <button
-                onClick={handleStop}
-                disabled={actionLoading}
-                className="w-full flex items-center justify-center gap-2 bg-[#f6465d] hover:bg-[#d93d51] disabled:opacity-60 text-white font-semibold py-3 rounded-xl text-sm transition"
-              >
-                <Square size={14} />
-                Stop Bot
+              <button onClick={handleStop} disabled={actionLoading}
+                className="w-full flex items-center justify-center gap-2 bg-[#f6465d] hover:bg-[#d93d51] disabled:opacity-60 text-white font-semibold py-3 rounded-xl text-sm transition">
+                <Square size={14} /> Stop Bot
               </button>
             ) : (
-              <button
-                onClick={handleStart}
-                disabled={actionLoading}
-                className="w-full flex items-center justify-center gap-2 bg-[#0ecb81] hover:bg-[#0ab56f] disabled:opacity-60 text-black font-semibold py-3 rounded-xl text-sm transition"
-              >
-                <Play size={14} />
-                Start Bot
+              <button onClick={handleStart} disabled={actionLoading}
+                className="w-full flex items-center justify-center gap-2 bg-[#0ecb81] hover:bg-[#0ab56f] disabled:opacity-60 text-black font-semibold py-3 rounded-xl text-sm transition">
+                <Play size={14} /> Start Bot
               </button>
             )}
 
@@ -160,8 +153,8 @@ export default function BotsPage() {
           </div>
         </div>
 
-        {/* P&L stats */}
-        <div className="col-span-2 grid grid-cols-2 gap-4">
+        {/* P&L stats grid */}
+        <div className="md:col-span-2 grid grid-cols-2 gap-4">
           {[
             {
               label: 'Total P&L',
@@ -210,10 +203,11 @@ export default function BotsPage() {
       </div>
 
       {/* Paper mode notice */}
-      <div className="flex items-center gap-2 bg-[#f0b90b]/5 border border-[#f0b90b]/20 rounded-xl px-4 py-3">
-        <AlertCircle size={14} className="text-[#f0b90b] flex-shrink-0" />
+      <div className="flex items-start gap-2 bg-[#f0b90b]/5 border border-[#f0b90b]/20 rounded-xl px-4 py-3">
+        <AlertCircle size={14} className="text-[#f0b90b] flex-shrink-0 mt-0.5" />
         <p className="text-xs text-[#848e9c]">
-          Bot is running in <span className="text-[#f0b90b] font-medium">paper trading mode</span> — no real money is at risk. Configure live broker keys in Settings to enable live trading.
+          Bot is running in <span className="text-[#f0b90b] font-medium">paper trading mode</span> — no real money is at risk.
+          Configure live broker keys in Settings to enable live trading.
         </p>
       </div>
 
@@ -224,7 +218,7 @@ export default function BotsPage() {
           <span className="text-xs text-[#848e9c]">{trades.length} trades</span>
         </div>
         <div className="overflow-x-auto">
-          <table className="w-full text-sm">
+          <table className="w-full text-sm min-w-[640px]">
             <thead>
               <tr className="text-[#848e9c] text-xs border-b border-[#2b3139]">
                 <th className="text-left px-4 py-3 font-medium">Time</th>
@@ -232,7 +226,7 @@ export default function BotsPage() {
                 <th className="text-left px-4 py-3 font-medium">Action</th>
                 <th className="text-right px-4 py-3 font-medium">Price</th>
                 <th className="text-right px-4 py-3 font-medium">Qty</th>
-                <th className="text-right px-4 py-3 font-medium">P&L</th>
+                <th className="text-right px-4 py-3 font-medium">P&amp;L</th>
                 <th className="text-left px-4 py-3 font-medium">Reason</th>
               </tr>
             </thead>
@@ -249,14 +243,14 @@ export default function BotsPage() {
                     </div>
                   </td>
                 </tr>
-              ) : trades.map((t) => (
+              ) : trades.map(t => (
                 <tr key={t.id} className="border-b border-[#2b3139]/50 hover:bg-[#1e2329] transition">
                   <td className="px-4 py-3 text-xs text-[#848e9c] whitespace-nowrap">
                     {new Date(t.created_at).toLocaleTimeString()}
                   </td>
                   <td className="px-4 py-3">
                     <div className="flex items-center gap-2">
-                      <div className="w-6 h-6 rounded-full bg-[#f0b90b]/10 flex items-center justify-center text-[9px] font-bold text-[#f0b90b]">
+                      <div className="w-6 h-6 rounded-full bg-[#f0b90b]/10 flex items-center justify-center text-[9px] font-bold text-[#f0b90b] flex-shrink-0">
                         {t.ticker[0]}
                       </div>
                       <span className="text-xs font-medium text-[#eaecef]">{t.ticker}</span>
@@ -276,7 +270,7 @@ export default function BotsPage() {
                       </span>
                     ) : <span className="text-[#848e9c]">Open</span>}
                   </td>
-                  <td className="px-4 py-3 text-xs text-[#848e9c] max-w-[200px] truncate">{t.reason ?? '—'}</td>
+                  <td className="px-4 py-3 text-xs text-[#848e9c] max-w-[180px] truncate">{t.reason ?? '—'}</td>
                 </tr>
               ))}
             </tbody>
