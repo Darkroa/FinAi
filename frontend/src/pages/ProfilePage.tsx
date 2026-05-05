@@ -57,36 +57,10 @@ function SectionHeader({ label }: { label: string }) {
 export default function ProfilePage() {
   const { user, setUser } = useAuthStore()
   const [tab, setTab] = useState<Tab>('personal')
-  const tier = TIERS[user?.account_tier ?? 0]
-
-  const kycBadge = () => {
-    switch (user?.kyc_status) {
-      case 'approved':  return <span className="inline-flex items-center gap-1 text-[11px] px-2 py-0.5 rounded-full bg-[#0ecb81]/10 text-[#0ecb81]"><CheckCircle size={9}/>Approved</span>
-      case 'submitted': return <span className="inline-flex items-center gap-1 text-[11px] px-2 py-0.5 rounded-full bg-[#f0b90b]/10 text-[#f0b90b]"><Clock size={9}/>Under Review</span>
-      case 'rejected':  return <span className="inline-flex items-center gap-1 text-[11px] px-2 py-0.5 rounded-full bg-[#f6465d]/10 text-[#f6465d]"><XCircle size={9}/>Rejected</span>
-      default:          return <span className="inline-flex items-center gap-1 text-[11px] px-2 py-0.5 rounded-full bg-[#2b3139] text-[#848e9c]"><Clock size={9}/>Pending</span>
-    }
-  }
 
   return (
     <div className="space-y-4 max-w-2xl">
       <h1 className="text-xl font-bold text-[#eaecef]">My Profile</h1>
-
-      {/* Tier banner */}
-      <div className={`rounded-xl border ${tier.border} ${tier.bg} px-4 py-3`}>
-        <div className="flex items-center gap-2 mb-2">
-          <Star size={13} className={tier.color} />
-          <span className={`font-bold text-sm ${tier.color}`}>{tier.label}</span>
-        </div>
-        <p className="text-[11px] text-[#848e9c] mb-2">{tier.limits}</p>
-        <div className="flex flex-wrap gap-2">
-          {kycBadge()}
-          {user?.is_mail_verified
-            ? <span className="inline-flex items-center gap-1 text-[11px] px-2 py-0.5 rounded-full bg-[#0ecb81]/10 text-[#0ecb81]"><CheckCircle size={9}/>Email verified</span>
-            : <span className="inline-flex items-center gap-1 text-[11px] px-2 py-0.5 rounded-full bg-[#f6465d]/10 text-[#f6465d]">Email unverified</span>
-          }
-        </div>
-      </div>
 
       {/* Tab bar */}
       <div className="flex gap-1 bg-[#161a1e] border border-[#2b3139] rounded-xl p-1">
@@ -102,7 +76,7 @@ export default function ProfilePage() {
         ))}
       </div>
 
-      {tab === 'personal' && <PersonalTab user={user} setUser={setUser} kycBadge={kycBadge} />}
+      {tab === 'personal' && <PersonalTab user={user} setUser={setUser} />}
       {tab === 'finapi'   && <FinApiTab   user={user} setUser={setUser} />}
       {tab === 'security' && <SecurityTab user={user} />}
     </div>
@@ -111,8 +85,16 @@ export default function ProfilePage() {
 
 
 /* ─────────────────────────── PERSONAL TAB ─────────────────────────── */
-function PersonalTab({ user, setUser, kycBadge }: { user: ReturnType<typeof useAuthStore>['user']; setUser: (u: unknown) => void; kycBadge: () => React.ReactNode }) {
-  void kycBadge
+function PersonalTab({ user, setUser }: { user: ReturnType<typeof useAuthStore>['user']; setUser: (u: unknown) => void }) {
+  const tier = TIERS[user?.account_tier ?? 0]
+  const kycBadge = () => {
+    switch (user?.kyc_status) {
+      case 'approved':  return <span className="inline-flex items-center gap-1 text-[11px] px-2 py-0.5 rounded-full bg-[#0ecb81]/10 text-[#0ecb81]"><CheckCircle size={9}/>Approved</span>
+      case 'submitted': return <span className="inline-flex items-center gap-1 text-[11px] px-2 py-0.5 rounded-full bg-[#f0b90b]/10 text-[#f0b90b]"><Clock size={9}/>Under Review</span>
+      case 'rejected':  return <span className="inline-flex items-center gap-1 text-[11px] px-2 py-0.5 rounded-full bg-[#f6465d]/10 text-[#f6465d]"><XCircle size={9}/>Rejected</span>
+      default:          return <span className="inline-flex items-center gap-1 text-[11px] px-2 py-0.5 rounded-full bg-[#2b3139] text-[#848e9c]"><Clock size={9}/>Pending</span>
+    }
+  }
   const [form, setForm] = useState({
     first_name:  user?.first_name  || '',
     middle_name: user?.middle_name || '',
@@ -199,7 +181,49 @@ function PersonalTab({ user, setUser, kycBadge }: { user: ReturnType<typeof useA
   return (
     <div className="space-y-3">
 
-      {/* Email verification banner */}
+      {/* 1. Profile picture */}
+      <div className="bg-[#161a1e] border border-[#2b3139] rounded-xl p-5">
+        <div className="flex flex-col items-center gap-3 text-center">
+          <div className="relative">
+            <div className="w-24 h-24 rounded-full bg-[#f0b90b]/10 border-2 border-[#f0b90b]/30 overflow-hidden flex items-center justify-center">
+              {user?.profile_photo
+                ? <img src={user.profile_photo} alt="avatar" className="w-full h-full object-cover" />
+                : <span className="text-4xl font-bold text-[#f0b90b]">{user?.email?.[0]?.toUpperCase() ?? 'U'}</span>
+              }
+            </div>
+            <button onClick={() => fileRef.current?.click()} disabled={photoLoading}
+              className="absolute -bottom-1 -right-1 w-8 h-8 rounded-full bg-[#f0b90b] flex items-center justify-center shadow-lg hover:bg-[#d4a30a] transition">
+              {photoLoading
+                ? <div className="w-3.5 h-3.5 border border-black border-t-transparent rounded-full animate-spin" />
+                : <Camera size={13} className="text-black" />}
+            </button>
+            <input ref={fileRef} type="file" accept="image/*" className="hidden" onChange={handlePhotoChange} />
+          </div>
+          <div>
+            <p className="font-bold text-base text-[#eaecef]">{user?.full_name || user?.email}</p>
+            <p className="text-xs text-[#848e9c] mt-0.5">@{user?.username || 'no username set'}</p>
+            <p className="text-[11px] text-[#4a5568] mt-0.5">{user?.email}</p>
+          </div>
+        </div>
+      </div>
+
+      {/* 2. Unverified / tier status */}
+      <div className={`rounded-xl border ${tier.border} ${tier.bg} px-4 py-3`}>
+        <div className="flex items-center gap-2 mb-2">
+          <Star size={13} className={tier.color} />
+          <span className={`font-bold text-sm ${tier.color}`}>{tier.label}</span>
+        </div>
+        <p className="text-[11px] text-[#848e9c] mb-2">{tier.limits}</p>
+        <div className="flex flex-wrap gap-2">
+          {kycBadge()}
+          {user?.is_mail_verified
+            ? <span className="inline-flex items-center gap-1 text-[11px] px-2 py-0.5 rounded-full bg-[#0ecb81]/10 text-[#0ecb81]"><CheckCircle size={9}/>Email verified</span>
+            : <span className="inline-flex items-center gap-1 text-[11px] px-2 py-0.5 rounded-full bg-[#f6465d]/10 text-[#f6465d]">Email unverified</span>
+          }
+        </div>
+      </div>
+
+      {/* 3. Verify email */}
       {!user?.is_mail_verified && (
         <div className="bg-[#f6465d]/5 border border-[#f6465d]/20 rounded-xl px-4 py-3">
           <div className="flex flex-col sm:flex-row sm:items-center gap-3">
@@ -233,33 +257,7 @@ function PersonalTab({ user, setUser, kycBadge }: { user: ReturnType<typeof useA
         </div>
       )}
 
-      {/* Avatar card */}
-      <div className="bg-[#161a1e] border border-[#2b3139] rounded-xl p-4">
-        <div className="flex items-center gap-4">
-          <div className="relative flex-shrink-0">
-            <div className="w-16 h-16 rounded-full bg-[#f0b90b]/10 border-2 border-[#f0b90b]/30 overflow-hidden flex items-center justify-center">
-              {user?.profile_photo
-                ? <img src={user.profile_photo} alt="avatar" className="w-full h-full object-cover" />
-                : <span className="text-2xl font-bold text-[#f0b90b]">{user?.email?.[0]?.toUpperCase() ?? 'U'}</span>
-              }
-            </div>
-            <button onClick={() => fileRef.current?.click()} disabled={photoLoading}
-              className="absolute -bottom-1 -right-1 w-6 h-6 rounded-full bg-[#f0b90b] flex items-center justify-center shadow-lg hover:bg-[#d4a30a] transition">
-              {photoLoading
-                ? <div className="w-2.5 h-2.5 border border-black border-t-transparent rounded-full animate-spin" />
-                : <Camera size={10} className="text-black" />}
-            </button>
-            <input ref={fileRef} type="file" accept="image/*" className="hidden" onChange={handlePhotoChange} />
-          </div>
-          <div>
-            <p className="text-sm font-bold text-[#eaecef]">{user?.full_name || user?.email}</p>
-            <p className="text-xs text-[#848e9c]">@{user?.username || 'no username set'}</p>
-            <p className="text-[11px] text-[#4a5568] mt-0.5">{user?.email}</p>
-          </div>
-        </div>
-      </div>
-
-      {/* Profile locked */}
+      {/* 4. Profile locked */}
       {user?.profile_locked && (
         <div className="flex items-center gap-2 bg-[#f6465d]/5 border border-[#f6465d]/20 rounded-xl px-4 py-3">
           <Lock size={13} className="text-[#f6465d] flex-shrink-0" />

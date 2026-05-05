@@ -4,7 +4,7 @@ import { useAuthStore } from '../store/authStore'
 import {
   LayoutDashboard, TrendingUp, BarChart2, Wallet,
   Settings, ShieldCheck, LogOut, Zap, Bell, Bot,
-  X, ChevronDown, User, Receipt, MessageSquare, Menu
+  X, ChevronDown, User, Receipt, MessageSquare, Menu, CalendarDays
 } from 'lucide-react'
 import { cn } from '../lib/utils'
 import { getUserNotifications, markAllNotificationsRead } from '../lib/api'
@@ -18,6 +18,7 @@ const navItems = [
   { to: '/app/wallet',       icon: Wallet,          label: 'Wallet'    },
   { to: '/app/transactions', icon: Receipt,         label: 'History'   },
   { to: '/app/bots',         icon: Bot,             label: 'AI Bots'   },
+  { to: '/app/calendar',     icon: CalendarDays,    label: 'Calendar'  },
   { to: '/app/support',      icon: MessageSquare,   label: 'Support'   },
   { to: '/app/settings',     icon: Settings,        label: 'Settings'  },
   { to: '/app/profile',      icon: User,            label: 'Profile'   },

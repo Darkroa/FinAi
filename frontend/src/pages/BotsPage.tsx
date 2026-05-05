@@ -1,5 +1,6 @@
 import { useEffect, useState, useCallback } from 'react'
 import { getBotStatus, startBot, stopBot, getBotTrades } from '../lib/api'
+import { useAuthStore } from '../store/authStore'
 import toast from 'react-hot-toast'
 import { Bot, Play, Square, RefreshCw, TrendingUp, Activity, Zap, Brain } from 'lucide-react'
 
@@ -30,6 +31,7 @@ const mockTrades: TradeLog[] = [
 ]
 
 export default function BotsPage() {
+  const { user } = useAuthStore()
   const [status, setStatus]               = useState<BotStatus>({ running: false })
   const [trades, setTrades]               = useState<TradeLog[]>([])
   const [loading, setLoading]             = useState(true)
@@ -59,6 +61,10 @@ export default function BotsPage() {
   }, [fetchData])
 
   const handleStart = async () => {
+    if (!user?.balance_usdt || user.balance_usdt <= 0) {
+      toast.error('Insufficient balance — please deposit funds before starting the bot')
+      return
+    }
     setActionLoading(true)
     try {
       await startBot()
@@ -143,7 +149,9 @@ export default function BotsPage() {
               </div>
               <div className="flex justify-between text-xs">
                 <span className="text-[#848e9c]">Capital</span>
-                <span className="text-[#eaecef]">${(status.capital ?? 10000).toLocaleString()}</span>
+                <span className={`font-medium ${(user?.balance_usdt ?? 0) > 0 ? 'text-[#0ecb81]' : 'text-[#f6465d]'}`}>
+                  ${(user?.balance_usdt ?? status.capital ?? 0).toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                </span>
               </div>
             </div>
           </div>

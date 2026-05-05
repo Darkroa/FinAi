@@ -65,13 +65,6 @@ export default function LandingPage() {
             ))}
           </nav>
 
-          <div className="hidden md:flex items-center gap-2 flex-shrink-0">
-            <button onClick={() => navigate('/login')}
-              className="text-sm text-[#848e9c] hover:text-[#eaecef] transition font-medium px-3 py-1.5">Sign in</button>
-            <button onClick={() => navigate('/login')}
-              className="text-sm bg-[#f0b90b] hover:bg-[#d4a30a] text-black font-bold px-4 py-2 rounded-lg transition">Get Started</button>
-          </div>
-
           <button onClick={() => setMobileMenuOpen(v => !v)}
             className="md:hidden p-2 text-[#848e9c] hover:text-[#eaecef] flex-shrink-0">
             {mobileMenuOpen ? <X size={20} /> : <Menu size={20} />}
@@ -79,17 +72,11 @@ export default function LandingPage() {
         </div>
 
         {mobileMenuOpen && (
-          <div className="md:hidden border-t border-[#2b3139] bg-[#0b0e11] px-4 py-3 space-y-2">
+          <div className="md:hidden border-t border-[#2b3139] bg-[#0b0e11] px-4 py-3 space-y-1">
             {['Features', 'Markets', 'Pricing'].map(n => (
               <a key={n} href={`#${n.toLowerCase()}`} onClick={() => setMobileMenuOpen(false)}
                 className="block text-sm text-[#848e9c] hover:text-[#eaecef] py-2">{n}</a>
             ))}
-            <div className="pt-1 flex flex-col gap-2">
-              <button onClick={() => navigate('/login')}
-                className="w-full text-sm border border-[#2b3139] text-[#848e9c] py-2.5 rounded-lg hover:text-[#eaecef] transition">Sign in</button>
-              <button onClick={() => navigate('/login')}
-                className="w-full text-sm bg-[#f0b90b] hover:bg-[#d4a30a] text-black font-bold py-2.5 rounded-lg transition">Get Started Free</button>
-            </div>
           </div>
         )}
       </header>
