@@ -36,26 +36,26 @@ export default function LandingPage() {
 
       {/* ─── NAVBAR ─── */}
       <header className="sticky top-0 z-50 bg-[#0b0e11]/95 backdrop-blur-md border-b border-[#2b3139]">
-        <div className="max-w-6xl mx-auto px-5 h-16 flex items-center justify-between">
-          <div className="flex items-center gap-2.5">
+        <div className="max-w-6xl mx-auto px-4 sm:px-6 h-16 flex items-center justify-between gap-4">
+          <div className="flex items-center gap-2 flex-shrink-0">
             <div className="w-8 h-8 rounded-xl bg-[#f0b90b] flex items-center justify-center shadow-lg shadow-[#f0b90b]/20">
               <Zap size={15} className="text-black" />
             </div>
             <span className="text-[#f0b90b] font-bold text-xl tracking-tight">FinAi</span>
           </div>
 
-          <nav className="hidden md:flex items-center gap-8">
+          <nav className="hidden md:flex items-center gap-6 lg:gap-8">
             {['Features', 'Markets', 'Pricing'].map(n => (
-              <a key={n} href={`#${n.toLowerCase()}`} className="text-sm text-[#848e9c] hover:text-[#eaecef] transition font-medium">{n}</a>
+              <a key={n} href={`#${n.toLowerCase()}`} className="text-sm text-[#848e9c] hover:text-[#eaecef] transition font-medium whitespace-nowrap">{n}</a>
             ))}
           </nav>
 
-          <div className="hidden md:flex items-center gap-3">
-            <button onClick={() => navigate('/login')} className="text-sm text-[#848e9c] hover:text-[#eaecef] transition font-medium">Sign in</button>
-            <button onClick={() => navigate('/login')} className="text-sm bg-[#f0b90b] hover:bg-[#d4a30a] text-black font-semibold px-4 py-2 rounded-xl transition">Get Started</button>
+          <div className="hidden md:flex items-center gap-2 flex-shrink-0">
+            <button onClick={() => navigate('/login')} className="text-sm text-[#848e9c] hover:text-[#eaecef] transition font-medium whitespace-nowrap px-3 py-2">Sign in</button>
+            <button onClick={() => navigate('/login')} className="text-sm bg-[#f0b90b] hover:bg-[#d4a30a] text-black font-semibold px-4 py-2 rounded-xl transition whitespace-nowrap">Get Started</button>
           </div>
 
-          <button onClick={() => setMobileMenuOpen(v => !v)} className="md:hidden p-2 text-[#848e9c] hover:text-[#eaecef]">
+          <button onClick={() => setMobileMenuOpen(v => !v)} className="md:hidden p-2 text-[#848e9c] hover:text-[#eaecef] flex-shrink-0">
             {mobileMenuOpen ? <X size={20} /> : <Menu size={20} />}
           </button>
         </div>
@@ -90,13 +90,12 @@ export default function LandingPage() {
             <Cpu size={11} /> Powered by Grok AI
           </div>
 
-          <h1 className="text-4xl sm:text-5xl lg:text-6xl font-extrabold leading-tight tracking-tight text-[#eaecef] mb-6">
+          <h1 className="text-3xl sm:text-5xl lg:text-6xl font-extrabold leading-tight tracking-tight text-[#eaecef] mb-6">
             Trade Smarter with{' '}
-            <span className="text-[#f0b90b]">AI&#8209;Powered</span>
-            <br className="hidden sm:block" /> Insights
+            <span className="text-[#f0b90b] whitespace-nowrap">AI-Powered Insights</span>
           </h1>
 
-          <p className="text-[#848e9c] text-base sm:text-lg leading-relaxed mb-10 max-w-xl mx-auto">
+          <p className="text-[#848e9c] text-sm sm:text-base leading-relaxed mb-10 max-w-xl mx-auto">
             FinAi reads real-time market news, detects high-impact events, and executes automated trading strategies — all driven by Grok AI.
           </p>
 
@@ -120,7 +119,11 @@ export default function LandingPage() {
         <div className="max-w-5xl mx-auto px-5 py-10">
           <div className="grid grid-cols-2 md:grid-cols-4 gap-0">
             {stats.map((s, i) => (
-              <div key={s.label} className={`text-center py-6 px-4 ${i < stats.length - 1 ? 'border-r border-[#2b3139]' : ''}`}>
+              <div key={s.label} className={`text-center py-6 px-4 ${
+                i % 2 === 0 && i !== stats.length - 1 ? 'border-r border-[#2b3139] md:border-r border-[#2b3139]' :
+                i % 2 !== 0 && i < 2 ? 'md:border-r border-[#2b3139]' :
+                i === 1 ? 'md:border-r border-[#2b3139]' : ''
+              } ${i < 2 ? 'border-b border-[#2b3139] md:border-b-0' : ''}`}>
                 <p className="text-3xl sm:text-4xl font-extrabold text-[#f0b90b] font-mono tracking-tight">{s.value}</p>
                 <p className="text-xs text-[#848e9c] mt-2 font-medium">{s.label}</p>
               </div>
@@ -135,7 +138,7 @@ export default function LandingPage() {
           <div className="text-center mb-14">
             <p className="text-xs text-[#f0b90b] font-bold tracking-widest uppercase mb-3">Why FinAi</p>
             <h2 className="text-2xl sm:text-3xl font-bold text-[#eaecef] mb-4">Everything you need to trade smarter</h2>
-            <p className="text-[#848e9c] text-sm max-w-md mx-auto leading-relaxed">
+            <p className="text-[#848e9c] text-sm max-w-md mx-auto leading-relaxed text-center">
               A complete AI trading suite — from market monitoring to automated execution, all in one platform.
             </p>
           </div>
@@ -200,7 +203,7 @@ export default function LandingPage() {
                 <div className="p-6 flex flex-col flex-1">
                   <h3 className={`font-bold text-base mb-0.5 ${p.highlight ? 'text-[#f0b90b]' : 'text-[#eaecef]'}`}>{p.name}</h3>
                   <div className="flex items-end gap-1 mb-5">
-                    <span className={`text-4xl font-extrabold font-mono ${p.highlight ? 'text-[#eaecef]' : 'text-[#eaecef]'}`}>
+                    <span className="text-4xl font-extrabold font-mono text-[#eaecef]">
                       {p.price === 0 ? 'Free' : `$${p.price}`}
                     </span>
                     {p.price > 0 && <span className="text-sm mb-1.5 text-[#848e9c]">{p.period}</span>}
