@@ -2,103 +2,142 @@
 
 ## Project Overview
 
-FinAi is a full-stack AI-powered financial trading platform built with FastAPI (backend) and React + Vite (frontend). It ingests real-time financial news, performs Grok-powered sentiment analysis, detects market events, and executes automated trading strategies.
+FinAi is a full-stack AI-powered financial trading platform built with FastAPI (backend) and React + Vite (frontend). It provides real-time market intelligence, automated trading bots, a full wallet system, KYC/profile management, exchange connections, and a comprehensive admin panel.
 
 ## Architecture
 
 ```
 ├── frontend/                # React + Vite + Tailwind CSS frontend (port 5000)
 │   ├── src/
-│   │   ├── layouts/         # DashboardLayout (sidebar, topbar, ticker)
-│   │   ├── pages/           # LoginPage, DashboardPage, MarketsPage, TradePage, WalletPage, SettingsPage, AdminPage
-│   │   ├── store/           # Zustand auth store (authStore.ts)
-│   │   ├── lib/             # api.ts (axios client), utils.ts
-│   │   └── App.tsx          # React Router setup with private routes
-│   ├── vite.config.ts       # Vite config — port 5000, proxy /api → localhost:8000
+│   │   ├── components/      # FloatingAI.tsx (AI signals + chat popup)
+│   │   ├── layouts/         # DashboardLayout (sidebar, topbar, live ticker, notification bell)
+│   │   ├── pages/
+│   │   │   ├── LoginPage.tsx
+│   │   │   ├── LandingPage.tsx
+│   │   │   ├── DashboardPage.tsx
+│   │   │   ├── MarketsPage.tsx
+│   │   │   ├── TradePage.tsx
+│   │   │   ├── WalletPage.tsx            # Deposit/Withdraw/P2P/VPS/Asset
+│   │   │   ├── TransactionHistoryPage.tsx
+│   │   │   ├── BotsPage.tsx
+│   │   │   ├── ProfilePage.tsx           # KYC, photo upload, email verify, tiers
+│   │   │   ├── SettingsPage.tsx          # Exchange connections, security, API keys
+│   │   │   ├── SupportPage.tsx           # Ticket system + live chat
+│   │   │   └── AdminPage.tsx             # Full admin panel (7 tabs)
+│   │   ├── store/           # Zustand auth store (authStore.ts) — full User type
+│   │   ├── hooks/           # useLivePrices.ts (CoinGecko live BTC/ETH)
+│   │   ├── lib/             # api.ts (all API calls), utils.ts
+│   │   └── App.tsx          # React Router with all routes
+│   ├── vite.config.ts
 │   └── package.json
 ├── src/
-│   ├── api/             # FastAPI backend (main.py, routes.py, middleware.py)
-│   ├── analysis/        # AI analysis modules (sentiment, forecaster, trendline, impact)
-│   ├── auth/            # JWT authentication (auth.py, dependencies.py)
-│   ├── celery_app/      # Celery task queue (__init__.py auto-detects Redis, tasks.py)
-│   ├── conversation/    # Conversational AI agent
-│   ├── database/        # SQLAlchemy models and session (PostgreSQL)
-│   ├── event/           # Market event detection
-│   ├── frontend/        # Legacy Streamlit pages (kept for reference)
-│   ├── ingestion/       # News scrapers (RSS, NewsAPI, AlphaVantage)
-│   ├── notifications/   # Multi-channel alerts (Telegram, WhatsApp, Slack, Email)
-│   ├── rag/             # Retrieval-Augmented Generation (ChromaDB)
-│   ├── trading/         # Trading bots and Alpaca/Binance broker integrations
-│   └── users/           # User CRUD, API key management, bot manager
-├── admin/               # Legacy Streamlit admin dashboard (kept for reference)
-├── migrations/          # Alembic database migrations
-└── start.sh             # Entry point: starts FastAPI (port 8000) + React frontend (port 5000)
+│   ├── api/
+│   │   ├── main.py          # FastAPI app entry point
+│   │   ├── routes.py        # All REST endpoints (auth, wallet, KYC, admin, support)
+│   │   └── middleware.py
+│   ├── analysis/
+│   ├── auth/                # JWT auth (auth.py, dependencies.py)
+│   ├── celery_app/          # Celery tasks (eager mode when no Redis)
+│   ├── database/
+│   │   ├── models.py        # User, APIKey, Transaction, WalletConfig, SupportTicket, SupportMessage, etc.
+│   │   └── session.py       # SQLAlchemy session + get_db
+│   ├── ingestion/
+│   ├── notifications/
+│   ├── rag/
+│   ├── trading/
+│   └── users/               # CRUD, API key management, bot manager
+└── start.sh                 # Entry: FastAPI (8000) + Vite (5000)
 ```
 
 ## Tech Stack
 
 - **Backend**: FastAPI + Uvicorn (port 8000)
-- **Frontend**: React 19 + Vite 8 + Tailwind CSS v4 + shadcn/ui radix primitives (port 5000)
-- **State**: Zustand (auth store, persisted to localStorage)
+- **Frontend**: React 19 + Vite 8 + Tailwind CSS v4 (port 5000)
+- **State**: Zustand (auth store, persisted to localStorage as `finai-auth`)
 - **Routing**: React Router v7
 - **Charts**: Recharts
-- **HTTP Client**: Axios (proxied to FastAPI via Vite proxy)
+- **QR Codes**: react-qr-code (wallet deposit addresses)
+- **HTTP Client**: Axios (proxied to FastAPI via Vite proxy `/api → localhost:8000`)
 - **Database**: PostgreSQL (Replit managed, via DATABASE_URL)
-- **Task Queue**: Celery — auto-detects Redis; falls back to synchronous eager mode when Redis is unavailable
-- **AI**: Grok (primary via langchain-groq) + OpenAI (fallback/embeddings)
+- **Task Queue**: Celery (eager mode — no Redis required)
+- **AI**: Grok (primary) + OpenAI (fallback)
 - **Vector DB**: ChromaDB (RAG)
-- **Trading**: Alpaca (paper + live), Binance via python-binance
-- **Notifications**: Telegram, Twilio WhatsApp, Slack, Email
-
-## Running the App
-
-The main workflow runs `start.sh`:
-
-```bash
-# Kills existing processes on ports 8000 and 5000
-# Starts FastAPI backend on port 8000 (background)
-uvicorn src.api.main:app --host 0.0.0.0 --port 8000 --reload
-# Starts React (Vite) frontend on port 5000 (foreground)
-cd frontend && npm run dev
-```
-
-## Environment Variables (Secrets)
-
-| Key | Required | Description |
-|-----|----------|-------------|
-| `GROK_API_KEY` | Yes | Groq API key for Grok LLM (console.groq.com) |
-| `OPENAI_API_KEY` | Recommended | OpenAI fallback + embeddings (platform.openai.com) |
-| `JWT_SECRET_KEY` | Yes | Secret for signing JWT tokens (any long random string) |
-| `DATABASE_URL` | Auto | Set automatically by Replit PostgreSQL |
-| `NEWSAPI_KEY` | Optional | NewsAPI.org for live financial news |
-| `ALPHA_VANTAGE_KEY` | Optional | AlphaVantage market data |
-| `ALPACA_API_KEY` | Optional | Alpaca trading (paper/live) |
-| `ALPACA_SECRET_KEY` | Optional | Alpaca trading secret |
-| `TELEGRAM_BOT_TOKEN` | Optional | Telegram trade alerts |
-| `TELEGRAM_CHAT_ID` | Optional | Telegram target chat |
-| `TWILIO_ACCOUNT_SID` | Optional | WhatsApp alerts via Twilio |
-| `TWILIO_AUTH_TOKEN` | Optional | Twilio auth |
+- **Notifications**: Telegram, WhatsApp, Slack, Email
 
 ## Default Credentials
 
-- **Admin**: `admin@finai.io` / `admin123!`
-- **Demo user**: `tomiwakhalifa@gmail.com` (no password hash set — login bypasses password check currently)
+- **Admin**: `admin@finai.com` / `Admin@FinAi2024!`
+- All new users start with $0.00 USDT balance, Tier 0
 
-## Key Design Decisions
+## Supported Exchanges (for bot trading)
 
-### Redis-Free Celery Mode
-`src/celery_app/__init__.py` probes Redis at startup. If Redis is not available (as on Replit free tier), Celery automatically runs in `task_always_eager=True` mode — tasks execute synchronously inline without needing a broker.
+Binance, Bybit, KuCoin, OKX, Kraken, Coinbase — connect via Settings page with API key + secret (+ passphrase for OKX/KuCoin)
 
-### API Proxy
-Vite's dev server proxies all `/api/*` requests to FastAPI on port 8000. No CORS issues, no hardcoded URLs.
+## Account Tier System
 
-### Auth Flow
-1. React `LoginPage` POSTs to `/api/auth/login` → receives `access_token`
-2. Immediately GETs `/api/users/me` with the new token → receives full user object
-3. Stores both token + user in Zustand (persisted to localStorage as `finai-auth`)
-4. All subsequent API calls use the Bearer token via Axios interceptor
+| Tier | Label       | Requirements           | Limits                          |
+|------|-------------|------------------------|---------------------------------|
+| 0    | Unverified  | Default                | No withdrawals, no API keys     |
+| 1    | Tier 1      | KYC approved by admin  | $500/day withdraw, 1 API key    |
+| 2    | Tier 2      | Admin sets             | $5,000/day withdraw, 5 API keys |
+| 3    | Tier 3      | Admin sets             | Unlimited, priority support     |
 
-### Color Palette (Binance-style)
+## Database Models
+
+- **User** — email, hashed_password, first/middle/last name, username, phone, dob, sex, address, country, profile_photo, is_mail_verified, email_verify_code, account_tier, kyc_status, balance_usdt, exchange_connections (JSON), profile_locked
+- **APIKey** — user_id, key_name, api_key, purpose, expires_at
+- **Transaction** — unified table: deposit/withdrawal/p2p_send/p2p_receive/trade/vps/asset
+- **WalletConfig** — key/value store for deposit addresses and bank details (admin-managed)
+- **SupportTicket** + **SupportMessage** — ticket system with admin reply
+- **Notification** — broadcast to all users or specific user
+- **Event**, **TrendAnalysis**, **TradeLog** — market intelligence
+
+## Key API Endpoints
+
+### Auth
+- `POST /api/auth/login` — returns JWT access_token
+- `POST /api/auth/signup`
+- `GET /api/users/me` — full user profile
+
+### Profile/KYC
+- `POST /api/users/update-profile` — update name, phone, dob, etc.
+- `POST /api/users/upload-photo` — multipart photo upload
+- `POST /api/users/send-verify-email` — sends code (returns dev_code in response)
+- `POST /api/users/verify-email` — confirm code
+- `POST /api/users/submit-kyc` — submit for admin review
+- `POST /api/users/exchange-connect` — add exchange API keys
+- `DELETE /api/users/exchange-disconnect/{exchange}`
+
+### Wallet
+- `GET /api/wallet/config` — deposit addresses + bank details (public)
+- `POST /api/wallet/deposit` — submit deposit request (pending admin approval)
+- `POST /api/wallet/withdraw` — submit withdrawal (deducts balance immediately)
+- `POST /api/wallet/p2p` — instant transfer to another user by email
+- `GET /api/wallet/transactions` — user's transaction history
+
+### Admin (requires admin JWT)
+- `GET /api/admin/users`
+- `POST /api/admin/update-user` — edit balance, tier, KYC status, ban/unban
+- `GET /api/admin/transactions` + approve/reject
+- `GET/POST /api/admin/wallet-config` — manage deposit addresses
+- `GET /api/admin/api-key-users`
+- `GET/POST /api/admin/support-tickets` + reply + status update
+- `GET /api/admin/health` — live health check (DB, Celery, CoinGecko, Binance)
+- `POST /api/admin/notifications` — push to all users or specific user
+
+### Support
+- `POST /api/support/tickets` — create ticket with first message
+- `GET /api/support/tickets` — list user's tickets
+- `GET /api/support/tickets/{id}` — messages
+- `POST /api/support/tickets/{id}/reply`
+
+### API Keys
+- `POST /api/api-keys` — requires is_mail_verified=True AND account_tier >= 1
+- `GET /api/api-keys`
+- `DELETE /api/api-keys/{id}`
+
+## Color Palette (Binance-style dark theme)
+
 - Background: `#0b0e11`
 - Surface: `#161a1e`
 - Card: `#1e2329`
@@ -109,11 +148,15 @@ Vite's dev server proxies all `/api/*` requests to FastAPI on port 8000. No CORS
 - Text: `#eaecef`
 - Muted: `#848e9c`
 
-### Pages
-- `/login` — Auth page (Sign In / Sign Up tabs, Google/Apple social buttons)
-- `/dashboard` — Portfolio overview, performance chart, open positions, AI events feed
-- `/markets` — Market table with sparklines (BTC, ETH, stocks)
-- `/trade` — Price chart + order form + order book (BTC/USDT)
-- `/wallet` — Asset balances, deposit address, withdrawal form, transaction history
-- `/settings` — Profile, security, notifications, API keys
-- `/admin` — Admin-only: users table + transaction approve/reject panel
+## Auth Flow
+
+1. POST `/api/auth/login` → receives `access_token`
+2. GET `/api/users/me` → full user object cached in Zustand
+3. All subsequent calls: `Authorization: Bearer <token>` via Axios interceptor
+4. 401 responses auto-logout (except `/public/` endpoints which use API key Bearer auth)
+
+## Floating AI Button
+
+Fixed bottom-right button (yellow, ⚡ icon) opens a panel with:
+- **AI Signals tab**: Live signals for BTC, ETH, NVDA, SPY with confidence bars
+- **Chat tab**: AI assistant for market analysis questions
