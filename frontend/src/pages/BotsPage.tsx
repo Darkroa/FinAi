@@ -1,8 +1,8 @@
 import { useEffect, useState, useCallback } from 'react'
-import { getBotStatus, startBot, stopBot, getBotTrades } from '../lib/api'
+import { getBotStatus, startBot, stopBot, getBotTrades, updateBotParams } from '../lib/api'
 import { useAuthStore } from '../store/authStore'
 import toast from 'react-hot-toast'
-import { Bot, Play, Square, RefreshCw, TrendingUp, Activity, Zap, Brain } from 'lucide-react'
+import { Bot, Play, Square, RefreshCw, TrendingUp, Activity, Zap, Brain, Settings, Save, ChevronDown } from 'lucide-react'
 
 interface TradeLog {
   id: number
@@ -18,37 +18,44 @@ interface TradeLog {
 
 interface BotStatus {
   running: boolean
-  bot_type?: string
+  bots?: Record<string, unknown>
   capital?: number
 }
 
-const mockTrades: TradeLog[] = [
-  { id: 1, ticker: 'BTC-USD', action: 'BUY',  price: 66800, qty: 0.01, pnl: null,  reason: 'Bullish breakout detected', paper: false, created_at: new Date(Date.now() - 3600000).toISOString() },
-  { id: 2, ticker: 'ETH-USD', action: 'SELL', price: 3480,  qty: 0.5,  pnl: 124.5, reason: 'Target price reached',      paper: false, created_at: new Date(Date.now() - 7200000).toISOString() },
-  { id: 3, ticker: 'NVDA',    action: 'BUY',  price: 860,   qty: 1,    pnl: null,  reason: 'AI event: earnings beat',   paper: false, created_at: new Date(Date.now() - 14400000).toISOString() },
-  { id: 4, ticker: 'AAPL',    action: 'SELL', price: 191.5, qty: 5,    pnl: -32.5, reason: 'Stop loss triggered',        paper: false, created_at: new Date(Date.now() - 28800000).toISOString() },
-  { id: 5, ticker: 'BTC-USD', action: 'SELL', price: 67200, qty: 0.01, pnl: 4.0,   reason: 'Take profit',               paper: false, created_at: new Date(Date.now() - 86400000).toISOString() },
-]
+const TICKERS = ['BTC-USD', 'ETH-USD', 'SOL-USD', 'NVDA', 'AAPL', 'TSLA', 'BNB-USD', 'MSFT', 'GOOGL', 'AMZN']
 
 export default function BotsPage() {
   const { user } = useAuthStore()
+
   const [status, setStatus]               = useState<BotStatus>({ running: false })
   const [trades, setTrades]               = useState<TradeLog[]>([])
   const [loading, setLoading]             = useState(true)
   const [actionLoading, setActionLoading] = useState(false)
+  const [showSettings, setShowSettings]   = useState(false)
+  const [savingParams, setSavingParams]   = useState(false)
+  const [showTickerDD, setShowTickerDD]   = useState(false)
+
+  const [params, setParams] = useState({
+    ticker: 'BTC-USD',
+    paper: true,
+    initial_capital: user?.default_capital || 1000,
+    risk_per_trade_pct: user?.risk_per_trade || 1.0,
+    max_drawdown_pct: user?.max_drawdown || 10.0,
+  })
 
   const fetchData = useCallback(async () => {
     try {
-      const [statusRes, tradesRes] = await Promise.allSettled([getBotStatus(), getBotTrades(20)])
-      if (statusRes.status === 'fulfilled') setStatus(statusRes.value.data)
+      const [statusRes, tradesRes] = await Promise.allSettled([getBotStatus(), getBotTrades(50)])
+      if (statusRes.status === 'fulfilled') {
+        const d = statusRes.value.data
+        setStatus({ running: d.running, bots: d.bots, capital: d.capital })
+      }
       if (tradesRes.status === 'fulfilled') {
         const d = tradesRes.value.data
-        setTrades(Array.isArray(d) ? d : (d?.trades ?? mockTrades))
-      } else {
-        setTrades(mockTrades)
+        setTrades(Array.isArray(d) ? d : (d?.trades ?? []))
       }
     } catch {
-      setTrades(mockTrades)
+      // silent
     } finally {
       setLoading(false)
     }
@@ -60,18 +67,31 @@ export default function BotsPage() {
     return () => clearInterval(interval)
   }, [fetchData])
 
+  useEffect(() => {
+    if (user) {
+      setParams(p => ({
+        ...p,
+        initial_capital: user.default_capital || p.initial_capital,
+        risk_per_trade_pct: user.risk_per_trade || p.risk_per_trade_pct,
+        max_drawdown_pct: user.max_drawdown || p.max_drawdown_pct,
+      }))
+    }
+  }, [user])
+
   const handleStart = async () => {
-    if (!user?.balance_usdt || user.balance_usdt <= 0) {
-      toast.error('Insufficient balance — please deposit funds before starting the bot')
+    if (!params.paper && (!user?.balance_usdt || user.balance_usdt < params.initial_capital)) {
+      toast.error(`Insufficient balance. Need $${params.initial_capital.toLocaleString()} USDT for live trading.`)
       return
     }
     setActionLoading(true)
     try {
-      await startBot()
+      const res = await startBot(params)
       setStatus(s => ({ ...s, running: true }))
-      toast.success('Bot started successfully')
-    } catch {
-      toast.error('Failed to start bot — check API key configuration in Profile → FinAPI')
+      toast.success(res.data?.message || 'Bot started successfully')
+      fetchData()
+    } catch (err: unknown) {
+      const msg = (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail
+      toast.error(msg || 'Failed to start bot')
     } finally { setActionLoading(false) }
   }
 
@@ -80,10 +100,26 @@ export default function BotsPage() {
     try {
       await stopBot()
       setStatus(s => ({ ...s, running: false }))
-      toast.success('Bot stopped')
+      toast.success('All bots stopped')
+      fetchData()
     } catch {
       toast.error('Failed to stop bot')
     } finally { setActionLoading(false) }
+  }
+
+  const handleSaveParams = async () => {
+    setSavingParams(true)
+    try {
+      await updateBotParams({
+        default_capital: params.initial_capital,
+        risk_per_trade: params.risk_per_trade_pct,
+        max_drawdown: params.max_drawdown_pct,
+        preferred_tickers: [params.ticker],
+      })
+      toast.success('Bot parameters saved')
+    } catch {
+      toast.error('Failed to save parameters')
+    } finally { setSavingParams(false) }
   }
 
   const pnlTrades     = trades.filter(t => t.pnl !== null)
@@ -101,12 +137,127 @@ export default function BotsPage() {
             {status.running ? 'Live' : 'Offline'}
           </span>
         </div>
-        <button onClick={fetchData} disabled={loading}
-          className="flex items-center gap-1.5 text-xs text-[#848e9c] hover:text-[#eaecef] transition">
-          <RefreshCw size={12} className={loading ? 'animate-spin' : ''} />
-          Refresh
-        </button>
+        <div className="flex items-center gap-2">
+          <button onClick={() => setShowSettings(v => !v)}
+            className={`flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg border transition ${showSettings ? 'bg-[#f0b90b]/10 border-[#f0b90b]/40 text-[#f0b90b]' : 'border-[#2b3139] text-[#848e9c] hover:text-[#eaecef]'}`}>
+            <Settings size={12} /> Configure
+          </button>
+          <button onClick={fetchData} disabled={loading}
+            className="flex items-center gap-1.5 text-xs text-[#848e9c] hover:text-[#eaecef] transition">
+            <RefreshCw size={12} className={loading ? 'animate-spin' : ''} />
+            Refresh
+          </button>
+        </div>
       </div>
+
+      {/* Settings Panel */}
+      {showSettings && (
+        <div className="bg-[#161a1e] border border-[#f0b90b]/20 rounded-2xl p-5">
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="text-sm font-semibold text-[#eaecef] flex items-center gap-2">
+              <Settings size={14} className="text-[#f0b90b]" /> Bot Configuration
+            </h3>
+            <button onClick={handleSaveParams} disabled={savingParams}
+              className="flex items-center gap-1.5 text-xs bg-[#f0b90b] hover:bg-[#d9a60b] disabled:opacity-60 text-black font-semibold px-3 py-1.5 rounded-lg transition">
+              <Save size={11} /> {savingParams ? 'Saving...' : 'Save Defaults'}
+            </button>
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+            {/* Ticker */}
+            <div>
+              <label className="text-xs text-[#848e9c] mb-1.5 block">Asset / Ticker</label>
+              <div className="relative">
+                <button onClick={() => setShowTickerDD(v => !v)}
+                  className="w-full flex items-center justify-between bg-[#0b0e11] border border-[#2b3139] focus:border-[#f0b90b] rounded-xl px-3 py-2.5 text-sm text-[#eaecef] transition">
+                  <span className="font-mono font-medium">{params.ticker}</span>
+                  <ChevronDown size={12} className="text-[#848e9c]" />
+                </button>
+                {showTickerDD && (
+                  <div className="absolute top-full mt-1 left-0 right-0 bg-[#1e2329] border border-[#2b3139] rounded-xl z-20 shadow-xl overflow-hidden max-h-48 overflow-y-auto">
+                    {TICKERS.map(t => (
+                      <button key={t} onClick={() => { setParams(p => ({ ...p, ticker: t })); setShowTickerDD(false) }}
+                        className={`w-full text-left px-4 py-2 text-sm transition hover:bg-[#2b3139] font-mono ${t === params.ticker ? 'text-[#f0b90b] font-semibold' : 'text-[#eaecef]'}`}>
+                        {t}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Capital */}
+            <div>
+              <label className="text-xs text-[#848e9c] mb-1.5 block">
+                Initial Capital (USDT)
+                <span className="ml-2 text-[#4a5568]">Balance: ${(user?.balance_usdt ?? 0).toLocaleString('en-US', { maximumFractionDigits: 2 })}</span>
+              </label>
+              <input
+                type="number" min={10} step={100}
+                value={params.initial_capital}
+                onChange={e => setParams(p => ({ ...p, initial_capital: parseFloat(e.target.value) || 0 }))}
+                className="w-full bg-[#0b0e11] border border-[#2b3139] focus:border-[#f0b90b] rounded-xl px-3 py-2.5 text-sm font-mono text-[#eaecef] focus:outline-none transition"
+              />
+            </div>
+
+            {/* Mode */}
+            <div>
+              <label className="text-xs text-[#848e9c] mb-1.5 block">Trading Mode</label>
+              <div className="grid grid-cols-2 gap-1 bg-[#0b0e11] p-1 rounded-xl border border-[#2b3139]">
+                <button onClick={() => setParams(p => ({ ...p, paper: true }))}
+                  className={`py-2 rounded-lg text-xs font-bold transition ${params.paper ? 'bg-[#f0b90b] text-black' : 'text-[#848e9c] hover:text-[#eaecef]'}`}>
+                  Paper
+                </button>
+                <button onClick={() => setParams(p => ({ ...p, paper: false }))}
+                  className={`py-2 rounded-lg text-xs font-bold transition ${!params.paper ? 'bg-[#f6465d] text-white' : 'text-[#848e9c] hover:text-[#eaecef]'}`}>
+                  Live
+                </button>
+              </div>
+            </div>
+
+            {/* Risk per trade */}
+            <div>
+              <label className="text-xs text-[#848e9c] mb-1.5 block">
+                Risk Per Trade: <span className="text-[#f0b90b] font-semibold">{params.risk_per_trade_pct}%</span>
+              </label>
+              <input
+                type="range" min={0.1} max={10} step={0.1}
+                value={params.risk_per_trade_pct}
+                onChange={e => setParams(p => ({ ...p, risk_per_trade_pct: parseFloat(e.target.value) }))}
+                className="w-full accent-[#f0b90b]"
+              />
+              <div className="flex justify-between text-[10px] text-[#4a5568] mt-1">
+                <span>0.1%</span><span>Conservative ← → Aggressive</span><span>10%</span>
+              </div>
+            </div>
+
+            {/* Max drawdown */}
+            <div>
+              <label className="text-xs text-[#848e9c] mb-1.5 block">
+                Max Drawdown Stop: <span className="text-[#f6465d] font-semibold">{params.max_drawdown_pct}%</span>
+              </label>
+              <input
+                type="range" min={1} max={50} step={1}
+                value={params.max_drawdown_pct}
+                onChange={e => setParams(p => ({ ...p, max_drawdown_pct: parseFloat(e.target.value) }))}
+                className="w-full accent-[#f6465d]"
+              />
+              <div className="flex justify-between text-[10px] text-[#4a5568] mt-1">
+                <span>1%</span><span>Auto-stop when loss hits this level</span><span>50%</span>
+              </div>
+            </div>
+
+            {/* Summary */}
+            <div className="bg-[#0b0e11] rounded-xl p-3 text-xs space-y-1.5 border border-[#2b3139]">
+              <p className="text-[#848e9c] font-semibold mb-1">Strategy Summary</p>
+              <div className="flex justify-between"><span className="text-[#4a5568]">Ticker</span><span className="text-[#f0b90b] font-mono">{params.ticker}</span></div>
+              <div className="flex justify-between"><span className="text-[#4a5568]">Capital</span><span className="text-[#eaecef] font-mono">${params.initial_capital.toLocaleString()}</span></div>
+              <div className="flex justify-between"><span className="text-[#4a5568]">Risk/trade</span><span className="text-[#0ecb81] font-mono">{params.risk_per_trade_pct}% = ${(params.initial_capital * params.risk_per_trade_pct / 100).toFixed(2)}</span></div>
+              <div className="flex justify-between"><span className="text-[#4a5568]">Stop at</span><span className="text-[#f6465d] font-mono">-{params.max_drawdown_pct}% = -${(params.initial_capital * params.max_drawdown_pct / 100).toFixed(2)}</span></div>
+              <div className="flex justify-between"><span className="text-[#4a5568]">Mode</span><span className={params.paper ? 'text-[#f0b90b] font-semibold' : 'text-[#f6465d] font-semibold'}>{params.paper ? 'Paper' : 'LIVE'}</span></div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Bot control + P&L stats */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -123,37 +274,48 @@ export default function BotsPage() {
 
             <div>
               <h2 className="font-semibold text-[#eaecef]">FinAi Trading Bot</h2>
-              <p className="text-xs text-[#848e9c] mt-0.5">Account Trading · Grok AI</p>
+              <p className="text-xs text-[#848e9c] mt-0.5">{params.ticker} · {params.paper ? 'Paper' : 'Live'} · Grok AI</p>
             </div>
 
             {status.running ? (
               <button onClick={handleStop} disabled={actionLoading}
                 className="w-full flex items-center justify-center gap-2 bg-[#f6465d] hover:bg-[#d93d51] disabled:opacity-60 text-white font-semibold py-3 rounded-xl text-sm transition">
-                <Square size={14}/> Stop Bot
+                <Square size={14}/> Stop All Bots
               </button>
             ) : (
               <button onClick={handleStart} disabled={actionLoading}
                 className="w-full flex items-center justify-center gap-2 bg-[#0ecb81] hover:bg-[#0ab56f] disabled:opacity-60 text-black font-semibold py-3 rounded-xl text-sm transition">
-                <Play size={14}/> Start Bot
+                <Play size={14}/> {actionLoading ? 'Starting...' : 'Start Bot'}
               </button>
             )}
 
             <div className="w-full bg-[#0b0e11] rounded-xl p-3 text-left space-y-2">
               <div className="flex justify-between text-xs">
-                <span className="text-[#848e9c]">Mode</span>
-                <span className="text-[#f0b90b] font-medium">Account Trading</span>
+                <span className="text-[#848e9c]">Ticker</span>
+                <span className="text-[#f0b90b] font-mono font-medium">{params.ticker}</span>
               </div>
               <div className="flex justify-between text-xs">
-                <span className="text-[#848e9c]">Strategy</span>
-                <span className="text-[#eaecef]">AI Event-driven</span>
+                <span className="text-[#848e9c]">Mode</span>
+                <span className={`font-semibold ${params.paper ? 'text-[#f0b90b]' : 'text-[#f6465d]'}`}>{params.paper ? 'Paper Trading' : 'LIVE Trading'}</span>
               </div>
               <div className="flex justify-between text-xs">
                 <span className="text-[#848e9c]">Capital</span>
-                <span className={`font-medium ${(user?.balance_usdt ?? 0) > 0 ? 'text-[#0ecb81]' : 'text-[#f6465d]'}`}>
-                  ${(user?.balance_usdt ?? status.capital ?? 0).toLocaleString('en-US', { minimumFractionDigits: 2 })}
-                </span>
+                <span className="text-[#0ecb81] font-mono font-medium">${params.initial_capital.toLocaleString()}</span>
+              </div>
+              <div className="flex justify-between text-xs">
+                <span className="text-[#848e9c]">Risk/Trade</span>
+                <span className="text-[#eaecef] font-mono">{params.risk_per_trade_pct}%</span>
+              </div>
+              <div className="flex justify-between text-xs">
+                <span className="text-[#848e9c]">Max DD Stop</span>
+                <span className="text-[#f6465d] font-mono">{params.max_drawdown_pct}%</span>
               </div>
             </div>
+
+            <button onClick={() => setShowSettings(v => !v)}
+              className="w-full flex items-center justify-center gap-1.5 text-xs text-[#848e9c] hover:text-[#f0b90b] border border-[#2b3139] hover:border-[#f0b90b]/40 py-2 rounded-xl transition">
+              <Settings size={12} /> {showSettings ? 'Hide Settings' : 'Configure Bot'}
+            </button>
           </div>
         </div>
 
@@ -210,8 +372,9 @@ export default function BotsPage() {
       <div className="flex items-start gap-3 bg-[#f0b90b]/5 border border-[#f0b90b]/20 rounded-xl px-4 py-3">
         <Brain size={16} className="text-[#f0b90b] flex-shrink-0 mt-0.5" />
         <p className="text-xs text-[#848e9c]">
-          <span className="text-[#f0b90b] font-semibold">BOT is being trained</span> to understand the market dynamics.
-          With advanced trading strategies and AI controls — continuously learning from live price action, news events, and sentiment signals.
+          <span className="text-[#f0b90b] font-semibold">AI Signal Engine:</span> The bot monitors trend analysis signals every 30 seconds.
+          It buys on BULLISH signals with &gt;65% confidence and sells on BEARISH signals or when stop-loss is triggered.
+          Configure your parameters above before starting.
         </p>
       </div>
 
@@ -243,14 +406,14 @@ export default function BotsPage() {
                     <div className="flex flex-col items-center gap-2">
                       <Bot size={28} className="text-[#2b3139]" />
                       <p className="text-sm text-[#848e9c]">No trades yet</p>
-                      <p className="text-xs text-[#4a5568]">Start the bot to begin trading</p>
+                      <p className="text-xs text-[#4a5568]">Configure and start the bot to begin trading</p>
                     </div>
                   </td>
                 </tr>
-              ) : trades.map(t => (
-                <tr key={t.id} className="border-b border-[#2b3139]/50 hover:bg-[#1e2329] transition">
+              ) : trades.map((t, i) => (
+                <tr key={t.id ?? i} className="border-b border-[#2b3139]/50 hover:bg-[#1e2329] transition">
                   <td className="px-4 py-3 text-xs text-[#848e9c] whitespace-nowrap">
-                    {new Date(t.created_at).toLocaleTimeString()}
+                    {t.created_at ? new Date(t.created_at).toLocaleString() : '—'}
                   </td>
                   <td className="px-4 py-3">
                     <div className="flex items-center gap-2">

@@ -107,9 +107,36 @@ export const replyToTicket = (ticket_id: number, message: string) =>
 
 // Bot (JWT-authenticated via /bots)
 export const getBotStatus = () => api.get('/bots/status')
-export const startBot = (ticker = 'BTC-USD') => api.post(`/bots/start?ticker=${encodeURIComponent(ticker)}`)
-export const stopBot = () => api.post('/bots/stop')
+export const startBot = (params: {
+  ticker?: string
+  paper?: boolean
+  initial_capital?: number
+  risk_per_trade_pct?: number
+  max_drawdown_pct?: number
+}) => api.post('/bots/start', {
+  ticker: params.ticker ?? 'BTC-USD',
+  paper: params.paper ?? true,
+  initial_capital: params.initial_capital ?? 1000,
+  risk_per_trade_pct: params.risk_per_trade_pct ?? 1.0,
+  max_drawdown_pct: params.max_drawdown_pct ?? 10.0,
+})
+export const stopBot = (ticker = 'ALL') => api.post(`/bots/stop?ticker=${encodeURIComponent(ticker)}`)
 export const getBotTrades = (limit = 20) => api.get(`/bots/trades?limit=${limit}`)
+export const updateBotParams = (data: {
+  default_capital?: number
+  risk_per_trade?: number
+  max_drawdown?: number
+  preferred_tickers?: string[]
+}) => api.post('/bots/update-params', data)
+
+// Trade execution
+export const executeTrade = (data: {
+  pair: string
+  side: string
+  order_type: string
+  price: number
+  amount: number
+}) => api.post('/trade/execute', data)
 
 // Security — change password / PIN / delete request
 export const changePassword = (current_password: string, new_password: string) =>

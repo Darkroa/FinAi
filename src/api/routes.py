@@ -129,6 +129,26 @@ class WebhookSettingsRequest(BaseModel):
     telegram_chat_id: Optional[str] = None
     whatsapp_number: Optional[str] = None
 
+class BotStartRequest(BaseModel):
+    ticker: str = "BTC-USD"
+    paper: bool = True
+    initial_capital: float = 1000.0
+    risk_per_trade_pct: float = 1.0
+    max_drawdown_pct: float = 10.0
+
+class BotParamsUpdate(BaseModel):
+    default_capital: Optional[float] = None
+    risk_per_trade: Optional[float] = None
+    max_drawdown: Optional[float] = None
+    preferred_tickers: Optional[list] = None
+
+class TradeExecuteRequest(BaseModel):
+    pair: str
+    side: str
+    order_type: str = "market"
+    price: float
+    amount: float
+
 class WhatsAppCodeRequest(BaseModel):
     phone: str
 
@@ -1030,22 +1050,31 @@ async def save_webhook_settings(data: WebhookSettingsRequest, current_user=Depen
 # ===================== JWT-Authenticated Bot Routes =====================
 
 @router.post("/bots/start")
-async def jwt_start_bot(ticker: str = Query(default="BTC-USD"), current_user=Depends(get_current_user), db: Session = Depends(get_db)):
+async def jwt_start_bot(body: BotStartRequest, current_user=Depends(get_current_user), db: Session = Depends(get_db)):
     user = db.query(User).filter(User.email == current_user["email"]).first()
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
+    capital = body.initial_capital if body.initial_capital > 0 else (user.default_capital or 1000.0)
+    if not body.paper and (user.balance_usdt or 0) < capital:
+        raise HTTPException(status_code=400, detail=f"Insufficient balance. Need ${capital:,.2f} USDT.")
     manager = get_user_bot_manager(user.email, user.id)
-    result = manager.start_bot(ticker, paper=False)
+    result = manager.start_bot(
+        ticker=body.ticker,
+        paper=body.paper,
+        initial_capital=capital,
+        risk_per_trade_pct=body.risk_per_trade_pct,
+        max_drawdown_pct=body.max_drawdown_pct,
+    )
     return {"status": "success", "message": result, "bot_status": manager.get_status()}
 
 
 @router.post("/bots/stop")
-async def jwt_stop_bot(current_user=Depends(get_current_user), db: Session = Depends(get_db)):
+async def jwt_stop_bot(ticker: str = Query(default="ALL"), current_user=Depends(get_current_user), db: Session = Depends(get_db)):
     user = db.query(User).filter(User.email == current_user["email"]).first()
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
     manager = get_user_bot_manager(user.email, user.id)
-    return {"status": "success", "message": manager.stop_bot()}
+    return {"status": "success", "message": manager.stop_bot(ticker)}
 
 
 @router.get("/bots/status")
@@ -1053,7 +1082,29 @@ async def jwt_bot_status(current_user=Depends(get_current_user), db: Session = D
     user = db.query(User).filter(User.email == current_user["email"]).first()
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
-    return get_user_bot_manager(user.email, user.id).get_status()
+    mgr = get_user_bot_manager(user.email, user.id)
+    status = mgr.get_status()
+    any_running = any(v.get("running") for v in status.values()) if status else False
+    return {"bots": status, "running": any_running, "capital": user.default_capital or 0.0}
+
+
+@router.post("/bots/update-params")
+async def update_bot_params(body: BotParamsUpdate, current_user=Depends(get_current_user), db: Session = Depends(get_db)):
+    user = db.query(User).filter(User.email == current_user["email"]).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    if body.default_capital is not None:
+        user.default_capital = body.default_capital
+    if body.risk_per_trade is not None:
+        user.risk_per_trade = body.risk_per_trade
+    if body.max_drawdown is not None:
+        user.max_drawdown = body.max_drawdown
+    if body.preferred_tickers is not None:
+        user.preferred_tickers = body.preferred_tickers
+    db.commit()
+    db.refresh(user)
+    return {"status": "saved", "default_capital": user.default_capital, "risk_per_trade": user.risk_per_trade,
+            "max_drawdown": user.max_drawdown, "preferred_tickers": user.preferred_tickers}
 
 
 @router.get("/bots/trades")
@@ -1061,8 +1112,106 @@ async def jwt_get_trades(limit: int = 20, current_user=Depends(get_current_user)
     user = db.query(User).filter(User.email == current_user["email"]).first()
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
-    trades = get_user_bot_manager(user.email, user.id).get_trades(limit)
-    return {"trades": trades}
+    db_trades = (
+        db.query(TradeLog)
+        .filter(TradeLog.user_id == user.id)
+        .order_by(TradeLog.created_at.desc())
+        .limit(limit)
+        .all()
+    )
+    result = [
+        {
+            "id": t.id,
+            "ticker": t.ticker,
+            "action": t.action,
+            "price": t.price,
+            "qty": t.qty,
+            "pnl": t.pnl,
+            "reason": t.reason,
+            "paper": t.paper,
+            "exchange": t.exchange,
+            "created_at": t.created_at.isoformat() if t.created_at else None,
+        }
+        for t in db_trades
+    ]
+    in_memory = get_user_bot_manager(user.email, user.id).get_trades(limit)
+    for t in in_memory:
+        t["created_at"] = t.get("time", "").isoformat() if hasattr(t.get("time", ""), "isoformat") else str(t.get("time", ""))
+    seen_ids = {t["id"] for t in result}
+    merged = result + [t for t in in_memory if t.get("id") not in seen_ids]
+    merged.sort(key=lambda x: x.get("created_at") or "", reverse=True)
+    return {"trades": merged[:limit]}
+
+
+@router.post("/trade/execute")
+async def execute_trade(body: TradeExecuteRequest, current_user=Depends(get_current_user), db: Session = Depends(get_db)):
+    user = db.query(User).filter(User.email == current_user["email"]).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    total_cost = body.price * body.amount
+    if body.side == "buy":
+        if (user.balance_usdt or 0) < total_cost:
+            raise HTTPException(status_code=400, detail=f"Insufficient balance. Need ${total_cost:,.2f} USDT.")
+        user.balance_usdt = round((user.balance_usdt or 0) - total_cost, 8)
+    elif body.side == "sell":
+        user.balance_usdt = round((user.balance_usdt or 0) + total_cost, 8)
+    else:
+        raise HTTPException(status_code=400, detail="side must be 'buy' or 'sell'")
+
+    ticker = body.pair.replace("/", "-").replace("_", "-")
+    log = TradeLog(
+        user_id=user.id,
+        ticker=ticker,
+        action=body.side.upper(),
+        price=body.price,
+        qty=body.amount,
+        pnl=None,
+        reason=f"{body.order_type} order via trading terminal",
+        paper=False,
+        exchange="manual",
+    )
+    db.add(log)
+
+    alpaca_order_id = None
+    alpaca_error = None
+    api_key = os.getenv("ALPACA_API_KEY") or (user.alpaca_api_key)
+    secret_key = os.getenv("ALPACA_SECRET_KEY") or (user.alpaca_secret_key)
+    if api_key and secret_key:
+        try:
+            from alpaca.trading.client import TradingClient
+            from alpaca.trading.requests import MarketOrderRequest, LimitOrderRequest
+            from alpaca.trading.enums import OrderSide, TimeInForce
+            client = TradingClient(api_key, secret_key, paper=True)
+            side_enum = OrderSide.BUY if body.side == "buy" else OrderSide.SELL
+            if body.order_type == "market":
+                order_req = MarketOrderRequest(symbol=ticker, qty=round(body.amount, 4), side=side_enum, time_in_force=TimeInForce.DAY)
+            else:
+                order_req = LimitOrderRequest(symbol=ticker, qty=round(body.amount, 4), side=side_enum, limit_price=round(body.price, 2), time_in_force=TimeInForce.DAY)
+            order = client.submit_order(order_req)
+            alpaca_order_id = str(order.id)
+            log.exchange = "alpaca"
+        except Exception as e:
+            alpaca_error = str(e)
+            logger.warning(f"Alpaca order failed for {user.email}: {e}")
+
+    db.commit()
+    db.refresh(log)
+    return {
+        "status": "executed",
+        "trade": {
+            "id": log.id,
+            "ticker": log.ticker,
+            "action": log.action,
+            "price": log.price,
+            "qty": log.qty,
+            "total_usdt": total_cost,
+            "new_balance": user.balance_usdt,
+            "created_at": log.created_at.isoformat() if log.created_at else None,
+        },
+        "alpaca_order_id": alpaca_order_id,
+        "alpaca_error": alpaca_error,
+    }
 
 
 # ===================== Public Bot Routes (API Key) =====================

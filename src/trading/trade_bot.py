@@ -315,14 +315,24 @@ class UserBotManager:
         self.user_email = user_email
         self.bots: Dict[str, TradingBotInstance] = {}
 
-    def start_bot(self, ticker: str, paper: bool = True) -> str:
+    def start_bot(self, ticker: str, paper: bool = True,
+                  initial_capital: float = 1000.0,
+                  risk_per_trade_pct: float = 1.0,
+                  max_drawdown_pct: float = 10.0) -> str:
         if ticker in self.bots and self.bots[ticker].running:
             return f"Bot for {ticker} is already running."
-        bot = TradingBotInstance(ticker=ticker, paper=paper, user_id=self.user_id)
+        bot = TradingBotInstance(
+            ticker=ticker,
+            paper=paper,
+            user_id=self.user_id,
+            initial_capital=initial_capital,
+            max_drawdown_pct=max_drawdown_pct,
+            risk_per_trade_pct=risk_per_trade_pct,
+        )
         self.bots[ticker] = bot
         bot.start()
-        logger.info(f"User {self.user_email} started {'paper' if paper else 'LIVE'} bot on {ticker}")
-        return f"✅ Bot started successfully on {ticker} (Paper Trading: {paper})"
+        logger.info(f"User {self.user_email} started {'paper' if paper else 'LIVE'} bot on {ticker} | capital=${initial_capital} risk={risk_per_trade_pct}% dd={max_drawdown_pct}%")
+        return f"✅ Bot started on {ticker} ({'Paper' if paper else 'LIVE'}) | Capital: ${initial_capital:,.2f}"
 
     def stop_bot(self, ticker: str = "ALL") -> str:
         if ticker == "ALL":

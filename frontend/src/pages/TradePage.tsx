@@ -4,6 +4,7 @@ import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContai
 import toast from 'react-hot-toast'
 import { useAuthStore } from '../store/authStore'
 import { useTickerPrices } from '../hooks/useTickerPrices'
+import { executeTrade } from '../lib/api'
 
 const PAIRS = ['BTC/USDT', 'ETH/USDT', 'BNB/USDT', 'SOL/USDT']
 const TF    = ['1m', '5m', '15m', '1h', '4h', '1D']
@@ -83,15 +84,37 @@ export default function TradePage() {
   const high24 = livePrice > 0 ? (livePrice * 1.022).toLocaleString('en-US', { maximumFractionDigits: 2 }) : '—'
   const low24  = livePrice > 0 ? (livePrice * 0.978).toLocaleString('en-US', { maximumFractionDigits: 2 }) : '—'
 
-  const handleTrade = (e: React.FormEvent) => {
+  const [orderLoading, setOrderLoading] = useState(false)
+
+  const handleTrade = async (e: React.FormEvent) => {
     e.preventDefault()
-    const qty    = parseFloat(amount)
-    const ttl    = parseFloat(total)
+    const qty = parseFloat(amount)
+    const ttl = parseFloat(total)
     if (!qty || qty <= 0) return toast.error('Enter a valid amount')
     if (side === 'buy' && ttl > userBalance)
       return toast.error(`Insufficient balance. Available: $${userBalance.toFixed(2)} USDT`)
-    toast.success(`${side === 'buy' ? '▲ Buy' : '▼ Sell'} order placed (demo mode)`)
-    setAmount('')
+    if (!numPrice || numPrice <= 0) return toast.error('Price must be greater than 0')
+    setOrderLoading(true)
+    try {
+      const res = await executeTrade({
+        pair,
+        side,
+        order_type: orderType,
+        price: numPrice,
+        amount: qty,
+      })
+      const d = res.data
+      toast.success(`${side === 'buy' ? '▲ Buy' : '▼ Sell'} ${qty} ${asset} @ $${numPrice.toLocaleString()} — Executed`)
+      if (d?.trade?.new_balance !== undefined) {
+        useAuthStore.getState().setUser({ ...useAuthStore.getState().user!, balance_usdt: d.trade.new_balance })
+      }
+      setAmount('')
+    } catch (err: unknown) {
+      const msg = (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail
+      toast.error(msg || 'Order failed — check your balance')
+    } finally {
+      setOrderLoading(false)
+    }
   }
 
   return (
@@ -247,9 +270,9 @@ export default function TradePage() {
                 <span className="font-mono font-semibold text-[#eaecef]">${total} USDT</span>
               </div>
 
-              <button type="submit"
-                className={`w-full py-3.5 rounded-xl text-sm font-bold transition-all active:scale-[0.98] ${side === 'buy' ? 'bg-[#0ecb81] hover:bg-[#0ab56f] text-black shadow-lg shadow-[#0ecb81]/20' : 'bg-[#f6465d] hover:bg-[#d93d51] text-white shadow-lg shadow-[#f6465d]/20'}`}>
-                {side === 'buy' ? `Buy ${asset}` : `Sell ${asset}`}
+              <button type="submit" disabled={orderLoading}
+                className={`w-full py-3.5 rounded-xl text-sm font-bold transition-all active:scale-[0.98] disabled:opacity-60 ${side === 'buy' ? 'bg-[#0ecb81] hover:bg-[#0ab56f] text-black shadow-lg shadow-[#0ecb81]/20' : 'bg-[#f6465d] hover:bg-[#d93d51] text-white shadow-lg shadow-[#f6465d]/20'}`}>
+                {orderLoading ? 'Executing...' : (side === 'buy' ? `Buy ${asset}` : `Sell ${asset}`)}
               </button>
             </form>
           </div>
