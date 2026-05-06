@@ -3,7 +3,7 @@ from fastapi import (
     HTTPException, Header, Request, status, UploadFile, File
 )
 from datetime import datetime, timedelta
-import random, string, base64, io
+import random, string, base64, io, os
 from sqlalchemy.orm import Session
 from typing import Optional, List
 from loguru import logger
@@ -128,6 +128,12 @@ class WebhookSettingsRequest(BaseModel):
     telegram_bot_token: Optional[str] = None
     telegram_chat_id: Optional[str] = None
     whatsapp_number: Optional[str] = None
+
+class WhatsAppCodeRequest(BaseModel):
+    phone: str
+
+class WhatsAppVerifyRequest(BaseModel):
+    code: str
 
 
 # ===================== Router =====================
@@ -277,9 +283,138 @@ async def send_verify_email(current_user=Depends(get_current_user), db: Session 
     user.email_verify_code = code
     user.email_verify_expires = datetime.utcnow() + timedelta(minutes=15)
     db.commit()
-    # In production, send email here. For now, return code in response (dev mode)
+
+    email_sent = False
+    resend_key = os.getenv("RESEND_API_KEY")
+    if resend_key:
+        try:
+            import resend as _resend
+            _resend.api_key = resend_key
+            from_addr = os.getenv("RESEND_FROM_EMAIL", "onboarding@resend.dev")
+            _resend.Emails.send({
+                "from": f"FinAi <{from_addr}>",
+                "to": [user.email],
+                "subject": "Your FinAi Verification Code",
+                "html": f"""
+                <div style="font-family:Arial,sans-serif;max-width:500px;margin:0 auto;background:#0b0e11;padding:32px;border-radius:12px">
+                  <div style="text-align:center;margin-bottom:24px">
+                    <span style="font-size:28px;font-weight:900;color:#f0b90b">⚡ FinAi</span>
+                  </div>
+                  <h2 style="color:#eaecef;font-size:20px;margin:0 0 12px">Verify your email address</h2>
+                  <p style="color:#848e9c;font-size:14px;margin:0 0 24px">Enter this 6-digit code to complete your email verification:</p>
+                  <div style="background:#1e2329;border:1px solid #2b3139;border-radius:10px;padding:28px;text-align:center;margin-bottom:24px">
+                    <span style="font-size:44px;font-weight:900;letter-spacing:14px;color:#f0b90b;font-family:monospace">{code}</span>
+                  </div>
+                  <p style="color:#4a5568;font-size:12px;text-align:center;margin:0">This code expires in 15 minutes. Never share it with anyone.</p>
+                </div>
+                """,
+            })
+            email_sent = True
+            logger.info(f"✉️  Verification email sent via Resend to {user.email}")
+        except Exception as e:
+            logger.error(f"Resend email failed: {e}")
+
+    # Also send to WhatsApp if user has a verified WhatsApp number
+    prefs = dict(user.notification_preferences or {})
+    wa_phone = prefs.get("whatsapp_number") if prefs.get("whatsapp_verified") else None
+    if wa_phone:
+        try:
+            from twilio.rest import Client as _Twilio
+            _tc = _Twilio(os.getenv("TWILIO_ACCOUNT_SID"), os.getenv("TWILIO_AUTH_TOKEN"))
+            _from = f"whatsapp:{os.getenv('TWILIO_WHATSAPP_NUMBER', '+14155238886')}"
+            _tc.messages.create(
+                from_=_from,
+                body=f"🔐 FinAi Email Verification\nYour code is: *{code}*\nExpires in 15 minutes.",
+                to=f"whatsapp:{wa_phone}",
+            )
+        except Exception as e:
+            logger.error(f"WhatsApp co-send failed: {e}")
+
     logger.info(f"Email verify code for {user.email}: {code}")
-    return {"message": "Verification code sent", "dev_code": code}
+    return {"message": "Verification code sent", "dev_code": code if not email_sent else None, "email_sent": email_sent}
+
+
+@router.post("/users/send-whatsapp-code")
+async def send_whatsapp_code(data: WhatsAppCodeRequest, current_user=Depends(get_current_user), db: Session = Depends(get_db)):
+    user = db.query(User).filter(User.email == current_user["email"]).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    account_sid = os.getenv("TWILIO_ACCOUNT_SID")
+    auth_token  = os.getenv("TWILIO_AUTH_TOKEN")
+    from_number = os.getenv("TWILIO_WHATSAPP_NUMBER", "+14155238886")
+    if not account_sid or not auth_token:
+        raise HTTPException(status_code=503, detail="WhatsApp service not configured. Contact support.")
+    code    = "".join(random.choices(string.digits, k=6))
+    expires = datetime.utcnow() + timedelta(minutes=10)
+    prefs = dict(user.notification_preferences or {})
+    prefs["whatsapp_otp_code"]    = code
+    prefs["whatsapp_otp_phone"]   = data.phone
+    prefs["whatsapp_otp_expires"] = expires.isoformat()
+    user.notification_preferences = prefs
+    db.commit()
+    try:
+        from twilio.rest import Client as _Twilio
+        _tc = _Twilio(account_sid, auth_token)
+        _from = f"whatsapp:{from_number}"
+        _tc.messages.create(
+            from_=_from,
+            body=f"🔐 FinAi WhatsApp Verification\n\nYour code is: *{code}*\n\nExpires in 10 minutes. Do not share this code.",
+            to=f"whatsapp:{data.phone}",
+        )
+        logger.info(f"WhatsApp OTP sent to {data.phone}")
+    except Exception as e:
+        logger.error(f"WhatsApp OTP send failed: {e}")
+        raise HTTPException(status_code=503, detail=f"Failed to send WhatsApp message: {str(e)}")
+    return {"message": "Verification code sent to WhatsApp"}
+
+
+@router.post("/users/verify-whatsapp")
+async def verify_whatsapp(data: WhatsAppVerifyRequest, current_user=Depends(get_current_user), db: Session = Depends(get_db)):
+    user = db.query(User).filter(User.email == current_user["email"]).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    prefs       = dict(user.notification_preferences or {})
+    stored_code = prefs.get("whatsapp_otp_code")
+    stored_phone = prefs.get("whatsapp_otp_phone")
+    expires_str = prefs.get("whatsapp_otp_expires")
+    if not stored_code:
+        raise HTTPException(status_code=400, detail="No pending verification. Request a code first.")
+    if stored_code != data.code:
+        raise HTTPException(status_code=400, detail="Invalid verification code")
+    if expires_str and datetime.utcnow() > datetime.fromisoformat(expires_str):
+        raise HTTPException(status_code=400, detail="Code has expired. Request a new one.")
+    prefs["whatsapp_verified"] = True
+    prefs["whatsapp_number"]   = stored_phone
+    for k in ["whatsapp_otp_code", "whatsapp_otp_phone", "whatsapp_otp_expires"]:
+        prefs.pop(k, None)
+    user.notification_preferences = prefs
+    db.commit()
+    return {"message": "WhatsApp verified successfully", "phone": stored_phone}
+
+
+@router.get("/users/telegram-chatid")
+async def get_telegram_chat_id(token: str, current_user=Depends(get_current_user)):
+    import httpx
+    try:
+        async with httpx.AsyncClient(timeout=10) as client:
+            r = await client.get(f"https://api.telegram.org/bot{token}/getUpdates")
+            result = r.json()
+            if not result.get("ok"):
+                raise HTTPException(status_code=400, detail="Invalid bot token or Telegram API error")
+            updates = result.get("result", [])
+            if not updates:
+                return {"chat_id": None, "message": "No messages yet. Send /start to your bot first, then retry."}
+            latest   = updates[-1]
+            msg      = latest.get("message") or latest.get("channel_post") or {}
+            chat     = msg.get("chat", {})
+            chat_id  = str(chat.get("id", ""))
+            username = chat.get("username", "")
+            name     = chat.get("first_name", "")
+            return {"chat_id": chat_id, "username": username, "first_name": name, "message": "Chat ID found!"}
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=503, detail=str(e))
 
 
 @router.post("/users/verify-email")

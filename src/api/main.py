@@ -52,6 +52,32 @@ async def startup_event():
     except Exception:
         pass
 
+    # Seed admin account (idempotent)
+    try:
+        from src.database.session import SessionLocal as _SL
+        from src.users.crud import get_user_by_email as _gube, create_user as _cu
+        from src.users.schemas import UserCreate as _UC
+        _ADMIN_EMAIL = "AdminfinAi@gmail.com"
+        _ADMIN_PASS  = "FineAdminpass1"
+        with _SL() as _db:
+            _existing = _gube(_db, _ADMIN_EMAIL)
+            if not _existing:
+                _admin = _cu(_db, _UC(email=_ADMIN_EMAIL, password=_ADMIN_PASS))
+                _admin.is_admin        = True
+                _admin.is_mail_verified = True
+                _admin.account_tier    = 3
+                _db.commit()
+                logger.success(f"✅ Admin seeded: {_ADMIN_EMAIL}")
+            else:
+                if not _existing.is_admin:
+                    _existing.is_admin        = True
+                    _existing.is_mail_verified = True
+                    _existing.account_tier    = 3
+                    _db.commit()
+                logger.info(f"ℹ️  Admin already exists: {_ADMIN_EMAIL}")
+    except Exception as _seed_err:
+        logger.warning(f"Admin seed skipped: {_seed_err}")
+
     scheduler.start()
     
     logger.success("🚀 FinAi API started successfully")

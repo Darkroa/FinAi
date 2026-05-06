@@ -4,7 +4,8 @@ import {
   updateProfile, uploadPhoto, sendVerifyEmail, verifyEmail,
   submitKYC, getMe, createApiKey, listApiKeys, revokeApiKey,
   connectExchange, disconnectExchange,
-  changePassword, setTransferPin, requestDeleteAccount, saveWebhookSettings
+  changePassword, setTransferPin, requestDeleteAccount, saveWebhookSettings,
+  sendWhatsAppCode, verifyWhatsApp, getTelegramChatId
 } from '../lib/api'
 import toast from 'react-hot-toast'
 import {
@@ -392,10 +393,20 @@ function FinApiTab({ user, setUser }: { user: ReturnType<typeof useAuthStore>['u
   const [showSecret, setShowSecret]   = useState(false)
   const [connecting, setConnecting]   = useState(false)
 
-  const [tgToken, setTgToken]   = useState((user?.notification_preferences as Record<string, string>)?.telegram_bot_token || '')
-  const [tgChatId, setTgChatId] = useState((user?.notification_preferences as Record<string, string>)?.telegram_chat_id || '')
-  const [waNumber, setWaNumber] = useState((user?.notification_preferences as Record<string, string>)?.whatsapp_number || '')
-  const [savingWebhook, setSavingWebhook] = useState(false)
+  const prefs = (user?.notification_preferences as Record<string, unknown>) || {}
+  const [tgToken, setTgToken]   = useState((prefs.telegram_bot_token as string) || '')
+  const [tgChatId, setTgChatId] = useState((prefs.telegram_chat_id as string) || '')
+  const [savingWebhook, setSavingWebhook]   = useState(false)
+  const [findingChatId, setFindingChatId]   = useState(false)
+  const [foundChatId, setFoundChatId]       = useState<string | null>(null)
+
+  const waVerified = prefs.whatsapp_verified === true
+  const waPhone    = (prefs.whatsapp_number as string) || ''
+  const [waInput, setWaInput]               = useState('')
+  const [waCode, setWaCode]                 = useState('')
+  const [waSending, setWaSending]           = useState(false)
+  const [waVerifying, setWaVerifying]       = useState(false)
+  const [waCodeSent, setWaCodeSent]         = useState(false)
 
   const selectedExch = EXCHANGES.find(e => e.id === selExchange)
   const connections  = (user?.exchange_connections as { exchange: string; label?: string; api_key_masked?: string }[]) || []
@@ -460,10 +471,65 @@ function FinApiTab({ user, setUser }: { user: ReturnType<typeof useAuthStore>['u
   const handleSaveWebhook = async () => {
     setSavingWebhook(true)
     try {
-      await saveWebhookSettings({ telegram_bot_token: tgToken, telegram_chat_id: tgChatId, whatsapp_number: waNumber })
-      toast.success('Webhook settings saved')
+      await saveWebhookSettings({ telegram_bot_token: tgToken, telegram_chat_id: tgChatId })
+      toast.success('Telegram settings saved')
     } catch { toast.error('Failed to save settings') }
     finally { setSavingWebhook(false) }
+  }
+
+  const handleFindChatId = async () => {
+    if (!tgToken.trim()) return toast.error('Enter your bot token first')
+    setFindingChatId(true)
+    try {
+      const res = await getTelegramChatId(tgToken.trim())
+      const { chat_id, first_name, username, message } = res.data
+      if (chat_id) {
+        setTgChatId(chat_id)
+        setFoundChatId(chat_id)
+        toast.success(`Found: ${first_name || username || chat_id}`)
+      } else {
+        toast.error(message || 'No messages found. Send /start to your bot first.')
+      }
+    } catch (err: unknown) {
+      toast.error((err as { response?: { data?: { detail?: string } } }).response?.data?.detail || 'Failed to fetch chat ID')
+    } finally { setFindingChatId(false) }
+  }
+
+  const handleSendWaCode = async () => {
+    if (!waInput.trim()) return toast.error('Enter your WhatsApp number (e.g. +1234567890)')
+    setWaSending(true)
+    try {
+      await sendWhatsAppCode(waInput.trim())
+      setWaCodeSent(true)
+      toast.success('Code sent to WhatsApp!')
+    } catch (err: unknown) {
+      toast.error((err as { response?: { data?: { detail?: string } } }).response?.data?.detail || 'Failed to send code')
+    } finally { setWaSending(false) }
+  }
+
+  const handleVerifyWa = async () => {
+    if (!waCode.trim()) return toast.error('Enter the verification code')
+    setWaVerifying(true)
+    try {
+      await verifyWhatsApp(waCode.trim())
+      const res = await getMe()
+      setUser(res.data)
+      setWaCodeSent(false)
+      setWaInput('')
+      setWaCode('')
+      toast.success('WhatsApp verified!')
+    } catch (err: unknown) {
+      toast.error((err as { response?: { data?: { detail?: string } } }).response?.data?.detail || 'Invalid code')
+    } finally { setWaVerifying(false) }
+  }
+
+  const handleDisconnectWa = async () => {
+    try {
+      await saveWebhookSettings({ whatsapp_number: '' })
+      const res = await getMe()
+      setUser(res.data)
+      toast.success('WhatsApp disconnected')
+    } catch { toast.error('Failed to disconnect') }
   }
 
   const canCreateKey = user?.is_mail_verified && (user?.account_tier ?? 0) >= 1
@@ -629,42 +695,118 @@ function FinApiTab({ user, setUser }: { user: ReturnType<typeof useAuthStore>['u
       <div className="bg-[#161a1e] border border-[#2b3139] rounded-xl overflow-hidden">
         <div className="flex items-center gap-2 px-4 py-3 border-b border-[#2b3139] bg-[#1a1f25]">
           <MessageCircle size={13} className="text-[#f0b90b]" />
-          <span className="text-xs font-semibold text-[#eaecef]">Alert Webhooks</span>
+          <span className="text-xs font-semibold text-[#eaecef]">Alert Channels</span>
         </div>
-        <div className="p-4 space-y-3">
+        <div className="p-4 space-y-4">
           <p className="text-[11px] text-[#848e9c]">Connect Telegram and WhatsApp to receive real-time trade alerts and AI signals.</p>
 
-          <div className="bg-[#0b0e11] border border-[#2b3139] rounded-lg p-3 space-y-3">
+          {/* Telegram */}
+          <div className="bg-[#0b0e11] border border-[#2b3139] rounded-xl p-4 space-y-3">
             <div className="flex items-center gap-2">
-              <Send size={12} className="text-[#0ecb81]" />
+              <Send size={12} className="text-[#229ED9]" />
               <span className="text-xs font-semibold text-[#eaecef]">Telegram Bot</span>
             </div>
+            <ol className="text-[10px] text-[#848e9c] space-y-0.5 list-decimal list-inside">
+              <li>Create a bot via <span className="text-[#229ED9]">@BotFather</span> and copy the token</li>
+              <li>Send <span className="text-[#f0b90b]">/start</span> to your bot in Telegram</li>
+              <li>Paste the token below and click <span className="text-[#f0b90b]">Find Chat ID</span></li>
+            </ol>
             <Field label="Bot Token">
-              <input value={tgToken} onChange={e => setTgToken(e.target.value)}
+              <input value={tgToken} onChange={e => { setTgToken(e.target.value); setFoundChatId(null) }}
                 placeholder="1234567890:ABCdefGhIJKlmNoPQRsTUVwxyZ" className={inp} />
             </Field>
+            <div className="flex gap-2">
+              <button type="button" onClick={handleFindChatId} disabled={findingChatId || !tgToken.trim()}
+                className="flex-1 bg-[#229ED9]/20 hover:bg-[#229ED9]/30 disabled:opacity-50 border border-[#229ED9]/30 text-[#229ED9] font-semibold py-2 rounded-lg text-xs transition">
+                {findingChatId ? 'Searching…' : '🔍 Find My Chat ID'}
+              </button>
+            </div>
+            {foundChatId && (
+              <div className="flex items-center gap-2 bg-[#0ecb81]/10 border border-[#0ecb81]/20 rounded-lg px-3 py-2">
+                <CheckCircle size={12} className="text-[#0ecb81] flex-shrink-0" />
+                <span className="text-xs text-[#0ecb81] font-mono">{foundChatId}</span>
+                <span className="text-[10px] text-[#848e9c] ml-auto">auto-filled below</span>
+              </div>
+            )}
             <Field label="Chat ID">
               <input value={tgChatId} onChange={e => setTgChatId(e.target.value)}
-                placeholder="-1001234567890" className={inp} />
+                placeholder="-1001234567890 (auto-filled or paste manually)" className={inp} />
             </Field>
-            <p className="text-[10px] text-[#848e9c]">Endpoint: <code className="text-[#f0b90b]">POST /api/webhooks/telegram</code></p>
+            <button onClick={handleSaveWebhook} disabled={savingWebhook}
+              className="w-full bg-[#f0b90b] hover:bg-[#d4a30a] disabled:opacity-60 text-black font-semibold py-2.5 rounded-lg text-xs transition">
+              {savingWebhook ? 'Saving…' : 'Save Telegram Settings'}
+            </button>
           </div>
 
-          <div className="bg-[#0b0e11] border border-[#2b3139] rounded-lg p-3 space-y-3">
-            <div className="flex items-center gap-2">
-              <MessageCircle size={12} className="text-[#25D366]" />
-              <span className="text-xs font-semibold text-[#eaecef]">WhatsApp (via Twilio)</span>
+          {/* WhatsApp */}
+          <div className="bg-[#0b0e11] border border-[#2b3139] rounded-xl p-4 space-y-3">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <MessageCircle size={12} className="text-[#25D366]" />
+                <span className="text-xs font-semibold text-[#eaecef]">WhatsApp (Twilio)</span>
+              </div>
+              {waVerified && (
+                <span className="flex items-center gap-1 text-[10px] text-[#0ecb81] bg-[#0ecb81]/10 border border-[#0ecb81]/20 px-2 py-0.5 rounded-full">
+                  <CheckCircle size={9} /> Verified
+                </span>
+              )}
             </div>
-            <Field label="Your WhatsApp Number">
-              <input value={waNumber} onChange={e => setWaNumber(e.target.value)} placeholder="+1 234 567 8900" className={inp} />
-            </Field>
-            <p className="text-[10px] text-[#848e9c]">Endpoint: <code className="text-[#f0b90b]">POST /api/webhooks/whatsapp</code></p>
-          </div>
 
-          <button onClick={handleSaveWebhook} disabled={savingWebhook}
-            className="w-full bg-[#f0b90b] hover:bg-[#d4a30a] disabled:opacity-60 text-black font-semibold py-2.5 rounded-lg text-xs transition">
-            {savingWebhook ? 'Saving…' : 'Save Webhook Settings'}
-          </button>
+            {waVerified ? (
+              <div className="space-y-2">
+                <div className="flex items-center gap-2 bg-[#0ecb81]/8 border border-[#0ecb81]/15 rounded-lg px-3 py-2.5">
+                  <CheckCircle size={13} className="text-[#0ecb81] flex-shrink-0" />
+                  <div>
+                    <p className="text-xs font-medium text-[#eaecef]">{waPhone}</p>
+                    <p className="text-[10px] text-[#848e9c]">Connected · Alerts enabled</p>
+                  </div>
+                </div>
+                <button onClick={handleDisconnectWa}
+                  className="w-full border border-[#f6465d]/30 hover:bg-[#f6465d]/10 text-[#f6465d] font-medium py-2 rounded-lg text-xs transition">
+                  Disconnect WhatsApp
+                </button>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                <p className="text-[10px] text-[#848e9c]">
+                  First join the Twilio sandbox by sending <span className="text-[#f0b90b] font-mono">join &lt;sandbox-code&gt;</span> to{' '}
+                  <span className="text-[#25D366]">+1 415 523 8886</span>, then verify your number below.
+                </p>
+                {!waCodeSent ? (
+                  <div className="space-y-2">
+                    <Field label="Your WhatsApp Number">
+                      <input value={waInput} onChange={e => setWaInput(e.target.value)}
+                        placeholder="+1 234 567 8900" className={inp} />
+                    </Field>
+                    <button onClick={handleSendWaCode} disabled={waSending || !waInput.trim()}
+                      className="w-full bg-[#25D366]/20 hover:bg-[#25D366]/30 disabled:opacity-50 border border-[#25D366]/30 text-[#25D366] font-semibold py-2.5 rounded-lg text-xs transition">
+                      {waSending ? 'Sending…' : '📲 Send Verification Code'}
+                    </button>
+                  </div>
+                ) : (
+                  <div className="space-y-2">
+                    <div className="text-[10px] text-[#0ecb81] bg-[#0ecb81]/8 border border-[#0ecb81]/15 rounded-lg px-3 py-2">
+                      Code sent to <span className="font-mono">{waInput}</span> — check WhatsApp
+                    </div>
+                    <Field label="Enter 6-digit Code">
+                      <input value={waCode} onChange={e => setWaCode(e.target.value)}
+                        placeholder="123456" maxLength={6} className={inp} />
+                    </Field>
+                    <div className="flex gap-2">
+                      <button onClick={handleVerifyWa} disabled={waVerifying || !waCode.trim()}
+                        className="flex-1 bg-[#f0b90b] hover:bg-[#d4a30a] disabled:opacity-60 text-black font-semibold py-2.5 rounded-lg text-xs transition">
+                        {waVerifying ? 'Verifying…' : 'Verify Code'}
+                      </button>
+                      <button onClick={() => { setWaCodeSent(false); setWaCode('') }}
+                        className="px-3 border border-[#2b3139] text-[#848e9c] hover:text-[#eaecef] rounded-lg text-xs transition">
+                        Back
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
         </div>
       </div>
     </div>

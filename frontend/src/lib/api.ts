@@ -126,6 +126,16 @@ export const saveWebhookSettings = (data: {
   whatsapp_number?: string
 }) => api.post('/users/save-webhook', data)
 
+// WhatsApp phone verification
+export const sendWhatsAppCode = (phone: string) =>
+  api.post('/users/send-whatsapp-code', { phone })
+export const verifyWhatsApp = (code: string) =>
+  api.post('/users/verify-whatsapp', { code })
+
+// Telegram — auto-detect chat ID from bot token
+export const getTelegramChatId = (token: string) =>
+  api.get(`/users/telegram-chatid?token=${encodeURIComponent(token)}`)
+
 // Notification preferences
 export const updateNotificationPreferences = (prefs: { email?: boolean; whatsapp?: boolean; telegram?: boolean }) =>
   api.post('/users/update-profile', { notification_preferences: prefs })

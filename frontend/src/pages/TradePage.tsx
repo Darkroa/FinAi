@@ -1,36 +1,95 @@
-import { useState } from 'react'
-import { ArrowUpDown, TrendingUp, TrendingDown, ChevronDown } from 'lucide-react'
+import { useState, useEffect, useRef } from 'react'
+import { ArrowUpDown, TrendingUp, TrendingDown, ChevronDown, Wifi, WifiOff } from 'lucide-react'
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts'
 import toast from 'react-hot-toast'
-
-const generateCandles = () =>
-  Array.from({ length: 48 }, (_, i) => ({
-    time: `${Math.floor(i / 2)}:${i % 2 === 0 ? '00' : '30'}`,
-    price: 67000 + Math.sin(i * 0.4) * 2000 + Math.random() * 800,
-  }))
-
-const orderBook = {
-  asks: Array.from({ length: 7 }, (_, i) => ({ price: 67500 + i * 10, size: +(Math.random() * 2).toFixed(4) })),
-  bids: Array.from({ length: 7 }, (_, i) => ({ price: 67450 - i * 10, size: +(Math.random() * 2).toFixed(4) })),
-}
+import { useAuthStore } from '../store/authStore'
+import { useTickerPrices } from '../hooks/useTickerPrices'
 
 const PAIRS = ['BTC/USDT', 'ETH/USDT', 'BNB/USDT', 'SOL/USDT']
 const TF    = ['1m', '5m', '15m', '1h', '4h', '1D']
 
-export default function TradePage() {
-  const [side, setSide]         = useState<'buy' | 'sell'>('buy')
-  const [orderType, setType]    = useState<'market' | 'limit'>('limit')
-  const [price, setPrice]       = useState('67,432.10')
-  const [amount, setAmount]     = useState('')
-  const [tf, setTf]             = useState('1h')
-  const [pair, setPair]         = useState('BTC/USDT')
-  const [showPairs, setShowP]   = useState(false)
-  const chartData = generateCandles()
+const FALLBACKS: Record<string, { price: number; change: number }> = {
+  'BTC/USDT': { price: 81000, change: 2.4 },
+  'ETH/USDT': { price: 2380,  change: 1.8 },
+  'BNB/USDT': { price: 628,   change: 0.9 },
+  'SOL/USDT': { price: 85,    change: 1.2 },
+}
 
-  const total = price && amount ? (parseFloat(price.replace(/,/g, '')) * parseFloat(amount)).toFixed(2) : '0.00'
+function generateCandles(base: number) {
+  return Array.from({ length: 48 }, (_, i) => ({
+    time:  `${Math.floor(i / 2)}:${i % 2 === 0 ? '00' : '30'}`,
+    price: base + Math.sin(i * 0.4) * (base * 0.025) + (Math.random() - 0.5) * (base * 0.008),
+  }))
+}
+
+function makeOrderBook(base: number) {
+  return {
+    asks: Array.from({ length: 7 }, (_, i) => ({
+      price: base + (i + 1) * (base * 0.00012),
+      size:  +(Math.random() * 2).toFixed(4),
+    })),
+    bids: Array.from({ length: 7 }, (_, i) => ({
+      price: base - i * (base * 0.00012),
+      size:  +(Math.random() * 2).toFixed(4),
+    })),
+  }
+}
+
+export default function TradePage() {
+  const { user }       = useAuthStore()
+  const tickerItems    = useTickerPrices(30000)
+
+  const [side, setSide]       = useState<'buy' | 'sell'>('buy')
+  const [orderType, setType]  = useState<'market' | 'limit'>('limit')
+  const [price, setPrice]     = useState('')
+  const [amount, setAmount]   = useState('')
+  const [tf, setTf]           = useState('1h')
+  const [pair, setPair]       = useState('BTC/USDT')
+  const [showPairs, setShowP] = useState(false)
+
+  const getPriceData = (p: string) => {
+    const item = tickerItems.find(i => i.symbol === p)
+    if (item?.live) {
+      const pr = parseFloat(item.price.replace(/[$,]/g, ''))
+      const ch = parseFloat(item.change.replace(/[%+]/g, ''))
+      return { price: pr, change: ch, live: true }
+    }
+    return { ...(FALLBACKS[p] ?? { price: 100, change: 0 }), live: false }
+  }
+
+  const { price: livePrice, change: liveChange, live: isLive } = getPriceData(pair)
+  const chartData = generateCandles(livePrice)
+  const orderBook = makeOrderBook(livePrice)
+
+  const prevPair     = useRef(pair)
+  const priceInitRef = useRef(false)
+
+  useEffect(() => {
+    const pairChanged = prevPair.current !== pair
+    if ((pairChanged || !priceInitRef.current) && livePrice > 0) {
+      setPrice(livePrice.toFixed(2))
+      prevPair.current     = pair
+      priceInitRef.current = true
+    }
+  }, [pair, livePrice])
+
+  const userBalance = user?.balance_usdt ?? 0
+  const asset       = pair.split('/')[0]
+  const availCrypto = livePrice > 0 ? userBalance / livePrice : 0
+
+  const numPrice = parseFloat(price.replace(/,/g, '')) || 0
+  const total    = numPrice && amount ? (numPrice * parseFloat(amount)).toFixed(2) : '0.00'
+
+  const high24 = livePrice > 0 ? (livePrice * 1.022).toLocaleString('en-US', { maximumFractionDigits: 2 }) : '—'
+  const low24  = livePrice > 0 ? (livePrice * 0.978).toLocaleString('en-US', { maximumFractionDigits: 2 }) : '—'
 
   const handleTrade = (e: React.FormEvent) => {
     e.preventDefault()
+    const qty    = parseFloat(amount)
+    const ttl    = parseFloat(total)
+    if (!qty || qty <= 0) return toast.error('Enter a valid amount')
+    if (side === 'buy' && ttl > userBalance)
+      return toast.error(`Insufficient balance. Available: $${userBalance.toFixed(2)} USDT`)
     toast.success(`${side === 'buy' ? '▲ Buy' : '▼ Sell'} order placed (demo mode)`)
     setAmount('')
   }
@@ -48,7 +107,7 @@ export default function TradePage() {
           {showPairs && (
             <div className="absolute top-full mt-1 left-0 bg-[#1e2329] border border-[#2b3139] rounded-xl overflow-hidden z-20 min-w-[150px] shadow-xl shadow-black/40">
               {PAIRS.map(p => (
-                <button key={p} onClick={() => { setPair(p); setShowP(false) }}
+                <button key={p} onClick={() => { setPair(p); setShowP(false); setAmount('') }}
                   className={`w-full text-left px-4 py-2.5 text-sm transition hover:bg-[#2b3139] ${p === pair ? 'text-[#f0b90b] font-semibold' : 'text-[#eaecef]'}`}>
                   {p}
                 </button>
@@ -57,15 +116,22 @@ export default function TradePage() {
           )}
         </div>
         <div className="flex items-center gap-2">
-          <span className="text-xl sm:text-2xl font-bold font-mono text-[#eaecef]">$67,432</span>
-          <span className="text-xs font-semibold text-[#0ecb81] flex items-center gap-0.5 bg-[#0ecb81]/10 px-2 py-1 rounded-lg">
-            <TrendingUp size={11} /> +2.4%
+          <span className="text-xl sm:text-2xl font-bold font-mono text-[#eaecef]">
+            ${livePrice > 0 ? livePrice.toLocaleString('en-US', { maximumFractionDigits: 2 }) : '—'}
+          </span>
+          <span className={`text-xs font-semibold flex items-center gap-0.5 px-2 py-1 rounded-lg ${liveChange >= 0 ? 'text-[#0ecb81] bg-[#0ecb81]/10' : 'text-[#f6465d] bg-[#f6465d]/10'}`}>
+            {liveChange >= 0 ? <TrendingUp size={11} /> : <TrendingDown size={11} />}
+            {liveChange >= 0 ? '+' : ''}{liveChange.toFixed(2)}%
+          </span>
+          <span className={`text-[10px] flex items-center gap-0.5 ${isLive ? 'text-[#0ecb81]' : 'text-[#848e9c]'}`}>
+            {isLive ? <Wifi size={9} /> : <WifiOff size={9} />}
+            {isLive ? 'live' : 'cached'}
           </span>
         </div>
         <div className="ml-auto flex flex-wrap gap-3 text-xs text-[#848e9c]">
-          <div><span className="block text-[10px]">24h High</span><span className="text-[#eaecef] font-mono font-medium">$68,820</span></div>
-          <div><span className="block text-[10px]">24h Low</span><span className="text-[#eaecef] font-mono font-medium">$65,940</span></div>
-          <div className="hidden sm:block"><span className="block text-[10px]">Volume</span><span className="text-[#eaecef] font-mono font-medium">$28.4B</span></div>
+          <div><span className="block text-[10px]">24h High</span><span className="text-[#eaecef] font-mono font-medium">${high24}</span></div>
+          <div><span className="block text-[10px]">24h Low</span><span className="text-[#eaecef] font-mono font-medium">${low24}</span></div>
+          <div className="hidden sm:block"><span className="block text-[10px]">Balance</span><span className="text-[#f0b90b] font-mono font-medium">${userBalance.toLocaleString('en-US', { maximumFractionDigits: 2 })} USDT</span></div>
         </div>
       </div>
 
@@ -92,7 +158,11 @@ export default function TradePage() {
               <CartesianGrid strokeDasharray="3 3" stroke="#2b3139" />
               <XAxis dataKey="time" tick={{ fill: '#848e9c', fontSize: 9 }} tickLine={false} axisLine={false} interval={7} />
               <YAxis tick={{ fill: '#848e9c', fontSize: 9 }} tickLine={false} axisLine={false}
-                tickFormatter={v => `$${((v as number) / 1000).toFixed(1)}k`} domain={['auto', 'auto']} width={42} />
+                tickFormatter={v => livePrice >= 10000
+                  ? `$${((v as number) / 1000).toFixed(1)}k`
+                  : `$${(v as number).toFixed(1)}`
+                }
+                domain={['auto', 'auto']} width={48} />
               <Tooltip
                 contentStyle={{ background: '#1e2329', border: '1px solid #2b3139', borderRadius: 10, fontSize: 11 }}
                 labelStyle={{ color: '#848e9c' }}
@@ -133,7 +203,9 @@ export default function TradePage() {
                 <div>
                   <div className="flex justify-between mb-1.5">
                     <label className="text-xs text-[#848e9c]">Price (USDT)</label>
-                    <span className="text-[10px] text-[#848e9c]">Best: $67,432</span>
+                    <span className="text-[10px] text-[#0ecb81]">
+                      {isLive ? '● live' : '○ cached'}
+                    </span>
                   </div>
                   <input value={price} onChange={e => setPrice(e.target.value)}
                     className="w-full bg-[#0b0e11] border border-[#2b3139] focus:border-[#f0b90b] rounded-xl px-3 py-2.5 text-sm font-mono text-[#eaecef] focus:outline-none transition" />
@@ -141,19 +213,31 @@ export default function TradePage() {
               )}
               <div>
                 <div className="flex justify-between mb-1.5">
-                  <label className="text-xs text-[#848e9c]">Amount (BTC)</label>
-                  <span className="text-[10px] text-[#848e9c]">Avail: 0.1280 BTC</span>
+                  <label className="text-xs text-[#848e9c]">Amount ({asset})</label>
+                  <span className="text-[10px] text-[#848e9c]">
+                    Avail: {side === 'buy'
+                      ? `$${userBalance.toLocaleString('en-US', { maximumFractionDigits: 2 })} USDT`
+                      : `${availCrypto.toFixed(6)} ${asset}`}
+                  </span>
                 </div>
                 <input value={amount} onChange={e => setAmount(e.target.value)} placeholder="0.00"
                   className="w-full bg-[#0b0e11] border border-[#2b3139] focus:border-[#f0b90b] rounded-xl px-3 py-2.5 text-sm font-mono text-[#eaecef] focus:outline-none transition" />
               </div>
 
-              {/* Quick %  */}
+              {/* Quick % */}
               <div className="grid grid-cols-4 gap-1">
-                {[25, 50, 75, 100].map(p => (
-                  <button key={p} type="button" onClick={() => setAmount((0.1280 * p / 100).toFixed(4))}
+                {[25, 50, 75, 100].map(pct => (
+                  <button key={pct} type="button"
+                    onClick={() => {
+                      if (side === 'buy') {
+                        const buyUSDT = userBalance * pct / 100
+                        setAmount(numPrice > 0 ? (buyUSDT / numPrice).toFixed(6) : '0')
+                      } else {
+                        setAmount((availCrypto * pct / 100).toFixed(6))
+                      }
+                    }}
                     className="text-xs py-1.5 rounded-lg bg-[#0b0e11] hover:bg-[#2b3139] text-[#848e9c] hover:text-[#eaecef] transition font-medium border border-[#2b3139]">
-                    {p}%
+                    {pct}%
                   </button>
                 ))}
               </div>
@@ -165,7 +249,7 @@ export default function TradePage() {
 
               <button type="submit"
                 className={`w-full py-3.5 rounded-xl text-sm font-bold transition-all active:scale-[0.98] ${side === 'buy' ? 'bg-[#0ecb81] hover:bg-[#0ab56f] text-black shadow-lg shadow-[#0ecb81]/20' : 'bg-[#f6465d] hover:bg-[#d93d51] text-white shadow-lg shadow-[#f6465d]/20'}`}>
-                {side === 'buy' ? `Buy ${pair.split('/')[0]}` : `Sell ${pair.split('/')[0]}`}
+                {side === 'buy' ? `Buy ${asset}` : `Sell ${asset}`}
               </button>
             </form>
           </div>
@@ -177,23 +261,25 @@ export default function TradePage() {
             </p>
             <div className="flex justify-between text-[10px] text-[#4a5568] mb-2 px-0.5">
               <span>Price (USDT)</span>
-              <span>Size (BTC)</span>
+              <span>Size ({asset})</span>
             </div>
             <div className="space-y-1">
               {orderBook.asks.slice(0, 5).reverse().map((a, i) => (
                 <div key={i} className="relative flex justify-between text-[11px] px-0.5 py-0.5">
                   <div className="absolute inset-0 right-0 bg-[#f6465d]/8 rounded"
                     style={{ width: `${Math.min(a.size / 2 * 100, 100)}%`, marginLeft: 'auto' }} />
-                  <span className="text-[#f6465d] font-mono relative">${a.price.toLocaleString()}</span>
+                  <span className="text-[#f6465d] font-mono relative">${a.price.toLocaleString('en-US', { maximumFractionDigits: 2 })}</span>
                   <span className="text-[#848e9c] font-mono relative">{a.size.toFixed(4)}</span>
                 </div>
               ))}
-              <div className="py-2 text-center text-sm font-bold font-mono text-[#eaecef] bg-[#0b0e11] rounded-lg my-1">$67,432</div>
+              <div className="py-2 text-center text-sm font-bold font-mono text-[#eaecef] bg-[#0b0e11] rounded-lg my-1">
+                ${livePrice > 0 ? livePrice.toLocaleString('en-US', { maximumFractionDigits: 2 }) : '—'}
+              </div>
               {orderBook.bids.slice(0, 5).map((b, i) => (
                 <div key={i} className="relative flex justify-between text-[11px] px-0.5 py-0.5">
                   <div className="absolute inset-0 bg-[#0ecb81]/8 rounded"
                     style={{ width: `${Math.min(b.size / 2 * 100, 100)}%` }} />
-                  <span className="text-[#0ecb81] font-mono relative">${b.price.toLocaleString()}</span>
+                  <span className="text-[#0ecb81] font-mono relative">${b.price.toLocaleString('en-US', { maximumFractionDigits: 2 })}</span>
                   <span className="text-[#848e9c] font-mono relative">{b.size.toFixed(4)}</span>
                 </div>
               ))}

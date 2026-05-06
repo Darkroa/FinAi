@@ -1,5 +1,5 @@
-import { useState } from 'react'
-import { Plus, Check, Trash2, Calendar, Clock, ChevronLeft, ChevronRight, Flag } from 'lucide-react'
+import { useState, useEffect } from 'react'
+import { Plus, Check, Trash2, Calendar, Clock, ChevronLeft, ChevronRight, Flag, Bell, BellOff } from 'lucide-react'
 
 interface Task {
   id: number
@@ -54,6 +54,50 @@ export default function CalendarPage() {
     title: '', date: selectedDate, time: '', priority: 'medium' as Task['priority'],
     category: 'trading' as Task['category'], notes: '',
   })
+  const [notifPermission, setNotifPermission] = useState<NotificationPermission>(
+    'Notification' in window ? Notification.permission : 'denied'
+  )
+
+  const requestNotifPermission = async () => {
+    if (!('Notification' in window)) return
+    const perm = await Notification.requestPermission()
+    setNotifPermission(perm)
+  }
+
+  useEffect(() => {
+    if (!('Notification' in window) || Notification.permission === 'default') {
+      requestNotifPermission()
+    }
+  }, [])
+
+  useEffect(() => {
+    if (!('Notification' in window)) return
+    const checkDueTasks = () => {
+      if (Notification.permission !== 'granted') return
+      const now = new Date()
+      tasks.forEach(task => {
+        if (task.done || task.priority !== 'high' || !task.time) return
+        const taskDateTime = new Date(`${task.date}T${task.time}:00`)
+        const diffMs = taskDateTime.getTime() - now.getTime()
+        if (diffMs >= -60_000 && diffMs <= 300_000) {
+          const key = `notif-${task.id}-${task.date}`
+          if (!sessionStorage.getItem(key)) {
+            sessionStorage.setItem(key, '1')
+            const minLeft = Math.ceil(diffMs / 60_000)
+            new Notification('⚡ High Priority Task', {
+              body: diffMs > 0
+                ? `${task.title} — due in ${minLeft} min`
+                : `${task.title} — due NOW`,
+              icon: '/vite.svg',
+            })
+          }
+        }
+      })
+    }
+    checkDueTasks()
+    const id = setInterval(checkDueTasks, 30_000)
+    return () => clearInterval(id)
+  }, [tasks])
 
   const year  = currentDate.getFullYear()
   const month = currentDate.getMonth()
@@ -103,7 +147,7 @@ export default function CalendarPage() {
     <div className="space-y-5">
 
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between gap-3 flex-wrap">
         <div>
           <h1 className="text-xl font-bold text-[#eaecef]">Calendar & Tasks</h1>
           {pendingToday > 0 && (
@@ -112,10 +156,25 @@ export default function CalendarPage() {
             </p>
           )}
         </div>
-        <button onClick={openAdd}
-          className="flex items-center gap-1.5 bg-[#f0b90b] hover:bg-[#d4a30a] text-black text-xs font-bold px-3 py-2 rounded-xl transition">
-          <Plus size={13} /> Add Task
-        </button>
+        <div className="flex items-center gap-2 ml-auto">
+          {'Notification' in window && notifPermission !== 'granted' && (
+            <button onClick={requestNotifPermission}
+              title="Enable push notifications for high-priority tasks"
+              className="flex items-center gap-1.5 border border-[#2b3139] hover:border-[#f0b90b]/40 text-[#848e9c] hover:text-[#f0b90b] text-xs font-medium px-3 py-2 rounded-xl transition">
+              {notifPermission === 'denied' ? <BellOff size={13} /> : <Bell size={13} />}
+              {notifPermission === 'denied' ? 'Blocked' : 'Enable Alerts'}
+            </button>
+          )}
+          {'Notification' in window && notifPermission === 'granted' && (
+            <span className="flex items-center gap-1 text-[10px] text-[#0ecb81] bg-[#0ecb81]/10 border border-[#0ecb81]/20 px-2.5 py-1.5 rounded-lg">
+              <Bell size={10} /> Alerts on
+            </span>
+          )}
+          <button onClick={openAdd}
+            className="flex items-center gap-1.5 bg-[#f0b90b] hover:bg-[#d4a30a] text-black text-xs font-bold px-3 py-2 rounded-xl transition">
+            <Plus size={13} /> Add Task
+          </button>
+        </div>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-5 gap-4">
