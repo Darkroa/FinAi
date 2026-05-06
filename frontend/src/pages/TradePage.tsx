@@ -1,7 +1,8 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
 import {
   ArrowUpDown, TrendingUp, TrendingDown, ChevronDown,
-  Wifi, WifiOff, BarChart2, Activity, Link2,
+  Wifi, WifiOff, BarChart2, Activity, Link2, RefreshCw,
+  Clock, CheckCircle2,
 } from 'lucide-react'
 import {
   AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip,
@@ -10,7 +11,7 @@ import {
 import toast from 'react-hot-toast'
 import { useAuthStore } from '../store/authStore'
 import { useTickerPrices } from '../hooks/useTickerPrices'
-import { executeTrade } from '../lib/api'
+import { executeTrade, getBotTrades } from '../lib/api'
 
 const PAIRS = ['BTC/USDT', 'ETH/USDT', 'BNB/USDT', 'SOL/USDT']
 const TF    = ['1m', '5m', '15m', '1h', '4h', '1D']
@@ -59,6 +60,17 @@ function makeOrderBook(base: number) {
 }
 
 interface ExchangeConn { exchange: string; label: string; api_key_masked: string }
+interface TradeRecord {
+  id: number
+  ticker: string
+  action: string
+  price: number
+  qty: number
+  pnl: number | null
+  exchange: string
+  paper: boolean
+  created_at: string
+}
 
 export default function TradePage() {
   const { user }    = useAuthStore()
@@ -74,6 +86,9 @@ export default function TradePage() {
   const [chartMode, setChartMode] = useState<ChartMode>('line')
   const [selExchange, setSelExch] = useState<string>('__balance__')
   const [orderLoading, setLoading]= useState(false)
+  const [bottomTab, setBottomTab] = useState<'history'>('history')
+  const [tradeHistory, setHistory]= useState<TradeRecord[]>([])
+  const [histLoading, setHistLoad]= useState(false)
 
   const exchanges: ExchangeConn[] =
     (user as unknown as { exchange_connections?: ExchangeConn[] })?.exchange_connections ?? []
@@ -85,6 +100,16 @@ export default function TradePage() {
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [exchanges.length])
+
+  const fetchHistory = useCallback(async () => {
+    setHistLoad(true)
+    try {
+      const res = await getBotTrades(50)
+      setHistory(res.data?.trades ?? [])
+    } catch { /* silent */ } finally { setHistLoad(false) }
+  }, [])
+
+  useEffect(() => { fetchHistory() }, [fetchHistory])
 
   const getPriceData = (p: string) => {
     const item = tickerItems.find(i => i.symbol === p)
@@ -164,6 +189,7 @@ export default function TradePage() {
         })
       }
       setAmount('')
+      fetchHistory()
     } catch (err: unknown) {
       const msg = (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail
       toast.error(msg || 'Order failed')
@@ -442,19 +468,103 @@ export default function TradePage() {
         </div>
       </div>
 
-      {/* Open orders bar */}
+      {/* Order history panel */}
       <div className="bg-[#161a1e] border border-[#2b3139] rounded-xl overflow-hidden">
-        <div className="flex items-center gap-3 px-5 py-3 border-b border-[#2b3139]">
-          {['Open Orders (0)', 'Order History'].map((tab, i) => (
-            <button key={tab} className={`text-xs font-semibold pb-1 border-b-2 transition ${i===0 ? 'text-[#eaecef] border-[#f0b90b]' : 'text-[#848e9c] border-transparent hover:text-[#eaecef]'}`}>
-              {tab}
-            </button>
-          ))}
+        {/* Tab bar */}
+        <div className="flex items-center gap-4 px-5 py-3 border-b border-[#2b3139]">
+          <button
+            className="text-xs font-semibold pb-1 border-b-2 text-[#eaecef] border-[#f0b90b]">
+            Order History
+          </button>
+          <span className="text-[10px] text-[#848e9c] ml-0.5">{tradeHistory.length > 0 ? `${tradeHistory.length} fills` : ''}</span>
+          <button
+            onClick={fetchHistory}
+            className="ml-auto text-[#848e9c] hover:text-[#eaecef] transition p-1"
+            title="Refresh">
+            <RefreshCw size={12} className={histLoading ? 'animate-spin' : ''} />
+          </button>
         </div>
-        <div className="py-10 text-center">
-          <TrendingDown size={24} className="text-[#2b3139] mx-auto mb-2" />
-          <p className="text-xs text-[#848e9c]">No open orders</p>
-        </div>
+
+        {/* Desktop table */}
+        {tradeHistory.length === 0 ? (
+          <div className="py-12 text-center">
+            <Clock size={22} className="text-[#2b3139] mx-auto mb-2" />
+            <p className="text-xs text-[#848e9c]">No trades yet — place your first order above</p>
+          </div>
+        ) : (
+          <>
+            {/* Header — hidden on mobile */}
+            <div className="hidden sm:grid grid-cols-7 gap-2 px-5 py-2 text-[10px] text-[#4a5568] uppercase tracking-widest border-b border-[#2b3139]/50">
+              <span>Pair</span>
+              <span>Side</span>
+              <span className="text-right">Price</span>
+              <span className="text-right">Amount</span>
+              <span className="text-right">Total</span>
+              <span>Route</span>
+              <span className="text-right">Time</span>
+            </div>
+
+            <div className="divide-y divide-[#2b3139]/50 max-h-72 overflow-y-auto">
+              {tradeHistory.map(t => {
+                const isBuy   = t.action?.toUpperCase() === 'BUY'
+                const total   = (t.price ?? 0) * (t.qty ?? 0)
+                const pairFmt = t.ticker?.replace('-', '/') ?? '—'
+                const timeStr = t.created_at
+                  ? new Date(t.created_at).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })
+                  : '—'
+                const exchLabel = t.exchange === 'internal' || t.exchange === 'manual'
+                  ? 'Balance'
+                  : (t.exchange ?? '—').toUpperCase()
+                return (
+                  <div key={t.id}>
+                    {/* Desktop row */}
+                    <div className="hidden sm:grid grid-cols-7 gap-2 px-5 py-2.5 text-xs hover:bg-[#1e2329] transition items-center">
+                      <span className="font-mono font-semibold text-[#eaecef]">{pairFmt}</span>
+                      <span className={`font-bold flex items-center gap-1 ${isBuy ? 'text-[#0ecb81]' : 'text-[#f6465d]'}`}>
+                        {isBuy ? <TrendingUp size={10} /> : <TrendingDown size={10} />}
+                        {isBuy ? 'Buy' : 'Sell'}
+                      </span>
+                      <span className="font-mono text-[#eaecef] text-right">
+                        ${(t.price ?? 0).toLocaleString('en-US', { maximumFractionDigits: 2 })}
+                      </span>
+                      <span className="font-mono text-[#eaecef] text-right">
+                        {(t.qty ?? 0).toFixed(6)}
+                      </span>
+                      <span className="font-mono text-[#eaecef] text-right">
+                        ${total.toLocaleString('en-US', { maximumFractionDigits: 2 })}
+                      </span>
+                      <span className="text-[#848e9c] flex items-center gap-1">
+                        <CheckCircle2 size={9} className="text-[#0ecb81]" />
+                        {exchLabel}
+                      </span>
+                      <span className="text-[#848e9c] text-right text-[10px]">{timeStr}</span>
+                    </div>
+
+                    {/* Mobile card */}
+                    <div className="sm:hidden px-4 py-3 flex items-center gap-3">
+                      <div className={`w-7 h-7 rounded-full flex items-center justify-center flex-shrink-0 ${isBuy ? 'bg-[#0ecb81]/10' : 'bg-[#f6465d]/10'}`}>
+                        {isBuy ? <TrendingUp size={12} className="text-[#0ecb81]" /> : <TrendingDown size={12} className="text-[#f6465d]" />}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2">
+                          <span className="text-xs font-semibold text-[#eaecef] font-mono">{pairFmt}</span>
+                          <span className={`text-[10px] font-bold ${isBuy ? 'text-[#0ecb81]' : 'text-[#f6465d]'}`}>{isBuy ? 'Buy' : 'Sell'}</span>
+                        </div>
+                        <span className="text-[10px] text-[#848e9c]">
+                          {(t.qty ?? 0).toFixed(6)} @ ${(t.price ?? 0).toLocaleString('en-US', { maximumFractionDigits: 2 })}
+                        </span>
+                      </div>
+                      <div className="text-right flex-shrink-0">
+                        <p className="text-xs font-mono font-semibold text-[#eaecef]">${total.toLocaleString('en-US', { maximumFractionDigits: 2 })}</p>
+                        <p className="text-[9px] text-[#848e9c]">{timeStr}</p>
+                      </div>
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          </>
+        )}
       </div>
     </div>
   )
