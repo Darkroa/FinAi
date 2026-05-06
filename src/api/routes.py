@@ -20,7 +20,7 @@ from src.users.bot_manager import get_user_bot_manager
 from src.auth.dependencies import get_current_user, require_admin
 from src.database.models import (
     User, APIKey, Transaction, UserMoney, Event,
-    Notification, WalletConfig, SupportTicket, SupportMessage
+    Notification, WalletConfig, SupportTicket, SupportMessage, TradeLog
 )
 
 # ===================== Pydantic Schemas =====================

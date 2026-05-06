@@ -4,7 +4,8 @@ import { useAuthStore } from '../store/authStore'
 import {
   LayoutDashboard, TrendingUp, BarChart2, Wallet,
   Settings, ShieldCheck, LogOut, Zap, Bell, Bot,
-  X, ChevronDown, User, Receipt, MessageSquare, Menu, CalendarDays
+  X, ChevronDown, User, Receipt, MessageSquare, Menu, CalendarDays,
+  Sun, Moon
 } from 'lucide-react'
 import { cn } from '../lib/utils'
 import { getUserNotifications, markAllNotificationsRead } from '../lib/api'
@@ -36,8 +37,19 @@ export default function DashboardLayout() {
   const [notifOpen, setNotifOpen] = useState(false)
   const [profileOpen, setProfileOpen] = useState(false)
   const [notifications, setNotifications] = useState<AppNotification[]>([])
+  const [lightMode, setLightMode] = useState(() => localStorage.getItem('finai-theme') === 'light')
   const notifRef = useRef<HTMLDivElement>(null)
   const profileRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    if (lightMode) {
+      document.documentElement.classList.add('light')
+      localStorage.setItem('finai-theme', 'light')
+    } else {
+      document.documentElement.classList.remove('light')
+      localStorage.setItem('finai-theme', 'dark')
+    }
+  }, [lightMode])
 
   useEffect(() => {
     fetchNotifications()
@@ -175,6 +187,16 @@ export default function DashboardLayout() {
               <Wallet size={11} className="text-[#f0b90b]" />
               <span className="text-xs font-mono text-[#eaecef]">${(user?.balance_usdt ?? 0).toFixed(2)}</span>
             </div>
+
+            {/* Brightness toggle */}
+            <button
+              onClick={() => setLightMode(v => !v)}
+              title={lightMode ? 'Switch to dark mode' : 'Switch to light mode'}
+              className="w-8 h-8 rounded-full bg-[#0b0e11] hover:bg-[#2b3139] flex items-center justify-center transition">
+              {lightMode
+                ? <Moon size={14} className="text-[#848e9c]" />
+                : <Sun  size={14} className="text-[#848e9c]" />}
+            </button>
 
             {/* Notifications */}
             <div className="relative" ref={notifRef}>

@@ -102,17 +102,39 @@ class TradingBotInstance:
     def _log_trade_to_db(self, trade: dict):
         db = SessionLocal()
         try:
+            pnl_value = trade.get("pnl")
+            # For BUY trades, pnl is None (open position) rather than 0.0
+            if trade["action"] == "BUY":
+                pnl_value = None
             log = TradeLog(
+                user_id=self.user_id,
                 ticker=trade["ticker"],
                 action=trade["action"],
                 price=trade["price"],
                 qty=trade["qty"],
-                pnl=trade.get("pnl"),
+                pnl=pnl_value,
                 reason=trade.get("reason"),
                 paper=self.paper,
+                exchange="bot",
             )
             db.add(log)
             db.commit()
+            # If this is a SELL, update the matching open BUY record's P&L too
+            if trade["action"] == "SELL" and pnl_value is not None:
+                open_buy = (
+                    db.query(TradeLog)
+                    .filter(
+                        TradeLog.user_id == self.user_id,
+                        TradeLog.ticker == trade["ticker"],
+                        TradeLog.action == "BUY",
+                        TradeLog.pnl == None,
+                    )
+                    .order_by(TradeLog.created_at.desc())
+                    .first()
+                )
+                if open_buy:
+                    open_buy.pnl = pnl_value
+                    db.commit()
         except Exception as e:
             logger.error(f"Failed to log trade: {e}")
         finally:

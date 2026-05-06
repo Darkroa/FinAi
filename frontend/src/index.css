@@ -22,10 +22,28 @@
     color: #eaecef;
     font-family: 'IBM Plex Sans', 'Inter', system-ui, sans-serif;
     -webkit-font-smoothing: antialiased;
+    transition: background-color 0.2s, color 0.2s;
   }
 
   #root { width: 100%; min-height: 100vh; }
 }
+
+/* ── Light mode ── */
+html.light body {
+  background-color: #f0f2f5;
+  color: #1a1d21;
+}
+
+html.light .bg-\[\#0b0e11\]   { background-color: #e8eaed !important; }
+html.light .bg-\[\#161a1e\]   { background-color: #ffffff !important; }
+html.light .bg-\[\#1e2329\]   { background-color: #f4f5f7 !important; }
+html.light .border-\[\#2b3139\] { border-color: #d0d3d8 !important; }
+html.light .text-\[\#eaecef\] { color: #1a1d21 !important; }
+html.light .text-\[\#848e9c\] { color: #5a6270 !important; }
+html.light .text-\[\#4a5568\] { color: #7a8494 !important; }
+html.light .hover\:bg-\[\#2b3139\]:hover { background-color: #e2e5ea !important; }
+html.light .hover\:bg-\[\#1e2329\]:hover  { background-color: #eef0f3 !important; }
+html.light .shadow-2xl { box-shadow: 0 20px 40px rgba(0,0,0,0.12) !important; }
 
 ::-webkit-scrollbar { width: 5px; height: 5px; }
 ::-webkit-scrollbar-track { background: #161a1e; }
