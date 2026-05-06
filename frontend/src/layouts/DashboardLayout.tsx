@@ -19,6 +19,7 @@ const navItems = [
   { to: '/app/wallet',       icon: Wallet,          label: 'Wallet'    },
   { to: '/app/transactions', icon: Receipt,         label: 'History'   },
   { to: '/app/bots',         icon: Bot,             label: 'AI Bots'   },
+  { to: '/app/alerts',       icon: Bell,            label: 'Alerts'    },
   { to: '/app/calendar',     icon: CalendarDays,    label: 'Calendar'  },
   { to: '/app/support',      icon: MessageSquare,   label: 'Support'   },
   { to: '/app/settings',     icon: Settings,        label: 'Settings'  },

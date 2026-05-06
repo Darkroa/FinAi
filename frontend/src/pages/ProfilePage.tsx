@@ -242,7 +242,7 @@ function PersonalTab({ user, setUser }: { user: ReturnType<typeof useAuthStore>[
               </button>
             ) : (
               <div className="flex flex-col gap-2">
-                {devCode && <p className="text-[10px] text-[#848e9c]">Dev code: <span className="text-[#f0b90b] font-mono">{devCode}</span></p>}
+                <p className="text-[11px] text-[#848e9c]">Check your email for the 6-digit code</p>
                 <div className="flex items-center gap-2">
                   <input value={verifyCode} onChange={e => setVerifyCode(e.target.value)}
                     placeholder="6-digit code" maxLength={6}

@@ -13,6 +13,7 @@ import ProfilePage from './pages/ProfilePage'
 import SupportPage from './pages/SupportPage'
 import TransactionHistoryPage from './pages/TransactionHistoryPage'
 import CalendarPage from './pages/CalendarPage'
+import AlertsPage from './pages/AlertsPage'
 import { useAuthStore } from './store/authStore'
 import DashboardLayout from './layouts/DashboardLayout'
 
@@ -53,6 +54,7 @@ export default function App() {
           <Route path="calendar"     element={<CalendarPage />} />
           <Route path="support"      element={<SupportPage />} />
           <Route path="admin"        element={<AdminPage />} />
+          <Route path="alerts"       element={<AlertsPage />} />
         </Route>
         <Route path="/dashboard" element={<Navigate to="/app/dashboard" replace />} />
         <Route path="*" element={<Navigate to="/" replace />} />

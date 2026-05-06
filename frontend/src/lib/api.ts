@@ -113,12 +113,14 @@ export const startBot = (params: {
   initial_capital?: number
   risk_per_trade_pct?: number
   max_drawdown_pct?: number
+  exchange_label?: string
 }) => api.post('/bots/start', {
   ticker: params.ticker ?? 'BTC-USD',
   paper: params.paper ?? true,
   initial_capital: params.initial_capital ?? 1000,
   risk_per_trade_pct: params.risk_per_trade_pct ?? 1.0,
   max_drawdown_pct: params.max_drawdown_pct ?? 10.0,
+  exchange_label: params.exchange_label,
 })
 export const stopBot = (ticker = 'ALL') => api.post(`/bots/stop?ticker=${encodeURIComponent(ticker)}`)
 export const getBotTrades = (limit = 20) => api.get(`/bots/trades?limit=${limit}`)
@@ -169,3 +171,16 @@ export const updateNotificationPreferences = (prefs: { email?: boolean; whatsapp
 
 // Health
 export const getHealth = () => api.get('/health')
+
+// Stats
+export const getTodayPnl = () => api.get('/stats/today-pnl')
+export const getBotPnlHistory = (days = 30) => api.get(`/bots/pnl-history?days=${days}`)
+
+// Price Alerts
+export const listAlerts = () => api.get('/alerts')
+export const createAlert = (data: {
+  symbol: string; target_price: number; direction: string;
+  notify_browser?: boolean; notify_telegram?: boolean; notify_whatsapp?: boolean
+}) => api.post('/alerts', data)
+export const deleteAlert = (id: number) => api.delete(`/alerts/${id}`)
+export const toggleAlert = (id: number) => api.post(`/alerts/${id}/toggle`)

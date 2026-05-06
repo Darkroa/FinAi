@@ -261,3 +261,21 @@ class SupportMessage(Base):
 
     ticket = relationship("SupportTicket", back_populates="messages")
     sender = relationship("User", foreign_keys=[sender_id])
+
+
+class PriceAlert(Base):
+    __tablename__ = "price_alerts"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    symbol = Column(String(30), nullable=False)
+    target_price = Column(Float, nullable=False)
+    direction = Column(String(10), nullable=False)  # "above" or "below"
+    is_active = Column(Boolean, default=True)
+    triggered_at = Column(DateTime, nullable=True)
+    notify_browser = Column(Boolean, default=True)
+    notify_telegram = Column(Boolean, default=False)
+    notify_whatsapp = Column(Boolean, default=False)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    user = relationship("User")

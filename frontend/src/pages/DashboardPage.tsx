@@ -1,20 +1,13 @@
 import { useEffect, useState, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuthStore } from '../store/authStore'
-import { getEvents, getBotStatus } from '../lib/api'
+import { getEvents, getBotStatus, getTodayPnl } from '../lib/api'
 import { useTickerPrices } from '../hooks/useTickerPrices'
 import {
   TrendingUp, TrendingDown, Zap, Activity,
   ArrowUpRight, Bot, BarChart2, RefreshCw, Eye, EyeOff,
   ArrowRight, Bitcoin
 } from 'lucide-react'
-
-const mockPositions = [
-  { asset: 'BTC/USDT', amount: '0.0842', value: '$5,674', pnl: '+$312', pnlPct: '+5.8%', up: true  },
-  { asset: 'ETH/USDT', amount: '1.250',  value: '$4,401', pnl: '+$88',  pnlPct: '+2.0%', up: true  },
-  { asset: 'AAPL',     amount: '8',      value: '$1,538', pnl: '-$24',  pnlPct: '-1.5%', up: false },
-  { asset: 'NVDA',     amount: '1.5',    value: '$1,312', pnl: '+$187', pnlPct: '+16.7%',up: true  },
-]
 
 function getGreeting() {
   const h = new Date().getHours()
@@ -31,10 +24,10 @@ export default function DashboardPage() {
   const [botRunning, setBotRunning] = useState(false)
   const [hideBalance, setHideBalance] = useState(false)
   const [btcToggle, setBtcToggle] = useState<'BTC' | 'ETH'>('BTC')
+  const [todayPnl, setTodayPnl] = useState(0)
+  const [todayPct, setTodayPct] = useState(0)
 
   const balance = user?.balance_usdt ?? 0
-  const todayPnl = 324.20
-  const todayPct = 2.57
 
   const btcItem  = tickerItems.find(t => t.symbol === 'BTC/USDT')
   const ethItem  = tickerItems.find(t => t.symbol === 'ETH/USDT')
@@ -45,7 +38,6 @@ export default function DashboardPage() {
   const btcChange = btcItem  ? parseChange(btcItem.change) : 0
   const ethChange = ethItem  ? parseChange(ethItem.change) : 0
   const priceLoading = !btcItem?.live
-  const refetch = () => {}
 
   const displayPrice  = (btcToggle === 'BTC' ? btcPrice  : ethPrice)  || (btcToggle === 'BTC' ? 67432.10 : 3521.80)
   const displayChange = (btcToggle === 'BTC' ? btcChange : ethChange) || (btcToggle === 'BTC' ? 2.4 : 1.8)
@@ -57,21 +49,28 @@ export default function DashboardPage() {
       setEvents(Array.isArray(data) ? data : (data?.events ?? []))
     }).catch(() => {})
     getBotStatus().then(r => setBotRunning(r.data?.running ?? false)).catch(() => {})
+    getTodayPnl().then(r => {
+      setTodayPnl(r.data?.today_pnl ?? 0)
+      setTodayPct(r.data?.today_pct ?? 0)
+    }).catch(() => {})
   }, [])
 
-  useEffect(() => { fetchData() }, [fetchData])
+  useEffect(() => {
+    fetchData()
+    const interval = setInterval(fetchData, 30000)
+    return () => clearInterval(interval)
+  }, [fetchData])
 
   const firstName = user?.first_name || user?.email?.split('@')[0] || 'Trader'
 
   return (
     <div className="space-y-4">
 
-      {/* ── Hero balance header ── */}
+      {/* Hero balance header */}
       <div className="relative rounded-2xl overflow-hidden" style={{
         background: 'linear-gradient(135deg, #1a1105 0%, #2a1f00 40%, #1e2329 100%)',
         borderBottom: '1px solid #2b3139',
       }}>
-        {/* Glow */}
         <div className="absolute inset-0 pointer-events-none" style={{
           backgroundImage: 'radial-gradient(ellipse at top left, rgba(240,185,11,0.12) 0%, transparent 60%)',
         }} />
@@ -118,7 +117,7 @@ export default function DashboardPage() {
                 <span className="text-[10px] text-[#848e9c]">
                   Rate: 1 {btcToggle} = ${displayPrice.toLocaleString('en-US', { maximumFractionDigits: 0 })}
                 </span>
-                <button onClick={refetch} className="text-[#848e9c] hover:text-[#f0b90b] transition">
+                <button onClick={fetchData} className="text-[#848e9c] hover:text-[#f0b90b] transition">
                   <RefreshCw size={10} />
                 </button>
               </div>
@@ -141,19 +140,23 @@ export default function DashboardPage() {
         </div>
       </div>
 
-      {/* ── Today's P&L strip ── */}
+      {/* Today's P&L strip — now live */}
       <div className="flex items-center justify-between bg-[#161a1e] border border-[#2b3139] rounded-xl px-4 py-3">
         <div className="flex items-center gap-2">
-          <TrendingUp size={14} className="text-[#0ecb81]" />
+          {todayPnl >= 0 ? <TrendingUp size={14} className="text-[#0ecb81]" /> : <TrendingDown size={14} className="text-[#f6465d]" />}
           <span className="text-xs text-[#848e9c]">Today's P&L</span>
         </div>
         <div className="flex items-center gap-2">
-          <span className="text-sm font-bold font-mono text-[#0ecb81]">+${todayPnl.toFixed(2)}</span>
-          <span className="text-xs px-2 py-0.5 rounded-full bg-[#0ecb81]/10 text-[#0ecb81] font-medium">+{todayPct}%</span>
+          <span className={`text-sm font-bold font-mono ${todayPnl >= 0 ? 'text-[#0ecb81]' : 'text-[#f6465d]'}`}>
+            {todayPnl >= 0 ? '+' : ''}${Math.abs(todayPnl).toFixed(2)}
+          </span>
+          <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${todayPnl >= 0 ? 'bg-[#0ecb81]/10 text-[#0ecb81]' : 'bg-[#f6465d]/10 text-[#f6465d]'}`}>
+            {todayPct >= 0 ? '+' : ''}{todayPct.toFixed(2)}%
+          </span>
         </div>
       </div>
 
-      {/* ── Activity Center ── */}
+      {/* Activity Center */}
       <div>
         <p className="text-xs font-bold text-[#eaecef] mb-3">Activity Center</p>
         <div className="grid grid-cols-2 gap-3">
@@ -198,7 +201,7 @@ export default function DashboardPage() {
         </div>
       </div>
 
-      {/* ── Quick Access ── */}
+      {/* Quick Access */}
       <div>
         <p className="text-xs font-bold text-[#eaecef] mb-3">Quick Access</p>
         <div className="grid grid-cols-3 gap-2.5">
@@ -218,19 +221,23 @@ export default function DashboardPage() {
         </div>
       </div>
 
-      {/* ── AI Events ── */}
+      {/* AI Events — live from backend */}
       <div>
         <div className="flex items-center justify-between mb-3">
           <p className="text-xs font-bold text-[#eaecef]">AI Market Events</p>
-          <Zap size={12} className="text-[#f0b90b]" />
+          <div className="flex items-center gap-1.5">
+            <span className="w-1.5 h-1.5 rounded-full bg-[#0ecb81] inline-block animate-pulse" />
+            <Zap size={12} className="text-[#f0b90b]" />
+          </div>
         </div>
         <div className="bg-[#161a1e] border border-[#2b3139] rounded-xl divide-y divide-[#2b3139]">
           {events.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-8 gap-2">
               <Activity size={20} className="text-[#2b3139]" />
-              <p className="text-xs text-[#848e9c]">No recent events</p>
+              <p className="text-xs text-[#848e9c]">No recent AI events</p>
+              <p className="text-[10px] text-[#4a5568]">Events are ingested every 15 minutes</p>
             </div>
-          ) : events.slice(0, 4).map((ev, i) => (
+          ) : events.slice(0, 5).map((ev, i) => (
             <div key={i} className="px-4 py-3 hover:bg-[#1e2329] transition">
               <p className="text-xs text-[#eaecef] leading-relaxed line-clamp-2">{ev.description ?? ev.event_type}</p>
               <p className="text-[10px] text-[#848e9c] mt-1 flex items-center gap-1.5">
@@ -240,38 +247,11 @@ export default function DashboardPage() {
             </div>
           ))}
         </div>
-      </div>
-
-      {/* ── Open Positions ── */}
-      <div>
-        <div className="flex items-center justify-between mb-3">
-          <p className="text-xs font-bold text-[#eaecef]">Open Positions</p>
-          <button onClick={() => navigate('/app/trade')}
-            className="flex items-center gap-1 text-[10px] text-[#f0b90b] hover:text-[#d4a30a] transition">
-            View all <ArrowRight size={10} />
+        {events.length > 0 && (
+          <button onClick={fetchData} className="w-full mt-2 text-[10px] text-[#848e9c] hover:text-[#f0b90b] transition flex items-center justify-center gap-1 py-1">
+            <RefreshCw size={9} /> Refresh events
           </button>
-        </div>
-        <div className="bg-[#161a1e] border border-[#2b3139] rounded-xl divide-y divide-[#2b3139]">
-          {mockPositions.map(p => (
-            <div key={p.asset} className="flex items-center justify-between px-4 py-3 hover:bg-[#1e2329] transition">
-              <div className="flex items-center gap-2.5">
-                <div className="w-8 h-8 rounded-full bg-[#f0b90b]/10 flex items-center justify-center text-[11px] font-bold text-[#f0b90b] flex-shrink-0">
-                  {p.asset[0]}
-                </div>
-                <div>
-                  <p className="text-xs font-semibold text-[#eaecef]">{p.asset}</p>
-                  <p className="text-[10px] text-[#848e9c]">{p.value}</p>
-                </div>
-              </div>
-              <div className="text-right">
-                <p className={`text-xs font-bold font-mono ${p.up ? 'text-[#0ecb81]' : 'text-[#f6465d]'}`}>{p.pnl}</p>
-                <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-medium ${p.up ? 'bg-[#0ecb81]/10 text-[#0ecb81]' : 'bg-[#f6465d]/10 text-[#f6465d]'}`}>
-                  {p.pnlPct}
-                </span>
-              </div>
-            </div>
-          ))}
-        </div>
+        )}
       </div>
 
     </div>

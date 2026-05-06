@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
-import { ArrowUpDown, TrendingUp, TrendingDown, ChevronDown, Wifi, WifiOff } from 'lucide-react'
-import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts'
+import { ArrowUpDown, TrendingUp, TrendingDown, ChevronDown, Wifi, WifiOff, BarChart2, Activity } from 'lucide-react'
+import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar, Cell } from 'recharts'
 import toast from 'react-hot-toast'
 import { useAuthStore } from '../store/authStore'
 import { useTickerPrices } from '../hooks/useTickerPrices'
@@ -9,6 +9,8 @@ import { executeTrade } from '../lib/api'
 const PAIRS = ['BTC/USDT', 'ETH/USDT', 'BNB/USDT', 'SOL/USDT']
 const TF    = ['1m', '5m', '15m', '1h', '4h', '1D']
 
+type ChartMode = 'line' | 'candle'
+
 const FALLBACKS: Record<string, { price: number; change: number }> = {
   'BTC/USDT': { price: 81000, change: 2.4 },
   'ETH/USDT': { price: 2380,  change: 1.8 },
@@ -16,11 +18,32 @@ const FALLBACKS: Record<string, { price: number; change: number }> = {
   'SOL/USDT': { price: 85,    change: 1.2 },
 }
 
-function generateCandles(base: number) {
+function generateLineData(base: number) {
   return Array.from({ length: 48 }, (_, i) => ({
     time:  `${Math.floor(i / 2)}:${i % 2 === 0 ? '00' : '30'}`,
     price: base + Math.sin(i * 0.4) * (base * 0.025) + (Math.random() - 0.5) * (base * 0.008),
   }))
+}
+
+function generateCandleData(base: number) {
+  return Array.from({ length: 24 }, (_, i) => {
+    const open  = base + Math.sin(i * 0.6) * (base * 0.02) + (Math.random() - 0.5) * (base * 0.01)
+    const close = open + (Math.random() - 0.5) * (base * 0.015)
+    const high  = Math.max(open, close) + Math.random() * (base * 0.008)
+    const low   = Math.min(open, close) - Math.random() * (base * 0.008)
+    const bullish = close >= open
+    return {
+      time:  `${i}:00`,
+      open:  +open.toFixed(2),
+      close: +close.toFixed(2),
+      high:  +high.toFixed(2),
+      low:   +low.toFixed(2),
+      body:  +Math.abs(close - open).toFixed(2),
+      bodyStart: +Math.min(open, close).toFixed(2),
+      bullish,
+      color: bullish ? '#0ecb81' : '#f6465d',
+    }
+  })
 }
 
 function makeOrderBook(base: number) {
@@ -40,13 +63,14 @@ export default function TradePage() {
   const { user }       = useAuthStore()
   const tickerItems    = useTickerPrices(30000)
 
-  const [side, setSide]       = useState<'buy' | 'sell'>('buy')
-  const [orderType, setType]  = useState<'market' | 'limit'>('limit')
-  const [price, setPrice]     = useState('')
-  const [amount, setAmount]   = useState('')
-  const [tf, setTf]           = useState('1h')
-  const [pair, setPair]       = useState('BTC/USDT')
-  const [showPairs, setShowP] = useState(false)
+  const [side, setSide]           = useState<'buy' | 'sell'>('buy')
+  const [orderType, setType]      = useState<'market' | 'limit'>('limit')
+  const [price, setPrice]         = useState('')
+  const [amount, setAmount]       = useState('')
+  const [tf, setTf]               = useState('1h')
+  const [pair, setPair]           = useState('BTC/USDT')
+  const [showPairs, setShowP]     = useState(false)
+  const [chartMode, setChartMode] = useState<ChartMode>('line')
 
   const getPriceData = (p: string) => {
     const item = tickerItems.find(i => i.symbol === p)
@@ -59,8 +83,9 @@ export default function TradePage() {
   }
 
   const { price: livePrice, change: liveChange, live: isLive } = getPriceData(pair)
-  const chartData = generateCandles(livePrice)
-  const orderBook = makeOrderBook(livePrice)
+  const lineData   = generateLineData(livePrice)
+  const candleData = generateCandleData(livePrice)
+  const orderBook  = makeOrderBook(livePrice)
 
   const prevPair     = useRef(pair)
   const priceInitRef = useRef(false)
@@ -77,12 +102,10 @@ export default function TradePage() {
   const userBalance = user?.balance_usdt ?? 0
   const asset       = pair.split('/')[0]
   const availCrypto = livePrice > 0 ? userBalance / livePrice : 0
-
-  const numPrice = parseFloat(price.replace(/,/g, '')) || 0
-  const total    = numPrice && amount ? (numPrice * parseFloat(amount)).toFixed(2) : '0.00'
-
-  const high24 = livePrice > 0 ? (livePrice * 1.022).toLocaleString('en-US', { maximumFractionDigits: 2 }) : '—'
-  const low24  = livePrice > 0 ? (livePrice * 0.978).toLocaleString('en-US', { maximumFractionDigits: 2 }) : '—'
+  const numPrice    = parseFloat(price.replace(/,/g, '')) || 0
+  const total       = numPrice && amount ? (numPrice * parseFloat(amount)).toFixed(2) : '0.00'
+  const high24      = livePrice > 0 ? (livePrice * 1.022).toLocaleString('en-US', { maximumFractionDigits: 2 }) : '—'
+  const low24       = livePrice > 0 ? (livePrice * 0.978).toLocaleString('en-US', { maximumFractionDigits: 2 }) : '—'
 
   const [orderLoading, setOrderLoading] = useState(false)
 
@@ -96,13 +119,7 @@ export default function TradePage() {
     if (!numPrice || numPrice <= 0) return toast.error('Price must be greater than 0')
     setOrderLoading(true)
     try {
-      const res = await executeTrade({
-        pair,
-        side,
-        order_type: orderType,
-        price: numPrice,
-        amount: qty,
-      })
+      const res = await executeTrade({ pair, side, order_type: orderType, price: numPrice, amount: qty })
       const d = res.data
       toast.success(`${side === 'buy' ? '▲ Buy' : '▼ Sell'} ${qty} ${asset} @ $${numPrice.toLocaleString()} — Executed`)
       if (d?.trade?.new_balance !== undefined) {
@@ -112,9 +129,7 @@ export default function TradePage() {
     } catch (err: unknown) {
       const msg = (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail
       toast.error(msg || 'Order failed — check your balance')
-    } finally {
-      setOrderLoading(false)
-    }
+    } finally { setOrderLoading(false) }
   }
 
   return (
@@ -162,39 +177,86 @@ export default function TradePage() {
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
         {/* Chart */}
         <div className="lg:col-span-2 bg-[#161a1e] border border-[#2b3139] rounded-xl p-4">
-          <div className="flex flex-wrap gap-1 mb-4">
-            {TF.map(t => (
-              <button key={t} onClick={() => setTf(t)}
-                className={`text-xs px-2.5 py-1.5 rounded-lg font-medium transition ${t === tf ? 'bg-[#f0b90b] text-black' : 'text-[#848e9c] hover:text-[#eaecef] hover:bg-[#2b3139]'}`}>
-                {t}
+          {/* TF buttons + chart mode toggle */}
+          <div className="flex flex-wrap items-center gap-2 mb-4">
+            <div className="flex gap-1">
+              {TF.map(t => (
+                <button key={t} onClick={() => setTf(t)}
+                  className={`text-xs px-2.5 py-1.5 rounded-lg font-medium transition ${t === tf ? 'bg-[#f0b90b] text-black' : 'text-[#848e9c] hover:text-[#eaecef] hover:bg-[#2b3139]'}`}>
+                  {t}
+                </button>
+              ))}
+            </div>
+            <div className="ml-auto flex gap-1 bg-[#0b0e11] p-0.5 rounded-lg border border-[#2b3139]">
+              <button onClick={() => setChartMode('line')}
+                className={`flex items-center gap-1 text-xs px-2.5 py-1.5 rounded-md font-medium transition ${chartMode === 'line' ? 'bg-[#2b3139] text-[#eaecef]' : 'text-[#848e9c] hover:text-[#eaecef]'}`}>
+                <Activity size={11} /> Line
               </button>
-            ))}
+              <button onClick={() => setChartMode('candle')}
+                className={`flex items-center gap-1 text-xs px-2.5 py-1.5 rounded-md font-medium transition ${chartMode === 'candle' ? 'bg-[#2b3139] text-[#eaecef]' : 'text-[#848e9c] hover:text-[#eaecef]'}`}>
+                <BarChart2 size={11} /> Candle
+              </button>
+            </div>
           </div>
-          <ResponsiveContainer width="100%" height={240}>
-            <AreaChart data={chartData} margin={{ left: 0, right: 4, top: 4, bottom: 0 }}>
-              <defs>
-                <linearGradient id="priceGrad" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="5%"  stopColor="#0ecb81" stopOpacity={0.15} />
-                  <stop offset="95%" stopColor="#0ecb81" stopOpacity={0} />
-                </linearGradient>
-              </defs>
-              <CartesianGrid strokeDasharray="3 3" stroke="#2b3139" />
-              <XAxis dataKey="time" tick={{ fill: '#848e9c', fontSize: 9 }} tickLine={false} axisLine={false} interval={7} />
-              <YAxis tick={{ fill: '#848e9c', fontSize: 9 }} tickLine={false} axisLine={false}
-                tickFormatter={v => livePrice >= 10000
-                  ? `$${((v as number) / 1000).toFixed(1)}k`
-                  : `$${(v as number).toFixed(1)}`
-                }
-                domain={['auto', 'auto']} width={48} />
-              <Tooltip
-                contentStyle={{ background: '#1e2329', border: '1px solid #2b3139', borderRadius: 10, fontSize: 11 }}
-                labelStyle={{ color: '#848e9c' }}
-                itemStyle={{ color: '#0ecb81' }}
-                formatter={(v: unknown) => [`$${(v as number).toFixed(2)}`, 'Price']}
-              />
-              <Area type="monotone" dataKey="price" stroke="#0ecb81" strokeWidth={2} fill="url(#priceGrad)" dot={false} />
-            </AreaChart>
-          </ResponsiveContainer>
+
+          {chartMode === 'line' ? (
+            <ResponsiveContainer width="100%" height={240}>
+              <AreaChart data={lineData} margin={{ left: 0, right: 4, top: 4, bottom: 0 }}>
+                <defs>
+                  <linearGradient id="priceGrad" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="5%"  stopColor="#0ecb81" stopOpacity={0.15} />
+                    <stop offset="95%" stopColor="#0ecb81" stopOpacity={0} />
+                  </linearGradient>
+                </defs>
+                <CartesianGrid strokeDasharray="3 3" stroke="#2b3139" />
+                <XAxis dataKey="time" tick={{ fill: '#848e9c', fontSize: 9 }} tickLine={false} axisLine={false} interval={7} />
+                <YAxis tick={{ fill: '#848e9c', fontSize: 9 }} tickLine={false} axisLine={false}
+                  tickFormatter={v => livePrice >= 10000 ? `$${((v as number) / 1000).toFixed(1)}k` : `$${(v as number).toFixed(1)}`}
+                  domain={['auto', 'auto']} width={48} />
+                <Tooltip
+                  contentStyle={{ background: '#1e2329', border: '1px solid #2b3139', borderRadius: 10, fontSize: 11 }}
+                  labelStyle={{ color: '#848e9c' }}
+                  itemStyle={{ color: '#0ecb81' }}
+                  formatter={(v: unknown) => [`$${(v as number).toFixed(2)}`, 'Price']}
+                />
+                <Area type="monotone" dataKey="price" stroke="#0ecb81" strokeWidth={2} fill="url(#priceGrad)" dot={false} />
+              </AreaChart>
+            </ResponsiveContainer>
+          ) : (
+            /* Candlestick chart using stacked bar chart */
+            <ResponsiveContainer width="100%" height={240}>
+              <BarChart data={candleData} margin={{ left: 0, right: 4, top: 4, bottom: 0 }} barCategoryGap="20%">
+                <CartesianGrid strokeDasharray="3 3" stroke="#2b3139" />
+                <XAxis dataKey="time" tick={{ fill: '#848e9c', fontSize: 9 }} tickLine={false} axisLine={false} interval={5} />
+                <YAxis tick={{ fill: '#848e9c', fontSize: 9 }} tickLine={false} axisLine={false}
+                  tickFormatter={v => livePrice >= 10000 ? `$${((v as number) / 1000).toFixed(1)}k` : `$${(v as number).toFixed(1)}`}
+                  domain={['auto', 'auto']} width={48} />
+                <Tooltip
+                  contentStyle={{ background: '#1e2329', border: '1px solid #2b3139', borderRadius: 10, fontSize: 11 }}
+                  labelStyle={{ color: '#848e9c' }}
+                  formatter={(v: unknown, name: unknown) => {
+                    const labels: Record<string, string> = { bodyStart: 'Open/Close from', body: 'Body size' }
+                    return [`$${(v as number).toFixed(2)}`, labels[name as string] || String(name)]
+                  }}
+                />
+                <Bar dataKey="bodyStart" stackId="candle" fill="transparent" stroke="none" />
+                <Bar dataKey="body" stackId="candle" radius={[1, 1, 1, 1]}>
+                  {candleData.map((entry, index) => (
+                    <Cell key={`cell-${index}`} fill={entry.color} />
+                  ))}
+                </Bar>
+              </BarChart>
+            </ResponsiveContainer>
+          )}
+
+          {/* Candle legend */}
+          {chartMode === 'candle' && (
+            <div className="flex items-center gap-4 mt-2 text-[10px] text-[#848e9c]">
+              <span className="flex items-center gap-1"><span className="w-3 h-2 rounded-sm bg-[#0ecb81] inline-block" /> Bullish</span>
+              <span className="flex items-center gap-1"><span className="w-3 h-2 rounded-sm bg-[#f6465d] inline-block" /> Bearish</span>
+              <span className="ml-auto italic">Simulated data · Connect exchange for live OHLCV</span>
+            </div>
+          )}
         </div>
 
         {/* Right column */}
@@ -226,9 +288,7 @@ export default function TradePage() {
                 <div>
                   <div className="flex justify-between mb-1.5">
                     <label className="text-xs text-[#848e9c]">Price (USDT)</label>
-                    <span className="text-[10px] text-[#0ecb81]">
-                      {isLive ? '● live' : '○ cached'}
-                    </span>
+                    <span className="text-[10px] text-[#0ecb81]">{isLive ? '● live' : '○ cached'}</span>
                   </div>
                   <input value={price} onChange={e => setPrice(e.target.value)}
                     className="w-full bg-[#0b0e11] border border-[#2b3139] focus:border-[#f0b90b] rounded-xl px-3 py-2.5 text-sm font-mono text-[#eaecef] focus:outline-none transition" />
@@ -247,7 +307,6 @@ export default function TradePage() {
                   className="w-full bg-[#0b0e11] border border-[#2b3139] focus:border-[#f0b90b] rounded-xl px-3 py-2.5 text-sm font-mono text-[#eaecef] focus:outline-none transition" />
               </div>
 
-              {/* Quick % */}
               <div className="grid grid-cols-4 gap-1">
                 {[25, 50, 75, 100].map(pct => (
                   <button key={pct} type="button"

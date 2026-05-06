@@ -1,39 +1,36 @@
 import { useEffect, useState, useCallback } from 'react'
-import { getBotStatus, startBot, stopBot, getBotTrades, updateBotParams } from '../lib/api'
+import { getBotStatus, startBot, stopBot, getBotTrades, updateBotParams, getBotPnlHistory } from '../lib/api'
 import { useAuthStore } from '../store/authStore'
 import toast from 'react-hot-toast'
-import { Bot, Play, Square, RefreshCw, TrendingUp, Activity, Zap, Brain, Settings, Save, ChevronDown } from 'lucide-react'
+import { Bot, Play, Square, RefreshCw, TrendingUp, Activity, Zap, Brain, Settings, Save, ChevronDown, BarChart2, AlertCircle } from 'lucide-react'
+import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceLine } from 'recharts'
 
 interface TradeLog {
-  id: number
-  ticker: string
-  action: string
-  price: number
-  qty: number
-  pnl: number | null
-  reason: string | null
-  paper: boolean
-  created_at: string
+  id: number; ticker: string; action: string; price: number; qty: number
+  pnl: number | null; reason: string | null; paper: boolean; created_at: string
 }
 
 interface BotStatus {
-  running: boolean
-  bots?: Record<string, unknown>
-  capital?: number
+  running: boolean; bots?: Record<string, unknown>; capital?: number
 }
+
+interface PnlPoint { date: string; pnl: number; cumulative: number }
 
 const TICKERS = ['BTC-USD', 'ETH-USD', 'SOL-USD', 'NVDA', 'AAPL', 'TSLA', 'BNB-USD', 'MSFT', 'GOOGL', 'AMZN']
 
 export default function BotsPage() {
   const { user } = useAuthStore()
+  const exchanges = user?.exchange_connections ?? []
 
   const [status, setStatus]               = useState<BotStatus>({ running: false })
   const [trades, setTrades]               = useState<TradeLog[]>([])
+  const [pnlHistory, setPnlHistory]       = useState<PnlPoint[]>([])
   const [loading, setLoading]             = useState(true)
   const [actionLoading, setActionLoading] = useState(false)
   const [showSettings, setShowSettings]   = useState(false)
   const [savingParams, setSavingParams]   = useState(false)
   const [showTickerDD, setShowTickerDD]   = useState(false)
+  const [showExchangeDD, setShowExchangeDD] = useState(false)
 
   const [params, setParams] = useState({
     ticker: 'BTC-USD',
@@ -41,11 +38,14 @@ export default function BotsPage() {
     initial_capital: user?.default_capital || 1000,
     risk_per_trade_pct: user?.risk_per_trade || 1.0,
     max_drawdown_pct: user?.max_drawdown || 10.0,
+    exchange_label: exchanges[0]?.label || '',
   })
 
   const fetchData = useCallback(async () => {
     try {
-      const [statusRes, tradesRes] = await Promise.allSettled([getBotStatus(), getBotTrades(50)])
+      const [statusRes, tradesRes, pnlRes] = await Promise.allSettled([
+        getBotStatus(), getBotTrades(50), getBotPnlHistory(30)
+      ])
       if (statusRes.status === 'fulfilled') {
         const d = statusRes.value.data
         setStatus({ running: d.running, bots: d.bots, capital: d.capital })
@@ -54,18 +54,13 @@ export default function BotsPage() {
         const d = tradesRes.value.data
         setTrades(Array.isArray(d) ? d : (d?.trades ?? []))
       }
-    } catch {
-      // silent
-    } finally {
-      setLoading(false)
-    }
+      if (pnlRes.status === 'fulfilled') {
+        setPnlHistory(pnlRes.value.data?.history ?? [])
+      }
+    } catch { /* silent */ } finally { setLoading(false) }
   }, [])
 
-  useEffect(() => {
-    fetchData()
-    const interval = setInterval(fetchData, 15000)
-    return () => clearInterval(interval)
-  }, [fetchData])
+  useEffect(() => { fetchData(); const id = setInterval(fetchData, 15000); return () => clearInterval(id) }, [fetchData])
 
   useEffect(() => {
     if (user) {
@@ -74,18 +69,23 @@ export default function BotsPage() {
         initial_capital: user.default_capital || p.initial_capital,
         risk_per_trade_pct: user.risk_per_trade || p.risk_per_trade_pct,
         max_drawdown_pct: user.max_drawdown || p.max_drawdown_pct,
+        exchange_label: p.exchange_label || exchanges[0]?.label || '',
       }))
     }
   }, [user])
 
   const handleStart = async () => {
+    if (!params.paper && exchanges.length === 0) {
+      toast.error('No exchange API key connected. Go to Profile → Exchanges to add one.')
+      return
+    }
     if (!params.paper && (!user?.balance_usdt || user.balance_usdt < params.initial_capital)) {
       toast.error(`Insufficient balance. Need $${params.initial_capital.toLocaleString()} USDT for live trading.`)
       return
     }
     setActionLoading(true)
     try {
-      const res = await startBot(params)
+      const res = await startBot({ ...params })
       setStatus(s => ({ ...s, running: true }))
       toast.success(res.data?.message || 'Bot started successfully')
       fetchData()
@@ -102,9 +102,7 @@ export default function BotsPage() {
       setStatus(s => ({ ...s, running: false }))
       toast.success('All bots stopped')
       fetchData()
-    } catch {
-      toast.error('Failed to stop bot')
-    } finally { setActionLoading(false) }
+    } catch { toast.error('Failed to stop bot') } finally { setActionLoading(false) }
   }
 
   const handleSaveParams = async () => {
@@ -117,9 +115,7 @@ export default function BotsPage() {
         preferred_tickers: [params.ticker],
       })
       toast.success('Bot parameters saved')
-    } catch {
-      toast.error('Failed to save parameters')
-    } finally { setSavingParams(false) }
+    } catch { toast.error('Failed to save parameters') } finally { setSavingParams(false) }
   }
 
   const pnlTrades     = trades.filter(t => t.pnl !== null)
@@ -144,11 +140,21 @@ export default function BotsPage() {
           </button>
           <button onClick={fetchData} disabled={loading}
             className="flex items-center gap-1.5 text-xs text-[#848e9c] hover:text-[#eaecef] transition">
-            <RefreshCw size={12} className={loading ? 'animate-spin' : ''} />
-            Refresh
+            <RefreshCw size={12} className={loading ? 'animate-spin' : ''} /> Refresh
           </button>
         </div>
       </div>
+
+      {/* API key warning if live mode but no exchange */}
+      {!params.paper && exchanges.length === 0 && (
+        <div className="flex items-start gap-2.5 bg-[#f6465d]/5 border border-[#f6465d]/20 rounded-xl px-4 py-3">
+          <AlertCircle size={14} className="text-[#f6465d] flex-shrink-0 mt-0.5" />
+          <p className="text-xs text-[#848e9c]">
+            <span className="text-[#f6465d] font-semibold">No exchange connected</span> — Live bots require an exchange API key.{' '}
+            <a href="/app/profile" className="text-[#f0b90b] underline">Add one in Profile → Exchanges</a>.
+          </p>
+        </div>
+      )}
 
       {/* Settings Panel */}
       {showSettings && (
@@ -191,12 +197,9 @@ export default function BotsPage() {
                 Initial Capital (USDT)
                 <span className="ml-2 text-[#4a5568]">Balance: ${(user?.balance_usdt ?? 0).toLocaleString('en-US', { maximumFractionDigits: 2 })}</span>
               </label>
-              <input
-                type="number" min={10} step={100}
-                value={params.initial_capital}
+              <input type="number" min={10} step={100} value={params.initial_capital}
                 onChange={e => setParams(p => ({ ...p, initial_capital: parseFloat(e.target.value) || 0 }))}
-                className="w-full bg-[#0b0e11] border border-[#2b3139] focus:border-[#f0b90b] rounded-xl px-3 py-2.5 text-sm font-mono text-[#eaecef] focus:outline-none transition"
-              />
+                className="w-full bg-[#0b0e11] border border-[#2b3139] focus:border-[#f0b90b] rounded-xl px-3 py-2.5 text-sm font-mono text-[#eaecef] focus:outline-none transition" />
             </div>
 
             {/* Mode */}
@@ -214,17 +217,45 @@ export default function BotsPage() {
               </div>
             </div>
 
+            {/* Exchange selector (shown for live mode) */}
+            {!params.paper && (
+              <div>
+                <label className="text-xs text-[#848e9c] mb-1.5 block">Exchange / API Key</label>
+                {exchanges.length === 0 ? (
+                  <div className="bg-[#0b0e11] border border-[#f6465d]/30 rounded-xl px-3 py-2.5 text-xs text-[#f6465d]">
+                    No exchange connected — <a href="/app/profile" className="underline">Add in Profile</a>
+                  </div>
+                ) : (
+                  <div className="relative">
+                    <button onClick={() => setShowExchangeDD(v => !v)}
+                      className="w-full flex items-center justify-between bg-[#0b0e11] border border-[#2b3139] focus:border-[#f0b90b] rounded-xl px-3 py-2.5 text-sm text-[#eaecef] transition">
+                      <span>{params.exchange_label || exchanges[0]?.label || 'Select exchange'}</span>
+                      <ChevronDown size={12} className="text-[#848e9c]" />
+                    </button>
+                    {showExchangeDD && (
+                      <div className="absolute top-full mt-1 left-0 right-0 bg-[#1e2329] border border-[#2b3139] rounded-xl z-20 shadow-xl overflow-hidden">
+                        {exchanges.map(ex => (
+                          <button key={ex.exchange} onClick={() => { setParams(p => ({ ...p, exchange_label: ex.label || ex.exchange })); setShowExchangeDD(false) }}
+                            className={`w-full text-left px-4 py-2.5 text-sm transition hover:bg-[#2b3139] ${params.exchange_label === (ex.label || ex.exchange) ? 'text-[#f0b90b] font-semibold' : 'text-[#eaecef]'}`}>
+                            <span className="font-medium">{ex.label || ex.exchange}</span>
+                            <span className="ml-2 text-xs text-[#4a5568]">{ex.api_key_masked}</span>
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
+
             {/* Risk per trade */}
             <div>
               <label className="text-xs text-[#848e9c] mb-1.5 block">
                 Risk Per Trade: <span className="text-[#f0b90b] font-semibold">{params.risk_per_trade_pct}%</span>
               </label>
-              <input
-                type="range" min={0.1} max={10} step={0.1}
-                value={params.risk_per_trade_pct}
+              <input type="range" min={0.1} max={10} step={0.1} value={params.risk_per_trade_pct}
                 onChange={e => setParams(p => ({ ...p, risk_per_trade_pct: parseFloat(e.target.value) }))}
-                className="w-full accent-[#f0b90b]"
-              />
+                className="w-full accent-[#f0b90b]" />
               <div className="flex justify-between text-[10px] text-[#4a5568] mt-1">
                 <span>0.1%</span><span>Conservative ← → Aggressive</span><span>10%</span>
               </div>
@@ -235,12 +266,9 @@ export default function BotsPage() {
               <label className="text-xs text-[#848e9c] mb-1.5 block">
                 Max Drawdown Stop: <span className="text-[#f6465d] font-semibold">{params.max_drawdown_pct}%</span>
               </label>
-              <input
-                type="range" min={1} max={50} step={1}
-                value={params.max_drawdown_pct}
+              <input type="range" min={1} max={50} step={1} value={params.max_drawdown_pct}
                 onChange={e => setParams(p => ({ ...p, max_drawdown_pct: parseFloat(e.target.value) }))}
-                className="w-full accent-[#f6465d]"
-              />
+                className="w-full accent-[#f6465d]" />
               <div className="flex justify-between text-[10px] text-[#4a5568] mt-1">
                 <span>1%</span><span>Auto-stop when loss hits this level</span><span>50%</span>
               </div>
@@ -302,6 +330,12 @@ export default function BotsPage() {
                 <span className="text-[#848e9c]">Capital</span>
                 <span className="text-[#0ecb81] font-mono font-medium">${params.initial_capital.toLocaleString()}</span>
               </div>
+              {!params.paper && params.exchange_label && (
+                <div className="flex justify-between text-xs">
+                  <span className="text-[#848e9c]">Exchange</span>
+                  <span className="text-[#eaecef] font-mono">{params.exchange_label}</span>
+                </div>
+              )}
               <div className="flex justify-between text-xs">
                 <span className="text-[#848e9c]">Risk/Trade</span>
                 <span className="text-[#eaecef] font-mono">{params.risk_per_trade_pct}%</span>
@@ -368,13 +402,62 @@ export default function BotsPage() {
         </div>
       </div>
 
+      {/* Real-time P&L chart */}
+      <div className="bg-[#161a1e] border border-[#2b3139] rounded-xl p-4">
+        <div className="flex items-center justify-between mb-4">
+          <div className="flex items-center gap-2">
+            <BarChart2 size={14} className="text-[#f0b90b]" />
+            <h3 className="text-sm font-semibold text-[#eaecef]">Cumulative P&L (30 days)</h3>
+          </div>
+          {pnlHistory.length > 0 && (
+            <span className={`text-xs font-bold font-mono ${pnlHistory[pnlHistory.length - 1]?.cumulative >= 0 ? 'text-[#0ecb81]' : 'text-[#f6465d]'}`}>
+              {pnlHistory[pnlHistory.length - 1]?.cumulative >= 0 ? '+' : ''}${pnlHistory[pnlHistory.length - 1]?.cumulative.toFixed(2)}
+            </span>
+          )}
+        </div>
+        {pnlHistory.length === 0 ? (
+          <div className="flex flex-col items-center justify-center h-36 gap-2">
+            <BarChart2 size={24} className="text-[#2b3139]" />
+            <p className="text-xs text-[#848e9c]">No P&L data yet — run bots to see your chart</p>
+          </div>
+        ) : (
+          <ResponsiveContainer width="100%" height={180}>
+            <AreaChart data={pnlHistory} margin={{ left: 0, right: 4, top: 4, bottom: 0 }}>
+              <defs>
+                <linearGradient id="pnlGrad" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="5%"  stopColor="#0ecb81" stopOpacity={0.2} />
+                  <stop offset="95%" stopColor="#0ecb81" stopOpacity={0} />
+                </linearGradient>
+                <linearGradient id="pnlGradRed" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="5%"  stopColor="#f6465d" stopOpacity={0.2} />
+                  <stop offset="95%" stopColor="#f6465d" stopOpacity={0} />
+                </linearGradient>
+              </defs>
+              <CartesianGrid strokeDasharray="3 3" stroke="#2b3139" />
+              <XAxis dataKey="date" tick={{ fill: '#848e9c', fontSize: 9 }} tickLine={false} axisLine={false} interval="preserveStartEnd" />
+              <YAxis tick={{ fill: '#848e9c', fontSize: 9 }} tickLine={false} axisLine={false}
+                tickFormatter={v => `$${(v as number).toFixed(0)}`} width={52} domain={['auto', 'auto']} />
+              <Tooltip
+                contentStyle={{ background: '#1e2329', border: '1px solid #2b3139', borderRadius: 10, fontSize: 11 }}
+                labelStyle={{ color: '#848e9c' }}
+                formatter={(v: unknown) => [`$${(v as number).toFixed(2)}`, 'Cumulative P&L']}
+              />
+              <ReferenceLine y={0} stroke="#2b3139" strokeDasharray="4 4" />
+              <Area type="monotone" dataKey="cumulative"
+                stroke={totalPnl >= 0 ? '#0ecb81' : '#f6465d'} strokeWidth={2}
+                fill={totalPnl >= 0 ? 'url(#pnlGrad)' : 'url(#pnlGradRed)'} dot={false} />
+            </AreaChart>
+          </ResponsiveContainer>
+        )}
+      </div>
+
       {/* AI training notice */}
       <div className="flex items-start gap-3 bg-[#f0b90b]/5 border border-[#f0b90b]/20 rounded-xl px-4 py-3">
         <Brain size={16} className="text-[#f0b90b] flex-shrink-0 mt-0.5" />
         <p className="text-xs text-[#848e9c]">
           <span className="text-[#f0b90b] font-semibold">AI Signal Engine:</span> The bot monitors trend analysis signals every 30 seconds.
           It buys on BULLISH signals with &gt;65% confidence and sells on BEARISH signals or when stop-loss is triggered.
-          Configure your parameters above before starting.
+          Live mode requires an exchange API key. Configure your parameters above before starting.
         </p>
       </div>
 

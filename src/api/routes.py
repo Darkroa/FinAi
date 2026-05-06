@@ -20,7 +20,7 @@ from src.users.bot_manager import get_user_bot_manager
 from src.auth.dependencies import get_current_user, require_admin
 from src.database.models import (
     User, APIKey, Transaction, UserMoney, Event,
-    Notification, WalletConfig, SupportTicket, SupportMessage, TradeLog
+    Notification, WalletConfig, SupportTicket, SupportMessage, TradeLog, PriceAlert
 )
 
 # ===================== Pydantic Schemas =====================
@@ -154,6 +154,22 @@ class WhatsAppCodeRequest(BaseModel):
 
 class WhatsAppVerifyRequest(BaseModel):
     code: str
+
+class PriceAlertCreate(BaseModel):
+    symbol: str
+    target_price: float
+    direction: str
+    notify_browser: bool = True
+    notify_telegram: bool = False
+    notify_whatsapp: bool = False
+
+class BotStartRequestV2(BaseModel):
+    ticker: str = "BTC-USD"
+    paper: bool = True
+    initial_capital: float = 1000.0
+    risk_per_trade_pct: float = 1.0
+    max_drawdown_pct: float = 10.0
+    exchange_label: Optional[str] = None
 
 
 # ===================== Router =====================
@@ -1050,10 +1066,19 @@ async def save_webhook_settings(data: WebhookSettingsRequest, current_user=Depen
 # ===================== JWT-Authenticated Bot Routes =====================
 
 @router.post("/bots/start")
-async def jwt_start_bot(body: BotStartRequest, current_user=Depends(get_current_user), db: Session = Depends(get_db)):
+async def jwt_start_bot(body: BotStartRequestV2, current_user=Depends(get_current_user), db: Session = Depends(get_db)):
     user = db.query(User).filter(User.email == current_user["email"]).first()
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
+    # API key guard: live bots require an exchange connection
+    if not body.paper:
+        connections = user.exchange_connections or []
+        if not connections:
+            raise HTTPException(status_code=400, detail="No exchange API key connected. Go to Profile → Exchanges to add one before running a live bot.")
+        if body.exchange_label:
+            matched = [c for c in connections if c.get("label") == body.exchange_label or c.get("exchange") == body.exchange_label]
+            if not matched:
+                raise HTTPException(status_code=400, detail=f"Exchange '{body.exchange_label}' not found in your connections.")
     capital = body.initial_capital if body.initial_capital > 0 else (user.default_capital or 1000.0)
     if not body.paper and (user.balance_usdt or 0) < capital:
         raise HTTPException(status_code=400, detail=f"Insufficient balance. Need ${capital:,.2f} USDT.")
@@ -1299,3 +1324,150 @@ async def get_celery_task_status(task_id: str):
         except Exception as e:
             response["result"] = f"Error: {str(e)}"
     return response
+
+
+# ===================== Today's P&L =====================
+@router.get("/stats/today-pnl")
+async def get_today_pnl(current_user=Depends(get_current_user), db: Session = Depends(get_db)):
+    uid = current_user["id"] if isinstance(current_user, dict) else current_user.id
+    today_start = datetime.utcnow().replace(hour=0, minute=0, second=0, microsecond=0)
+    today_trades = (
+        db.query(TradeLog)
+        .filter(TradeLog.user_id == uid, TradeLog.created_at >= today_start, TradeLog.pnl.isnot(None))
+        .all()
+    )
+    total_pnl = sum(t.pnl for t in today_trades if t.pnl is not None)
+    user = db.query(User).filter(User.id == uid).first()
+    balance = user.balance_usdt or 0
+    pct = (total_pnl / balance * 100) if balance > 0 else 0
+    return {
+        "today_pnl": round(total_pnl, 2),
+        "today_pct": round(pct, 2),
+        "trade_count": len(today_trades),
+    }
+
+
+# ===================== Cumulative P&L for bots chart =====================
+@router.get("/bots/pnl-history")
+async def get_bot_pnl_history(days: int = 30, current_user=Depends(get_current_user), db: Session = Depends(get_db)):
+    uid = current_user["id"] if isinstance(current_user, dict) else current_user.id
+    since = datetime.utcnow() - timedelta(days=days)
+    trades = (
+        db.query(TradeLog)
+        .filter(TradeLog.user_id == uid, TradeLog.created_at >= since, TradeLog.pnl.isnot(None))
+        .order_by(TradeLog.created_at.asc())
+        .all()
+    )
+    cumulative = 0.0
+    chart = []
+    for t in trades:
+        cumulative += t.pnl or 0
+        chart.append({
+            "date": t.created_at.strftime("%b %d") if t.created_at else "",
+            "pnl": round(t.pnl or 0, 2),
+            "cumulative": round(cumulative, 2),
+        })
+    return {"history": chart, "total_pnl": round(cumulative, 2), "trade_count": len(trades)}
+
+
+# ===================== Price Alerts =====================
+@router.get("/alerts")
+async def list_price_alerts(current_user=Depends(get_current_user), db: Session = Depends(get_db)):
+    uid = current_user["id"] if isinstance(current_user, dict) else current_user.id
+    alerts = db.query(PriceAlert).filter(PriceAlert.user_id == uid).order_by(PriceAlert.created_at.desc()).all()
+    return [{"id": a.id, "symbol": a.symbol, "target_price": a.target_price, "direction": a.direction,
+             "is_active": a.is_active, "notify_browser": a.notify_browser, "notify_telegram": a.notify_telegram,
+             "notify_whatsapp": a.notify_whatsapp, "triggered_at": a.triggered_at.isoformat() if a.triggered_at else None,
+             "created_at": a.created_at.isoformat()} for a in alerts]
+
+
+@router.post("/alerts")
+async def create_price_alert(data: PriceAlertCreate, current_user=Depends(get_current_user), db: Session = Depends(get_db)):
+    uid = current_user["id"] if isinstance(current_user, dict) else current_user.id
+    if data.direction not in ("above", "below"):
+        raise HTTPException(status_code=400, detail="direction must be 'above' or 'below'")
+    alert = PriceAlert(
+        user_id=uid,
+        symbol=data.symbol.upper(),
+        target_price=data.target_price,
+        direction=data.direction,
+        notify_browser=data.notify_browser,
+        notify_telegram=data.notify_telegram,
+        notify_whatsapp=data.notify_whatsapp,
+    )
+    db.add(alert)
+    db.commit()
+    db.refresh(alert)
+    return {"id": alert.id, "symbol": alert.symbol, "target_price": alert.target_price,
+            "direction": alert.direction, "is_active": alert.is_active, "created_at": alert.created_at.isoformat()}
+
+
+@router.delete("/alerts/{alert_id}")
+async def delete_price_alert(alert_id: int, current_user=Depends(get_current_user), db: Session = Depends(get_db)):
+    uid = current_user["id"] if isinstance(current_user, dict) else current_user.id
+    alert = db.query(PriceAlert).filter(PriceAlert.id == alert_id, PriceAlert.user_id == uid).first()
+    if not alert:
+        raise HTTPException(status_code=404, detail="Alert not found")
+    db.delete(alert)
+    db.commit()
+    return {"status": "deleted"}
+
+
+@router.post("/alerts/{alert_id}/toggle")
+async def toggle_price_alert(alert_id: int, current_user=Depends(get_current_user), db: Session = Depends(get_db)):
+    uid = current_user["id"] if isinstance(current_user, dict) else current_user.id
+    alert = db.query(PriceAlert).filter(PriceAlert.id == alert_id, PriceAlert.user_id == uid).first()
+    if not alert:
+        raise HTTPException(status_code=404, detail="Alert not found")
+    alert.is_active = not alert.is_active
+    db.commit()
+    return {"id": alert.id, "is_active": alert.is_active}
+
+
+@router.post("/alerts/check")
+async def check_price_alerts(db: Session = Depends(get_db)):
+    """Background-callable: check all active alerts against current prices."""
+    import httpx
+    active = db.query(PriceAlert).filter(PriceAlert.is_active == True).all()
+    if not active:
+        return {"checked": 0, "triggered": 0}
+    symbols = list({a.symbol for a in active})
+    prices: dict = {}
+    try:
+        async with httpx.AsyncClient(timeout=5) as client:
+            r = await client.get("https://api.coingecko.com/api/v3/simple/price",
+                                 params={"ids": "bitcoin,ethereum,binancecoin,solana", "vs_currencies": "usd"})
+            if r.status_code == 200:
+                raw = r.json()
+                prices = {"BTC/USDT": raw.get("bitcoin", {}).get("usd", 0),
+                          "ETH/USDT": raw.get("ethereum", {}).get("usd", 0),
+                          "BNB/USDT": raw.get("binancecoin", {}).get("usd", 0),
+                          "SOL/USDT": raw.get("solana", {}).get("usd", 0)}
+    except Exception:
+        pass
+    triggered = 0
+    for alert in active:
+        current = prices.get(alert.symbol, 0)
+        if current == 0:
+            continue
+        fired = (alert.direction == "above" and current >= alert.target_price) or \
+                (alert.direction == "below" and current <= alert.target_price)
+        if fired:
+            alert.is_active = False
+            alert.triggered_at = datetime.utcnow()
+            triggered += 1
+            user = db.query(User).filter(User.id == alert.user_id).first()
+            if user and alert.notify_telegram:
+                prefs = dict(user.notification_preferences or {})
+                tok = prefs.get("telegram_bot_token")
+                cid = prefs.get("telegram_chat_id")
+                if tok and cid:
+                    try:
+                        import httpx as _hx
+                        async with _hx.AsyncClient(timeout=5) as c:
+                            await c.post(f"https://api.telegram.org/bot{tok}/sendMessage",
+                                         json={"chat_id": cid, "text": f"🔔 FinAi Price Alert\n{alert.symbol} hit ${alert.target_price:,.2f} ({alert.direction})\nCurrent: ${current:,.2f}"})
+                    except Exception:
+                        pass
+    db.commit()
+    return {"checked": len(active), "triggered": triggered}
