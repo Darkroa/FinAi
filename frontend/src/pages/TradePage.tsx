@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import {
   ArrowUpDown, TrendingUp, TrendingDown, ChevronDown,
-  Wifi, WifiOff, BarChart2, Activity, FlaskConical, Zap, AlertTriangle,
+  Wifi, WifiOff, BarChart2, Activity, Link2,
 } from 'lucide-react'
 import {
   AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip,
@@ -14,9 +14,7 @@ import { executeTrade } from '../lib/api'
 
 const PAIRS = ['BTC/USDT', 'ETH/USDT', 'BNB/USDT', 'SOL/USDT']
 const TF    = ['1m', '5m', '15m', '1h', '4h', '1D']
-
 type ChartMode = 'line' | 'candle'
-type TradeMode = 'paper' | 'live'
 
 const FALLBACKS: Record<string, { price: number; change: number }> = {
   'BTC/USDT': { price: 81000, change: 2.4 },
@@ -36,17 +34,11 @@ function generateCandleData(base: number) {
   return Array.from({ length: 24 }, (_, i) => {
     const open  = base + Math.sin(i * 0.6) * (base * 0.02) + (Math.random() - 0.5) * (base * 0.01)
     const close = open + (Math.random() - 0.5) * (base * 0.015)
-    const high  = Math.max(open, close) + Math.random() * (base * 0.008)
-    const low   = Math.min(open, close) - Math.random() * (base * 0.008)
     const bullish = close >= open
     return {
-      time:     `${i}:00`,
-      open:     +open.toFixed(2),
-      close:    +close.toFixed(2),
-      high:     +high.toFixed(2),
-      low:      +low.toFixed(2),
-      body:     +Math.abs(close - open).toFixed(2),
-      bodyStart:+Math.min(open, close).toFixed(2),
+      time:      `${i}:00`,
+      body:      +Math.abs(close - open).toFixed(2),
+      bodyStart: +Math.min(open, close).toFixed(2),
       bullish,
       color: bullish ? '#0ecb81' : '#f6465d',
     }
@@ -80,18 +72,19 @@ export default function TradePage() {
   const [pair, setPair]           = useState('BTC/USDT')
   const [showPairs, setShowP]     = useState(false)
   const [chartMode, setChartMode] = useState<ChartMode>('line')
-  const [tradeMode, setTradeMode] = useState<TradeMode>('paper')
-  const [selExchange, setSelExch] = useState<string>('')
+  const [selExchange, setSelExch] = useState<string>('__balance__')
   const [orderLoading, setLoading]= useState(false)
 
-  const exchanges: ExchangeConn[] = (user as unknown as { exchange_connections?: ExchangeConn[] })?.exchange_connections ?? []
+  const exchanges: ExchangeConn[] =
+    (user as unknown as { exchange_connections?: ExchangeConn[] })?.exchange_connections ?? []
 
-  // Auto-select first exchange when switching to live
+  // Set default to first exchange if available, else wallet balance
   useEffect(() => {
-    if (tradeMode === 'live' && exchanges.length > 0 && !selExchange) {
+    if (exchanges.length > 0 && selExchange === '__balance__') {
       setSelExch(exchanges[0].label)
     }
-  }, [tradeMode, exchanges, selExchange])
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [exchanges.length])
 
   const getPriceData = (p: string) => {
     const item = tickerItems.find(i => i.symbol === p)
@@ -129,23 +122,17 @@ export default function TradePage() {
   const high24      = livePrice > 0 ? (livePrice * 1.022).toLocaleString('en-US', { maximumFractionDigits: 2 }) : '—'
   const low24       = livePrice > 0 ? (livePrice * 0.978).toLocaleString('en-US', { maximumFractionDigits: 2 }) : '—'
 
+  const usingBalance  = selExchange === '__balance__'
+  const selectedConn  = exchanges.find(e => e.label === selExchange)
+
   const handleTrade = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (!qty || qty <= 0) return toast.error('Enter a valid amount')
-    if (!numPrice || numPrice <= 0) return toast.error('Price must be greater than 0')
+    if (!qty || qty <= 0)               return toast.error('Enter a valid amount')
+    if (!numPrice || numPrice <= 0)     return toast.error('Price must be greater than 0')
 
-    if (tradeMode === 'paper') {
-      const ttl = numPrice * qty
-      if (side === 'buy' && ttl > userBalance)
-        return toast.error(`Insufficient balance. You have $${userBalance.toFixed(2)} USDT`)
-    }
-
-    if (tradeMode === 'live') {
-      if (exchanges.length === 0)
-        return toast.error('No exchange connected. Go to Profile → FinAPI to add one.')
-      if (!selExchange)
-        return toast.error('Select an exchange to trade on')
-    }
+    // Balance trade: validate funds
+    if (usingBalance && side === 'buy' && numPrice * qty > userBalance)
+      return toast.error(`Insufficient balance. You have $${userBalance.toFixed(2)} USDT`)
 
     setLoading(true)
     try {
@@ -155,20 +142,21 @@ export default function TradePage() {
         order_type: orderType,
         price: numPrice,
         amount: qty,
-        paper: tradeMode === 'paper',
-        exchange_label: tradeMode === 'live' ? selExchange : undefined,
+        paper: false,
+        exchange_label: usingBalance ? undefined : selExchange,
       })
       const d = res.data
-      const modeLabel = tradeMode === 'paper' ? '📄 Paper' : '⚡ Live'
+      const exLabel = usingBalance
+        ? 'Platform Balance'
+        : selectedConn?.exchange?.toUpperCase() ?? selExchange
+
       toast.success(
-        `${modeLabel} ${side === 'buy' ? '▲ Buy' : '▼ Sell'} ${qty} ${asset} @ $${numPrice.toLocaleString()} — Filled`,
+        `${side === 'buy' ? '▲ Buy' : '▼ Sell'} ${qty} ${asset} @ $${numPrice.toLocaleString()} via ${exLabel} — Filled`,
         { duration: 4000 }
       )
-      // Live mode exchange error warning
       if (d?.exchange_error) {
-        toast.error(`Exchange order failed: ${d.exchange_error}`, { duration: 6000 })
+        toast.error(`Exchange error: ${d.exchange_error}`, { duration: 7000 })
       }
-      // Update balance in store after paper trade
       if (d?.trade?.new_balance !== undefined) {
         useAuthStore.getState().setUser({
           ...useAuthStore.getState().user!,
@@ -184,9 +172,9 @@ export default function TradePage() {
 
   return (
     <div className="space-y-4">
-      {/* Header row */}
+
+      {/* Header */}
       <div className="flex flex-wrap items-center gap-3">
-        {/* Pair selector */}
         <div className="relative">
           <button onClick={() => setShowP(v => !v)}
             className="flex items-center gap-2 bg-[#161a1e] border border-[#2b3139] hover:border-[#f0b90b]/40 rounded-xl px-3.5 py-2 transition">
@@ -205,7 +193,6 @@ export default function TradePage() {
           )}
         </div>
 
-        {/* Price & change */}
         <div className="flex items-center gap-2">
           <span className="text-xl sm:text-2xl font-bold font-mono text-[#eaecef]">
             ${livePrice > 0 ? livePrice.toLocaleString('en-US', { maximumFractionDigits: 2 }) : '—'}
@@ -220,11 +207,11 @@ export default function TradePage() {
           </span>
         </div>
 
-        {/* Stats */}
         <div className="ml-auto flex flex-wrap gap-3 text-xs text-[#848e9c]">
           <div><span className="block text-[10px]">24h High</span><span className="text-[#eaecef] font-mono font-medium">${high24}</span></div>
           <div><span className="block text-[10px]">24h Low</span><span className="text-[#eaecef] font-mono font-medium">${low24}</span></div>
-          <div className="hidden sm:block"><span className="block text-[10px]">Balance</span>
+          <div className="hidden sm:block">
+            <span className="block text-[10px]">Balance</span>
             <span className="text-[#f0b90b] font-mono font-medium">${userBalance.toLocaleString('en-US', { maximumFractionDigits: 2 })} USDT</span>
           </div>
         </div>
@@ -292,7 +279,7 @@ export default function TradePage() {
                   }} />
                 <Bar dataKey="bodyStart" stackId="candle" fill="transparent" stroke="none" />
                 <Bar dataKey="body" stackId="candle" radius={[1,1,1,1]}>
-                  {candleData.map((entry, i) => <Cell key={i} fill={entry.color} />)}
+                  {candleData.map((_, i) => <Cell key={i} fill={candleData[i].color} />)}
                 </Bar>
               </BarChart>
             </ResponsiveContainer>
@@ -302,76 +289,36 @@ export default function TradePage() {
             <div className="flex items-center gap-4 mt-2 text-[10px] text-[#848e9c]">
               <span className="flex items-center gap-1"><span className="w-3 h-2 rounded-sm bg-[#0ecb81] inline-block" /> Bullish</span>
               <span className="flex items-center gap-1"><span className="w-3 h-2 rounded-sm bg-[#f6465d] inline-block" /> Bearish</span>
-              <span className="ml-auto italic">Simulated OHLCV · Connect exchange for live data</span>
             </div>
           )}
         </div>
 
-        {/* Right column */}
+        {/* Right column — order form */}
         <div className="space-y-4">
-          {/* Order form */}
           <div className="bg-[#161a1e] border border-[#2b3139] rounded-xl p-4 space-y-3">
 
-            {/* ── Paper / Live toggle ── */}
-            <div className="grid grid-cols-2 gap-1 bg-[#0b0e11] p-1 rounded-xl">
-              <button onClick={() => setTradeMode('paper')}
-                className={`flex items-center justify-center gap-1.5 py-2 rounded-lg text-xs font-bold transition ${
-                  tradeMode === 'paper'
-                    ? 'bg-[#2b3139] text-[#f0b90b]'
-                    : 'text-[#848e9c] hover:text-[#eaecef]'
-                }`}>
-                <FlaskConical size={12} /> Paper
-              </button>
-              <button onClick={() => setTradeMode('live')}
-                className={`flex items-center justify-center gap-1.5 py-2 rounded-lg text-xs font-bold transition ${
-                  tradeMode === 'live'
-                    ? 'bg-[#2b3139] text-[#0ecb81]'
-                    : 'text-[#848e9c] hover:text-[#eaecef]'
-                }`}>
-                <Zap size={12} /> Live
-              </button>
+            {/* Route selector: Balance or Exchange API */}
+            <div>
+              <label className="text-[10px] text-[#848e9c] uppercase tracking-widest mb-1.5 block">Route via</label>
+              <select
+                value={selExchange}
+                onChange={e => setSelExch(e.target.value)}
+                className="w-full bg-[#0b0e11] border border-[#2b3139] focus:border-[#f0b90b] rounded-xl px-3 py-2.5 text-xs text-[#eaecef] focus:outline-none transition">
+                <option value="__balance__">Platform Balance (internal)</option>
+                {exchanges.map(ex => (
+                  <option key={ex.label} value={ex.label}>
+                    {ex.exchange.toUpperCase()} — {ex.label}
+                  </option>
+                ))}
+              </select>
+              <p className="text-[9px] text-[#848e9c] mt-1 flex items-center gap-1">
+                {usingBalance ? (
+                  <>Platform wallet · fills update your USDT balance</>
+                ) : (
+                  <><Link2 size={9} /> Live order on {selectedConn?.exchange?.toUpperCase()} via API key</>
+                )}
+              </p>
             </div>
-
-            {/* Paper mode info */}
-            {tradeMode === 'paper' && (
-              <div className="flex items-start gap-1.5 bg-[#f0b90b]/5 border border-[#f0b90b]/15 rounded-lg px-3 py-2">
-                <FlaskConical size={11} className="text-[#f0b90b] flex-shrink-0 mt-0.5" />
-                <p className="text-[10px] text-[#848e9c] leading-relaxed">
-                  Paper trading — fills are simulated and deducted from your USDT balance. No real funds are used.
-                </p>
-              </div>
-            )}
-
-            {/* Live mode: exchange selector or warning */}
-            {tradeMode === 'live' && (
-              exchanges.length === 0 ? (
-                <div className="flex items-start gap-1.5 bg-[#f6465d]/5 border border-[#f6465d]/20 rounded-lg px-3 py-2.5">
-                  <AlertTriangle size={11} className="text-[#f6465d] flex-shrink-0 mt-0.5" />
-                  <p className="text-[10px] text-[#848e9c] leading-relaxed">
-                    No exchange connected.{' '}
-                    <a href="/app/profile" className="text-[#f0b90b] underline">Go to Profile → FinAPI</a>{' '}
-                    to add your exchange API key, then return here.
-                  </p>
-                </div>
-              ) : (
-                <div>
-                  <label className="text-[10px] text-[#848e9c] mb-1 block">Exchange</label>
-                  <select
-                    value={selExchange}
-                    onChange={e => setSelExch(e.target.value)}
-                    className="w-full bg-[#0b0e11] border border-[#0ecb81]/30 rounded-xl px-3 py-2 text-xs text-[#eaecef] focus:outline-none focus:border-[#0ecb81] transition">
-                    {exchanges.map(ex => (
-                      <option key={ex.label} value={ex.label}>
-                        {ex.exchange.toUpperCase()} — {ex.label} ({ex.api_key_masked})
-                      </option>
-                    ))}
-                  </select>
-                  <p className="text-[9px] text-[#848e9c] mt-1">
-                    Orders will be placed directly on {selExchange ? exchanges.find(e => e.label === selExchange)?.exchange?.toUpperCase() : 'your exchange'}.
-                  </p>
-                </div>
-              )
-            )}
 
             {/* Buy / Sell */}
             <div className="grid grid-cols-2 gap-1 bg-[#0b0e11] p-1 rounded-xl">
@@ -420,7 +367,7 @@ export default function TradePage() {
                   className="w-full bg-[#0b0e11] border border-[#2b3139] focus:border-[#f0b90b] rounded-xl px-3 py-2.5 text-sm font-mono text-[#eaecef] focus:outline-none transition" />
               </div>
 
-              {/* % quick fill */}
+              {/* % quick-fill */}
               <div className="grid grid-cols-4 gap-1">
                 {[25, 50, 75, 100].map(pct => (
                   <button key={pct} type="button"
@@ -445,17 +392,15 @@ export default function TradePage() {
               </div>
 
               {/* Submit */}
-              <button type="submit"
-                disabled={orderLoading || (tradeMode === 'live' && exchanges.length === 0)}
-                className={`w-full py-3.5 rounded-xl text-sm font-bold transition-all active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed ${
+              <button type="submit" disabled={orderLoading}
+                className={`w-full py-3.5 rounded-xl text-sm font-bold transition-all active:scale-[0.98] disabled:opacity-60 ${
                   side === 'buy'
                     ? 'bg-[#0ecb81] hover:bg-[#0ab56f] text-black shadow-lg shadow-[#0ecb81]/20'
                     : 'bg-[#f6465d] hover:bg-[#d93d51] text-white shadow-lg shadow-[#f6465d]/20'
                 }`}>
                 {orderLoading
                   ? 'Placing order...'
-                  : `${tradeMode === 'paper' ? '📄' : '⚡'} ${side === 'buy' ? 'Buy' : 'Sell'} ${asset}`
-                }
+                  : `${side === 'buy' ? 'Buy' : 'Sell'} ${asset}`}
               </button>
             </form>
           </div>

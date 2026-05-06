@@ -1176,38 +1176,28 @@ async def execute_trade(body: TradeExecuteRequest, current_user=Depends(get_curr
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
 
-    # Live mode: must have a connected exchange selected
-    if not body.paper:
+    # Resolve exchange connection if label provided
+    conn = None
+    if body.exchange_label:
         connections = user.exchange_connections or []
-        if not connections:
-            raise HTTPException(
-                status_code=400,
-                detail="No exchange connected. Go to Profile → FinAPI to add an exchange API key, or switch to Paper mode."
-            )
-        if body.exchange_label:
-            conn = next((c for c in connections if c.get("label") == body.exchange_label), None)
-            if not conn:
-                raise HTTPException(status_code=400, detail=f"Exchange '{body.exchange_label}' not found in your connections.")
-        else:
-            conn = connections[0]
-    else:
-        conn = None
+        conn = next((c for c in connections if c.get("label") == body.exchange_label), None)
+        if not conn:
+            raise HTTPException(status_code=400, detail=f"Exchange '{body.exchange_label}' not found in your connections.")
 
     total_cost = round(body.price * body.amount, 8)
 
-    # Paper mode: deduct/add from USDT wallet balance
-    if body.paper:
-        if body.side == "buy":
-            if (user.balance_usdt or 0) < total_cost:
-                raise HTTPException(status_code=400, detail=f"Insufficient balance. Need ${total_cost:,.2f} USDT.")
-            user.balance_usdt = round((user.balance_usdt or 0) - total_cost, 8)
-        elif body.side == "sell":
-            user.balance_usdt = round((user.balance_usdt or 0) + total_cost, 8)
-        else:
-            raise HTTPException(status_code=400, detail="side must be 'buy' or 'sell'")
+    # Always update platform balance (whether using internal balance or routing to exchange)
+    if body.side == "buy":
+        if (user.balance_usdt or 0) < total_cost:
+            raise HTTPException(status_code=400, detail=f"Insufficient balance. Need ${total_cost:,.2f} USDT.")
+        user.balance_usdt = round((user.balance_usdt or 0) - total_cost, 8)
+    elif body.side == "sell":
+        user.balance_usdt = round((user.balance_usdt or 0) + total_cost, 8)
+    else:
+        raise HTTPException(status_code=400, detail="side must be 'buy' or 'sell'")
 
     ticker = body.pair.replace("/", "-").replace("_", "-")
-    exchange_name = "paper" if body.paper else conn.get("exchange", "live")
+    exchange_name = conn.get("exchange", "live") if conn else "internal"
 
     log = TradeLog(
         user_id=user.id,
@@ -1216,8 +1206,8 @@ async def execute_trade(body: TradeExecuteRequest, current_user=Depends(get_curr
         price=body.price,
         qty=body.amount,
         pnl=None,
-        reason=f"{body.order_type} {'paper' if body.paper else 'live'} order via terminal",
-        paper=body.paper,
+        reason=f"{body.order_type} order via trading terminal ({exchange_name})",
+        paper=False,
         exchange=exchange_name,
     )
     db.add(log)
@@ -1227,8 +1217,8 @@ async def execute_trade(body: TradeExecuteRequest, current_user=Depends(get_curr
     exchange_result = None
     exchange_error = None
 
-    # Live mode: attempt to place order on the connected exchange
-    if not body.paper and conn:
+    # If a live exchange API key is selected, also place the real order there
+    if conn:
         api_key_val = conn.get("api_key", "")
         secret_val = conn.get("api_secret", "")
         passphrase = conn.get("passphrase", "")
@@ -1242,22 +1232,21 @@ async def execute_trade(body: TradeExecuteRequest, current_user=Depends(get_curr
             if passphrase:
                 creds["password"] = passphrase
             exchange_obj = ex_class(creds)
-            symbol = body.pair  # e.g. BTC/USDT
             side_str = body.side.lower()
             if body.order_type == "market":
-                order = exchange_obj.create_market_order(symbol, side_str, body.amount)
+                order = exchange_obj.create_market_order(body.pair, side_str, body.amount)
             else:
-                order = exchange_obj.create_limit_order(symbol, side_str, body.amount, body.price)
+                order = exchange_obj.create_limit_order(body.pair, side_str, body.amount, body.price)
             exchange_result = {"order_id": str(order.get("id", "")), "status": order.get("status", "submitted")}
             log.exchange = exchange_id
             db.commit()
         except Exception as e:
             exchange_error = str(e)
-            logger.warning(f"Live order failed for {user.email} on {exchange_id}: {e}")
+            logger.warning(f"Exchange order failed for {user.email} on {exchange_id}: {e}")
 
     return {
         "status": "executed",
-        "paper": body.paper,
+        "routed_via": exchange_name,
         "trade": {
             "id": log.id,
             "ticker": log.ticker,
