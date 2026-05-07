@@ -5,7 +5,7 @@ import {
   LayoutDashboard, TrendingUp, BarChart2, Wallet,
   Settings, ShieldCheck, LogOut, Zap, Bell, Bot,
   X, ChevronDown, User, Receipt, MessageSquare, Menu, CalendarDays,
-  Sun, Moon
+  Sun, Moon, Lightbulb
 } from 'lucide-react'
 import { cn } from '../lib/utils'
 import { getUserNotifications, markAllNotificationsRead } from '../lib/api'
@@ -14,7 +14,8 @@ import FloatingAI from '../components/FloatingAI'
 
 const navItems = [
   { to: '/app/dashboard',    icon: LayoutDashboard, label: 'Dashboard' },
-  { to: '/app/markets',      icon: BarChart2,       label: 'Markets'   },
+  { to: '/app/markets',          icon: BarChart2,       label: 'Markets'        },
+  { to: '/app/recommendations',  icon: Lightbulb,       label: 'Signals'        },
   { to: '/app/trade',        icon: TrendingUp,      label: 'Trade'     },
   { to: '/app/wallet',       icon: Wallet,          label: 'Wallet'    },
   { to: '/app/transactions', icon: Receipt,         label: 'History'   },
