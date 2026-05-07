@@ -1,12 +1,12 @@
 import { useEffect, useState, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuthStore } from '../store/authStore'
-import { getEvents, getBotStatus, getTodayPnl } from '../lib/api'
-import { useTickerPrices } from '../hooks/useTickerPrices'
+import { getEvents, getBotStatus, getTodayPnl, getBotTrades } from '../lib/api'
+import { useTickerPrices, useLivePricesMap } from '../hooks/useTickerPrices'
 import {
   TrendingUp, TrendingDown, Zap, Activity,
   ArrowUpRight, Bot, BarChart2, RefreshCw, Eye, EyeOff,
-  ArrowRight, Bitcoin
+  ArrowRight, Bitcoin, DollarSign
 } from 'lucide-react'
 
 function getGreeting() {
@@ -16,16 +16,26 @@ function getGreeting() {
   return 'Good Evening'
 }
 
+interface TradeLog {
+  id: number; ticker: string; action: string; price: number; qty: number
+  pnl: number | null; created_at: string; exchange: string
+}
+
 export default function DashboardPage() {
   const navigate = useNavigate()
   const { user } = useAuthStore()
   const tickerItems = useTickerPrices(60000)
+  const { map: priceMap, refetch: refetchPrices } = useLivePricesMap(60000)
+
   const [events, setEvents] = useState<{ id: number; description: string; event_type: string; tickers_affected: string[]; created_at: string }[]>([])
   const [botRunning, setBotRunning] = useState(false)
   const [hideBalance, setHideBalance] = useState(false)
   const [btcToggle, setBtcToggle] = useState<'BTC' | 'ETH'>('BTC')
   const [todayPnl, setTodayPnl] = useState(0)
   const [todayPct, setTodayPct] = useState(0)
+  const [trades, setTrades] = useState<TradeLog[]>([])
+  const [unrealizedPnl, setUnrealizedPnl] = useState(0)
+  const [openPositions, setOpenPositions] = useState(0)
 
   const balance = user?.balance_usdt ?? 0
 
@@ -39,9 +49,44 @@ export default function DashboardPage() {
   const ethChange = ethItem  ? parseChange(ethItem.change) : 0
   const priceLoading = !btcItem?.live
 
-  const displayPrice  = (btcToggle === 'BTC' ? btcPrice  : ethPrice)  || (btcToggle === 'BTC' ? 67432.10 : 3521.80)
+  const displayPrice  = (btcToggle === 'BTC' ? btcPrice  : ethPrice)  || (btcToggle === 'BTC' ? 97000 : 3200)
   const displayChange = (btcToggle === 'BTC' ? btcChange : ethChange) || (btcToggle === 'BTC' ? 2.4 : 1.8)
   const btcEquiv      = displayPrice > 0 ? (balance / displayPrice).toFixed(6) : '—'
+
+  // ── Compute unrealized P&L from open buy positions vs current prices ──
+  useEffect(() => {
+    if (trades.length === 0 || Object.keys(priceMap).length === 0) return
+
+    // Build net position per ticker (buys - sells)
+    const positions: Record<string, { qty: number; avgPrice: number; totalCost: number }> = {}
+    for (const t of trades) {
+      const sym = t.ticker?.replace('-', '/').replace('USD', 'USDT') ?? ''
+      if (!sym) continue
+      if (!positions[sym]) positions[sym] = { qty: 0, avgPrice: 0, totalCost: 0 }
+      if (t.action?.toUpperCase() === 'BUY') {
+        positions[sym].totalCost += (t.price ?? 0) * (t.qty ?? 0)
+        positions[sym].qty += (t.qty ?? 0)
+      } else {
+        positions[sym].qty -= (t.qty ?? 0)
+        if (positions[sym].qty < 0) positions[sym].qty = 0
+      }
+      positions[sym].avgPrice = positions[sym].qty > 0
+        ? positions[sym].totalCost / positions[sym].qty
+        : 0
+    }
+
+    let totalUnrealized = 0
+    let openCount = 0
+    for (const [sym, pos] of Object.entries(positions)) {
+      if (pos.qty <= 0) continue
+      const current = priceMap[sym]?.usd ?? priceMap[sym.replace('/USDT', '')]?.usd ?? 0
+      if (current === 0) continue
+      totalUnrealized += (current - pos.avgPrice) * pos.qty
+      openCount++
+    }
+    setUnrealizedPnl(totalUnrealized)
+    setOpenPositions(openCount)
+  }, [trades, priceMap])
 
   const fetchData = useCallback(async () => {
     getEvents(5).then(r => {
@@ -53,7 +98,12 @@ export default function DashboardPage() {
       setTodayPnl(r.data?.today_pnl ?? 0)
       setTodayPct(r.data?.today_pct ?? 0)
     }).catch(() => {})
-  }, [])
+    getBotTrades(100).then(r => {
+      const d = r.data
+      setTrades(Array.isArray(d) ? d : (d?.trades ?? []))
+    }).catch(() => {})
+    refetchPrices()
+  }, [refetchPrices])
 
   useEffect(() => {
     fetchData()
@@ -140,19 +190,34 @@ export default function DashboardPage() {
         </div>
       </div>
 
-      {/* Today's P&L strip — now live */}
-      <div className="flex items-center justify-between bg-[#161a1e] border border-[#2b3139] rounded-xl px-4 py-3">
-        <div className="flex items-center gap-2">
-          {todayPnl >= 0 ? <TrendingUp size={14} className="text-[#0ecb81]" /> : <TrendingDown size={14} className="text-[#f6465d]" />}
-          <span className="text-xs text-[#848e9c]">Today's P&L</span>
+      {/* P&L row — Today + Unrealized side by side */}
+      <div className="grid grid-cols-2 gap-3">
+        <div className="flex items-center justify-between bg-[#161a1e] border border-[#2b3139] rounded-xl px-3 py-3">
+          <div className="flex items-center gap-1.5">
+            {todayPnl >= 0 ? <TrendingUp size={13} className="text-[#0ecb81]" /> : <TrendingDown size={13} className="text-[#f6465d]" />}
+            <span className="text-[10px] text-[#848e9c] leading-tight">Today<br/>P&L</span>
+          </div>
+          <div className="text-right">
+            <p className={`text-sm font-bold font-mono ${todayPnl >= 0 ? 'text-[#0ecb81]' : 'text-[#f6465d]'}`}>
+              {todayPnl >= 0 ? '+' : ''}${Math.abs(todayPnl).toFixed(2)}
+            </p>
+            <p className={`text-[10px] font-medium ${todayPnl >= 0 ? 'text-[#0ecb81]' : 'text-[#f6465d]'}`}>
+              {todayPct >= 0 ? '+' : ''}{todayPct.toFixed(2)}%
+            </p>
+          </div>
         </div>
-        <div className="flex items-center gap-2">
-          <span className={`text-sm font-bold font-mono ${todayPnl >= 0 ? 'text-[#0ecb81]' : 'text-[#f6465d]'}`}>
-            {todayPnl >= 0 ? '+' : ''}${Math.abs(todayPnl).toFixed(2)}
-          </span>
-          <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${todayPnl >= 0 ? 'bg-[#0ecb81]/10 text-[#0ecb81]' : 'bg-[#f6465d]/10 text-[#f6465d]'}`}>
-            {todayPct >= 0 ? '+' : ''}{todayPct.toFixed(2)}%
-          </span>
+
+        <div className="flex items-center justify-between bg-[#161a1e] border border-[#2b3139] rounded-xl px-3 py-3">
+          <div className="flex items-center gap-1.5">
+            <DollarSign size={13} className={unrealizedPnl >= 0 ? 'text-[#f0b90b]' : 'text-[#848e9c]'} />
+            <span className="text-[10px] text-[#848e9c] leading-tight">Unrealized<br/>P&L</span>
+          </div>
+          <div className="text-right">
+            <p className={`text-sm font-bold font-mono ${unrealizedPnl >= 0 ? 'text-[#0ecb81]' : 'text-[#f6465d]'}`}>
+              {unrealizedPnl >= 0 ? '+' : ''}${Math.abs(unrealizedPnl).toFixed(2)}
+            </p>
+            <p className="text-[10px] text-[#848e9c]">{openPositions} open</p>
+          </div>
         </div>
       </div>
 
@@ -254,6 +319,30 @@ export default function DashboardPage() {
         )}
       </div>
 
+      {/* Open positions summary (if any) */}
+      {openPositions > 0 && (
+        <div className="bg-[#161a1e] border border-[#f0b90b]/20 rounded-xl px-4 py-3">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <div className="w-6 h-6 rounded-full bg-[#f0b90b]/10 flex items-center justify-center">
+                <BarChart2 size={11} className="text-[#f0b90b]" />
+              </div>
+              <div>
+                <p className="text-xs font-semibold text-[#eaecef]">{openPositions} Open Position{openPositions !== 1 ? 's' : ''}</p>
+                <p className="text-[10px] text-[#848e9c]">Unrealized P&L vs current market</p>
+              </div>
+            </div>
+            <div className="text-right">
+              <p className={`text-sm font-bold font-mono ${unrealizedPnl >= 0 ? 'text-[#0ecb81]' : 'text-[#f6465d]'}`}>
+                {unrealizedPnl >= 0 ? '+' : ''}${Math.abs(unrealizedPnl).toFixed(2)}
+              </p>
+              <button onClick={() => navigate('/app/trade')} className="text-[10px] text-[#f0b90b] hover:text-[#eaecef] transition flex items-center gap-0.5 ml-auto">
+                View <ArrowRight size={8} />
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

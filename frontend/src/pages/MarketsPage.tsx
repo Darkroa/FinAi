@@ -1,37 +1,200 @@
-import { useState } from 'react'
-import { Search, TrendingUp, TrendingDown, LayoutGrid, LayoutList } from 'lucide-react'
+import { useState, useEffect, useCallback } from 'react'
+import { Search, TrendingUp, TrendingDown, LayoutGrid, LayoutList, Zap, RefreshCw, Star, ArrowRight } from 'lucide-react'
 import { LineChart, Line, ResponsiveContainer, Tooltip } from 'recharts'
+import { useNavigate } from 'react-router-dom'
 
-const sparkline = (up: boolean) =>
-  Array.from({ length: 12 }, (_, i) => ({ v: 50 + (up ? 1 : -1) * i * 3 + Math.random() * 10 - 5 }))
+interface MarketItem {
+  symbol: string
+  name: string
+  price: number
+  change: number
+  vol: string
+  mcap: string
+  cat: 'crypto' | 'stocks' | 'metals'
+  live: boolean
+}
 
-const markets = [
-  { symbol: 'BTC/USDT', name: 'Bitcoin',     price: 67432.10, change: 2.4,  vol: '$28.4B', mcap: '$1.32T', up: true,  cat: 'crypto' },
-  { symbol: 'ETH/USDT', name: 'Ethereum',    price: 3521.80,  change: 1.8,  vol: '$12.1B', mcap: '$423B',  up: true,  cat: 'crypto' },
-  { symbol: 'BNB/USDT', name: 'BNB',         price: 598.40,   change: -0.6, vol: '$1.8B',  mcap: '$89B',   up: false, cat: 'crypto' },
-  { symbol: 'SOL/USDT', name: 'Solana',      price: 182.30,   change: 5.2,  vol: '$4.2B',  mcap: '$82B',   up: true,  cat: 'crypto' },
-  { symbol: 'AAPL',     name: 'Apple Inc.',  price: 192.35,   change: 0.9,  vol: '$4.1B',  mcap: '$2.95T', up: true,  cat: 'stocks' },
-  { symbol: 'TSLA',     name: 'Tesla Inc.',  price: 248.70,   change: -1.2, vol: '$12.8B', mcap: '$792B',  up: false, cat: 'stocks' },
-  { symbol: 'NVDA',     name: 'NVIDIA',      price: 875.00,   change: 3.1,  vol: '$18.5B', mcap: '$2.15T', up: true,  cat: 'stocks' },
-  { symbol: 'SPY',      name: 'S&P 500 ETF', price: 530.40,   change: 0.5,  vol: '$22.3B', mcap: '—',      up: true,  cat: 'stocks' },
+interface NewListing {
+  symbol: string
+  name: string
+  price: number
+  change: number
+  recommendation: 'BUY' | 'SELL' | 'HOLD'
+  confidence: number
+  reason: string
+  cat: string
+}
+
+const sparkline = (up: boolean, volatility = 10) =>
+  Array.from({ length: 14 }, (_, i) => ({
+    v: 50 + (up ? 1 : -1) * i * 2.5 + (Math.random() * volatility - volatility / 2),
+  }))
+
+const ASSET_META: Record<string, { name: string; vol: string; mcap: string }> = {
+  'BTC/USDT':  { name: 'Bitcoin',        vol: '$28.4B', mcap: '$1.92T' },
+  'ETH/USDT':  { name: 'Ethereum',       vol: '$12.1B', mcap: '$384B'  },
+  'BNB/USDT':  { name: 'BNB',            vol: '$1.8B',  mcap: '$91B'   },
+  'SOL/USDT':  { name: 'Solana',         vol: '$4.2B',  mcap: '$78B'   },
+  'XRP/USDT':  { name: 'XRP',            vol: '$3.1B',  mcap: '$29B'   },
+  'ADA/USDT':  { name: 'Cardano',        vol: '$0.8B',  mcap: '$17B'   },
+  'DOGE/USDT': { name: 'Dogecoin',       vol: '$1.2B',  mcap: '$24B'   },
+  'DOT/USDT':  { name: 'Polkadot',       vol: '$0.5B',  mcap: '$10B'   },
+  'LINK/USDT': { name: 'Chainlink',      vol: '$0.6B',  mcap: '$9B'    },
+  'AVAX/USDT': { name: 'Avalanche',      vol: '$0.9B',  mcap: '$16B'   },
+  'MATIC/USDT':{ name: 'Polygon',        vol: '$0.4B',  mcap: '$8B'    },
+  'LTC/USDT':  { name: 'Litecoin',       vol: '$0.5B',  mcap: '$7B'    },
+  'UNI/USDT':  { name: 'Uniswap',        vol: '$0.3B',  mcap: '$5B'    },
+  'XLM/USDT':  { name: 'Stellar',        vol: '$0.2B',  mcap: '$3B'    },
+  'XAU/USD':   { name: 'Gold',           vol: '$182B',  mcap: '$15.7T' },
+  'XAG/USD':   { name: 'Silver',         vol: '$8.1B',  mcap: '$1.74T' },
+  'XPT/USD':   { name: 'Platinum',       vol: '$0.9B',  mcap: '$220B'  },
+  'XPD/USD':   { name: 'Palladium',      vol: '$0.4B',  mcap: '$48B'   },
+  'COPPER':    { name: 'Copper',         vol: '$3.2B',  mcap: '—'      },
+  'OIL/WTI':   { name: 'Crude Oil WTI',  vol: '$42B',   mcap: '—'      },
+  'NATGAS':    { name: 'Natural Gas',    vol: '$6.8B',  mcap: '—'      },
+  'AAPL':  { name: 'Apple Inc.',        vol: '$4.1B',  mcap: '$3.18T' },
+  'TSLA':  { name: 'Tesla Inc.',        vol: '$12.8B', mcap: '$794B'  },
+  'NVDA':  { name: 'NVIDIA Corp.',      vol: '$18.5B', mcap: '$3.21T' },
+  'SPY':   { name: 'S&P 500 ETF',       vol: '$22.3B', mcap: '—'      },
+  'MSFT':  { name: 'Microsoft Corp.',   vol: '$5.8B',  mcap: '$3.22T' },
+  'GOOGL': { name: 'Alphabet Inc.',     vol: '$4.9B',  mcap: '$2.18T' },
+  'AMZN':  { name: 'Amazon.com Inc.',   vol: '$6.2B',  mcap: '$2.12T' },
+  'META':  { name: 'Meta Platforms',    vol: '$7.1B',  mcap: '$1.55T' },
+  'BRK':   { name: 'Berkshire Hathaway',vol: '$0.9B',  mcap: '$1.07T' },
+  'JPM':   { name: 'JPMorgan Chase',    vol: '$3.4B',  mcap: '$743B'  },
+  'V':     { name: 'Visa Inc.',         vol: '$2.1B',  mcap: '$596B'  },
+  'JNJ':   { name: 'Johnson & Johnson', vol: '$1.8B',  mcap: '$366B'  },
+  'WMT':   { name: 'Walmart Inc.',      vol: '$1.5B',  mcap: '$769B'  },
+  'XOM':   { name: 'ExxonMobil Corp.',  vol: '$2.8B',  mcap: '$494B'  },
+  'GLD':   { name: 'SPDR Gold Shares',  vol: '$1.4B',  mcap: '—'      },
+}
+
+const NEW_LISTINGS: NewListing[] = [
+  { symbol: 'WLD/USDT',  name: 'Worldcoin',    price: 1.28,  change: 8.4,  recommendation: 'BUY',  confidence: 78, reason: 'Strong breakout above 20-day MA with volume surge. AI detects bullish accumulation pattern.', cat: 'crypto' },
+  { symbol: 'STRK/USDT', name: 'StarkNet',     price: 0.562, change: 12.1, recommendation: 'BUY',  confidence: 72, reason: 'L2 narrative momentum. Network TVL growing 34% week-over-week. Oversold RSI bounce.', cat: 'crypto' },
+  { symbol: 'ONDO/USDT', name: 'Ondo Finance', price: 0.918, change: 5.8,  recommendation: 'HOLD', confidence: 61, reason: 'RWA tokenization leader but near resistance. Wait for breakout above $1.00 for entry.', cat: 'crypto' },
+  { symbol: 'ENA/USDT',  name: 'Ethena',       price: 0.44,  change: -3.2, recommendation: 'SELL', confidence: 68, reason: 'Bearish divergence on RSI. Protocol TVL declining. High funding rate creating sell pressure.', cat: 'crypto' },
+  { symbol: 'BOME/USDT', name: 'Book of Meme', price: 0.0082,change: 18.4, recommendation: 'BUY',  confidence: 55, reason: 'Meme cycle momentum. High risk/reward. Strict stop-loss at -15% recommended.', cat: 'crypto' },
+  { symbol: 'W/USDT',    name: 'Wormhole',     price: 0.195, change: 6.2,  recommendation: 'BUY',  confidence: 65, reason: 'Cross-chain bridge volume up 45% in 7 days. Institutional interest growing.', cat: 'crypto' },
+  { symbol: 'ARM',       name: 'Arm Holdings',  price: 118.5, change: 3.8,  recommendation: 'BUY',  confidence: 74, reason: 'AI chip architecture exposure. Strong earnings beat. Semiconductor cycle recovery.', cat: 'stocks' },
+  { symbol: 'RDDT',      name: 'Reddit Inc.',   price: 63.20, change: -2.1, recommendation: 'HOLD', confidence: 58, reason: 'Post-IPO stabilization. AI data licensing deals are a catalyst but valuation is stretched.', cat: 'stocks' },
+  { symbol: 'ALAB',      name: 'Astera Labs',   price: 44.10, change: 7.3,  recommendation: 'BUY',  confidence: 70, reason: 'Data center connectivity play. Revenue growth 128% YoY. Key beneficiary of AI buildout.', cat: 'stocks' },
 ]
 
-export default function MarketsPage() {
-  const [search, setSearch] = useState('')
-  const [cat, setCat]       = useState<'all' | 'crypto' | 'stocks'>('all')
-  const [view, setView]     = useState<'table' | 'grid'>('table')
+type Tab = 'all' | 'crypto' | 'stocks' | 'metals' | 'new'
 
-  const filtered = markets.filter(m =>
-    (cat === 'all' || m.cat === cat) &&
-    (m.symbol.toLowerCase().includes(search.toLowerCase()) || m.name.toLowerCase().includes(search.toLowerCase()))
+export default function MarketsPage() {
+  const navigate = useNavigate()
+  const [tab, setTab]       = useState<Tab>('all')
+  const [search, setSearch] = useState('')
+  const [view, setView]     = useState<'table' | 'grid'>('table')
+  const [markets, setMarkets] = useState<MarketItem[]>([])
+  const [loading, setLoading] = useState(true)
+  const [lastUpdate, setLastUpdate] = useState<Date | null>(null)
+
+  const fetchMarkets = useCallback(async () => {
+    try {
+      const res = await fetch('/api/public/prices')
+      if (!res.ok) return
+      const data = await res.json()
+      const items: MarketItem[] = []
+
+      const cryptoMap: Record<string, string> = {
+        bitcoin: 'BTC/USDT', ethereum: 'ETH/USDT', binancecoin: 'BNB/USDT',
+        solana: 'SOL/USDT', ripple: 'XRP/USDT', cardano: 'ADA/USDT',
+        dogecoin: 'DOGE/USDT', polkadot: 'DOT/USDT', chainlink: 'LINK/USDT',
+        'avalanche-2': 'AVAX/USDT', 'matic-network': 'MATIC/USDT',
+        litecoin: 'LTC/USDT', uniswap: 'UNI/USDT', stellar: 'XLM/USDT',
+      }
+      for (const [id, sym] of Object.entries(cryptoMap)) {
+        if (data[id]) {
+          const meta = ASSET_META[sym] ?? { name: sym, vol: '—', mcap: '—' }
+          items.push({ symbol: sym, name: meta.name, price: data[id].usd, change: data[id].usd_24h_change, vol: meta.vol, mcap: meta.mcap, cat: 'crypto', live: true })
+        }
+      }
+
+      const m = data.metals ?? {}
+      const metalMap: Record<string, string> = {
+        gold: 'XAU/USD', silver: 'XAG/USD', platinum: 'XPT/USD',
+        palladium: 'XPD/USD', copper: 'COPPER', oil_wti: 'OIL/WTI', nat_gas: 'NATGAS',
+      }
+      for (const [k, sym] of Object.entries(metalMap)) {
+        if (m[k]) {
+          const meta = ASSET_META[sym] ?? { name: sym, vol: '—', mcap: '—' }
+          items.push({ symbol: sym, name: meta.name, price: m[k].usd, change: m[k].usd_24h_change, vol: meta.vol, mcap: meta.mcap, cat: 'metals', live: true })
+        }
+      }
+
+      const s = data.stocks ?? {}
+      for (const [sym, v] of Object.entries(s) as [string, { usd: number; usd_24h_change: number }][]) {
+        const meta = ASSET_META[sym] ?? { name: sym, vol: '—', mcap: '—' }
+        items.push({ symbol: sym, name: meta.name, price: v.usd, change: v.usd_24h_change, vol: meta.vol, mcap: meta.mcap, cat: 'stocks', live: true })
+      }
+
+      if (items.length > 0) {
+        setMarkets(items)
+        setLastUpdate(new Date())
+      }
+    } catch { /* keep */ } finally { setLoading(false) }
+  }, [])
+
+  useEffect(() => {
+    fetchMarkets()
+    const id = setInterval(fetchMarkets, 30000)
+    return () => clearInterval(id)
+  }, [fetchMarkets])
+
+  const filtered = markets.filter(m => {
+    if (tab !== 'all' && tab !== 'new' && m.cat !== tab) return false
+    return (
+      m.symbol.toLowerCase().includes(search.toLowerCase()) ||
+      m.name.toLowerCase().includes(search.toLowerCase())
+    )
+  })
+
+  const filteredNew = NEW_LISTINGS.filter(n =>
+    n.symbol.toLowerCase().includes(search.toLowerCase()) ||
+    n.name.toLowerCase().includes(search.toLowerCase())
   )
+
+  const fmtPrice = (p: number) => {
+    if (p >= 10000) return '$' + p.toLocaleString('en-US', { maximumFractionDigits: 0 })
+    if (p >= 100)   return '$' + p.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+    if (p >= 1)     return '$' + p.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 4 })
+    return '$' + p.toLocaleString('en-US', { minimumFractionDigits: 4, maximumFractionDigits: 6 })
+  }
+
+  const catIcon = (cat: string) => {
+    if (cat === 'metals') return '⟡'
+    if (cat === 'stocks') return '◈'
+    return cat[0].toUpperCase()
+  }
+
+  const tabs: { key: Tab; label: string }[] = [
+    { key: 'all',    label: 'All Markets' },
+    { key: 'crypto', label: 'Crypto'      },
+    { key: 'metals', label: 'Metals'      },
+    { key: 'stocks', label: 'Stocks'      },
+    { key: 'new',    label: '🔥 New'       },
+  ]
 
   return (
     <div className="space-y-4 sm:space-y-5">
       {/* Header */}
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <h1 className="text-xl font-bold text-[#eaecef]">Markets</h1>
+        <div>
+          <h1 className="text-xl font-bold text-[#eaecef]">Markets</h1>
+          {lastUpdate && (
+            <p className="text-[10px] text-[#848e9c] mt-0.5 flex items-center gap-1">
+              <span className="w-1.5 h-1.5 rounded-full bg-[#0ecb81] inline-block animate-pulse" />
+              Live · Updated {lastUpdate.toLocaleTimeString()}
+            </p>
+          )}
+        </div>
         <div className="flex items-center gap-2">
+          <button onClick={fetchMarkets} className="p-2 rounded-lg bg-[#161a1e] border border-[#2b3139] text-[#848e9c] hover:text-[#eaecef] transition">
+            <RefreshCw size={13} className={loading ? 'animate-spin' : ''} />
+          </button>
           <button onClick={() => setView('table')} className={`p-2 rounded-lg transition ${view === 'table' ? 'bg-[#f0b90b] text-black' : 'bg-[#161a1e] border border-[#2b3139] text-[#848e9c] hover:text-[#eaecef]'}`}>
             <LayoutList size={14} />
           </button>
@@ -41,83 +204,157 @@ export default function MarketsPage() {
         </div>
       </div>
 
-      {/* Filters */}
-      <div className="flex flex-wrap items-center gap-3">
-        <div className="relative flex-1 min-w-0 max-w-xs">
+      {/* Tab bar + Search */}
+      <div className="flex flex-col sm:flex-row gap-3">
+        <div className="flex gap-1 bg-[#161a1e] border border-[#2b3139] rounded-xl p-1 overflow-x-auto flex-shrink-0">
+          {tabs.map(t => (
+            <button key={t.key} onClick={() => setTab(t.key)}
+              className={`text-xs px-3.5 py-1.5 rounded-lg whitespace-nowrap font-medium transition ${tab === t.key ? 'bg-[#f0b90b] text-black font-bold' : 'text-[#848e9c] hover:text-[#eaecef]'}`}>
+              {t.label}
+            </button>
+          ))}
+        </div>
+        <div className="relative flex-1 min-w-0">
           <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-[#848e9c]" />
           <input type="text" placeholder="Search markets…" value={search} onChange={e => setSearch(e.target.value)}
             className="w-full bg-[#161a1e] border border-[#2b3139] rounded-xl pl-9 pr-4 py-2.5 text-sm text-[#eaecef] placeholder-[#4a5568] focus:outline-none focus:border-[#f0b90b] transition" />
         </div>
-        <div className="flex gap-1 bg-[#161a1e] border border-[#2b3139] rounded-xl p-1">
-          {(['all', 'crypto', 'stocks'] as const).map(c => (
-            <button key={c} onClick={() => setCat(c)}
-              className={`text-xs px-4 py-1.5 rounded-lg capitalize font-medium transition ${cat === c ? 'bg-[#f0b90b] text-black' : 'text-[#848e9c] hover:text-[#eaecef]'}`}>
-              {c === 'all' ? 'All' : c.charAt(0).toUpperCase() + c.slice(1)}
-            </button>
-          ))}
-        </div>
       </div>
 
-      {/* Grid view */}
-      {view === 'grid' && (
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
-          {filtered.map(m => (
-            <div key={m.symbol} className="bg-[#161a1e] border border-[#2b3139] hover:border-[#f0b90b]/30 rounded-2xl p-4 transition-all cursor-pointer">
-              <div className="flex items-center justify-between mb-3">
-                <div className="w-9 h-9 rounded-full bg-[#f0b90b]/10 flex items-center justify-center text-sm font-bold text-[#f0b90b]">
-                  {m.symbol[0]}
+      {/* New / Trending tab */}
+      {tab === 'new' && (
+        <div className="space-y-3">
+          <div className="flex items-center gap-2 mb-1">
+            <Star size={13} className="text-[#f0b90b]" />
+            <p className="text-xs font-bold text-[#eaecef]">New Listings & Trending</p>
+            <span className="text-[10px] bg-[#f0b90b]/10 text-[#f0b90b] px-2 py-0.5 rounded-full font-medium">AI Recommendations</span>
+          </div>
+          {filteredNew.map(n => {
+            const isUp   = n.change >= 0
+            const recColor = n.recommendation === 'BUY' ? 'text-[#0ecb81] bg-[#0ecb81]/10 border-[#0ecb81]/20'
+              : n.recommendation === 'SELL' ? 'text-[#f6465d] bg-[#f6465d]/10 border-[#f6465d]/20'
+              : 'text-[#f0b90b] bg-[#f0b90b]/10 border-[#f0b90b]/20'
+            return (
+              <div key={n.symbol} className="bg-[#161a1e] border border-[#2b3139] hover:border-[#f0b90b]/25 rounded-xl p-4 transition-all">
+                <div className="flex flex-wrap items-start gap-3">
+                  <div className="w-10 h-10 rounded-full bg-[#f0b90b]/10 flex items-center justify-center text-sm font-bold text-[#f0b90b] flex-shrink-0">
+                    {n.symbol[0]}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex flex-wrap items-center gap-2 mb-1">
+                      <span className="font-mono font-bold text-[#eaecef] text-sm">{n.symbol}</span>
+                      <span className="text-[10px] text-[#848e9c]">{n.name}</span>
+                      <span className={`text-[10px] font-bold px-2 py-0.5 rounded border ${isUp ? 'text-[#0ecb81]' : 'text-[#f6465d]'}`}>
+                        {isUp ? '+' : ''}{n.change}%
+                      </span>
+                    </div>
+                    <p className="text-[11px] text-[#848e9c] leading-relaxed">{n.reason}</p>
+                  </div>
+                  <div className="flex flex-col items-end gap-2 flex-shrink-0">
+                    <span className={`text-xs font-bold px-2.5 py-1 rounded-lg border ${recColor}`}>
+                      {n.recommendation}
+                    </span>
+                    <div className="flex items-center gap-1">
+                      <div className="w-20 h-1.5 bg-[#2b3139] rounded-full overflow-hidden">
+                        <div className="h-full bg-[#f0b90b] rounded-full" style={{ width: `${n.confidence}%` }} />
+                      </div>
+                      <span className="text-[10px] text-[#848e9c]">{n.confidence}%</span>
+                    </div>
+                    <p className="text-xs font-mono font-bold text-[#eaecef]">${n.price}</p>
+                  </div>
                 </div>
-                <span className={`text-xs font-bold flex items-center gap-0.5 ${m.up ? 'text-[#0ecb81]' : 'text-[#f6465d]'}`}>
-                  {m.up ? <TrendingUp size={10} /> : <TrendingDown size={10} />}
-                  {m.up ? '+' : ''}{m.change}%
-                </span>
+                <div className="mt-3 flex items-center justify-between">
+                  <div className="flex items-center gap-1.5">
+                    <Zap size={10} className="text-[#f0b90b]" />
+                    <span className="text-[10px] text-[#848e9c]">AI confidence: {n.confidence}%</span>
+                  </div>
+                  <button onClick={() => navigate('/app/trade')}
+                    className="flex items-center gap-1 text-[10px] text-[#f0b90b] hover:text-[#eaecef] transition font-medium">
+                    Trade <ArrowRight size={9} />
+                  </button>
+                </div>
               </div>
-              <p className="text-xs font-semibold text-[#eaecef]">{m.symbol}</p>
-              <p className="text-[10px] text-[#848e9c] mb-2">{m.name}</p>
-              <p className="text-sm font-bold font-mono text-[#eaecef]">${m.price.toLocaleString()}</p>
-              <div className="mt-2 h-9">
-                <ResponsiveContainer width="100%" height="100%">
-                  <LineChart data={sparkline(m.up)}>
-                    <Line type="monotone" dataKey="v" stroke={m.up ? '#0ecb81' : '#f6465d'} strokeWidth={1.5} dot={false} />
-                    <Tooltip contentStyle={{ display: 'none' }} />
-                  </LineChart>
-                </ResponsiveContainer>
+            )
+          })}
+        </div>
+      )}
+
+      {/* Grid view */}
+      {tab !== 'new' && view === 'grid' && (
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
+          {loading && filtered.length === 0
+            ? Array.from({ length: 8 }).map((_, i) => (
+                <div key={i} className="bg-[#161a1e] border border-[#2b3139] rounded-2xl p-4 animate-pulse h-32" />
+              ))
+            : filtered.map(m => (
+              <div key={m.symbol} className="bg-[#161a1e] border border-[#2b3139] hover:border-[#f0b90b]/30 rounded-2xl p-4 transition-all cursor-pointer" onClick={() => navigate('/app/trade')}>
+                <div className="flex items-center justify-between mb-3">
+                  <div className="w-9 h-9 rounded-full bg-[#f0b90b]/10 flex items-center justify-center text-xs font-bold text-[#f0b90b]">
+                    {catIcon(m.cat)}
+                  </div>
+                  <span className={`text-xs font-bold flex items-center gap-0.5 ${m.change >= 0 ? 'text-[#0ecb81]' : 'text-[#f6465d]'}`}>
+                    {m.change >= 0 ? <TrendingUp size={10} /> : <TrendingDown size={10} />}
+                    {m.change >= 0 ? '+' : ''}{m.change.toFixed(2)}%
+                  </span>
+                </div>
+                <p className="text-xs font-semibold text-[#eaecef]">{m.symbol}</p>
+                <p className="text-[10px] text-[#848e9c] mb-2">{m.name}</p>
+                <p className="text-sm font-bold font-mono text-[#eaecef]">{fmtPrice(m.price)}</p>
+                {m.live && <div className="mt-2 h-9">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <LineChart data={sparkline(m.change >= 0)}>
+                      <Line type="monotone" dataKey="v" stroke={m.change >= 0 ? '#0ecb81' : '#f6465d'} strokeWidth={1.5} dot={false} />
+                      <Tooltip contentStyle={{ display: 'none' }} />
+                    </LineChart>
+                  </ResponsiveContainer>
+                </div>}
               </div>
-            </div>
-          ))}
+            ))}
         </div>
       )}
 
       {/* Table view */}
-      {view === 'table' && (
+      {tab !== 'new' && view === 'table' && (
         <div className="bg-[#161a1e] border border-[#2b3139] rounded-xl overflow-hidden">
           {/* Mobile card list */}
           <div className="sm:hidden divide-y divide-[#2b3139]/60">
-            {filtered.map((m, i) => (
-              <div key={m.symbol} className="flex items-center justify-between px-4 py-3.5 hover:bg-[#1e2329] transition cursor-pointer">
-                <div className="flex items-center gap-3">
-                  <span className="text-xs text-[#4a5568] w-4 text-center">{i + 1}</span>
-                  <div className="w-8 h-8 rounded-full bg-[#f0b90b]/10 flex items-center justify-center text-xs font-bold text-[#f0b90b] flex-shrink-0">
-                    {m.symbol[0]}
+            {loading && filtered.length === 0
+              ? Array.from({ length: 6 }).map((_, i) => (
+                  <div key={i} className="flex items-center gap-3 px-4 py-3.5 animate-pulse">
+                    <div className="w-8 h-8 rounded-full bg-[#2b3139]" />
+                    <div className="flex-1"><div className="h-3 bg-[#2b3139] rounded w-20 mb-1" /><div className="h-2.5 bg-[#2b3139] rounded w-14" /></div>
+                    <div className="h-4 bg-[#2b3139] rounded w-16" />
                   </div>
-                  <div>
-                    <p className="text-sm font-semibold text-[#eaecef]">{m.symbol}</p>
-                    <p className="text-[10px] text-[#848e9c]">{m.name}</p>
+                ))
+              : filtered.map((m, i) => (
+                <div key={m.symbol} className="flex items-center justify-between px-4 py-3.5 hover:bg-[#1e2329] transition cursor-pointer" onClick={() => navigate('/app/trade')}>
+                  <div className="flex items-center gap-3">
+                    <span className="text-xs text-[#4a5568] w-4 text-center">{i + 1}</span>
+                    <div className="w-8 h-8 rounded-full bg-[#f0b90b]/10 flex items-center justify-center text-xs font-bold text-[#f0b90b] flex-shrink-0">
+                      {catIcon(m.cat)}
+                    </div>
+                    <div>
+                      <p className="text-sm font-semibold text-[#eaecef]">{m.symbol}</p>
+                      <div className="flex items-center gap-1.5">
+                        <p className="text-[10px] text-[#848e9c]">{m.name}</p>
+                        {m.live && <span className="w-1 h-1 rounded-full bg-[#0ecb81] inline-block" />}
+                      </div>
+                    </div>
+                  </div>
+                  <div className="text-right">
+                    <p className="text-sm font-bold font-mono text-[#eaecef]">{fmtPrice(m.price)}</p>
+                    <span className={`text-xs font-semibold flex items-center justify-end gap-0.5 ${m.change >= 0 ? 'text-[#0ecb81]' : 'text-[#f6465d]'}`}>
+                      {m.change >= 0 ? <TrendingUp size={9} /> : <TrendingDown size={9} />}
+                      {m.change >= 0 ? '+' : ''}{m.change.toFixed(2)}%
+                    </span>
                   </div>
                 </div>
-                <div className="text-right">
-                  <p className="text-sm font-bold font-mono text-[#eaecef]">${m.price.toLocaleString()}</p>
-                  <span className={`text-xs font-semibold ${m.up ? 'text-[#0ecb81]' : 'text-[#f6465d]'}`}>
-                    {m.up ? '+' : ''}{m.change}%
-                  </span>
-                </div>
-              </div>
-            ))}
+              ))}
           </div>
 
           {/* Desktop table */}
           <div className="hidden sm:block overflow-x-auto">
-            <table className="w-full text-sm min-w-[640px]">
+            <table className="w-full text-sm min-w-[700px]">
               <thead>
                 <tr className="text-[#848e9c] text-xs border-b border-[#2b3139] bg-[#0b0e11]/40">
                   <th className="text-left px-5 py-3 font-medium">#</th>
@@ -126,48 +363,79 @@ export default function MarketsPage() {
                   <th className="text-right px-5 py-3 font-medium">24h Change</th>
                   <th className="text-right px-5 py-3 font-medium hidden md:table-cell">Volume</th>
                   <th className="text-right px-5 py-3 font-medium hidden lg:table-cell">Market Cap</th>
-                  <th className="text-right px-5 py-3 font-medium hidden xl:table-cell">7D</th>
+                  <th className="text-right px-5 py-3 font-medium hidden xl:table-cell">7D Chart</th>
+                  <th className="text-right px-5 py-3 font-medium">Action</th>
                 </tr>
               </thead>
               <tbody>
-                {filtered.map((m, i) => (
-                  <tr key={m.symbol} className="border-b border-[#2b3139]/50 hover:bg-[#1e2329] transition cursor-pointer">
-                    <td className="px-5 py-4 text-[#848e9c] text-xs">{i + 1}</td>
-                    <td className="px-5 py-4">
-                      <div className="flex items-center gap-3">
-                        <div className="w-8 h-8 rounded-full bg-[#f0b90b]/10 flex items-center justify-center text-xs font-bold text-[#f0b90b] flex-shrink-0">
-                          {m.symbol[0]}
+                {loading && filtered.length === 0
+                  ? Array.from({ length: 8 }).map((_, i) => (
+                      <tr key={i} className="border-b border-[#2b3139]/50 animate-pulse">
+                        <td className="px-5 py-4"><div className="h-3 bg-[#2b3139] rounded w-4" /></td>
+                        <td className="px-5 py-4"><div className="flex items-center gap-3"><div className="w-8 h-8 rounded-full bg-[#2b3139]" /><div><div className="h-3 bg-[#2b3139] rounded w-20 mb-1" /><div className="h-2.5 bg-[#2b3139] rounded w-14" /></div></div></td>
+                        <td className="px-5 py-4"><div className="h-3 bg-[#2b3139] rounded w-20 ml-auto" /></td>
+                        <td className="px-5 py-4"><div className="h-5 bg-[#2b3139] rounded w-16 ml-auto" /></td>
+                        <td className="px-5 py-4 hidden md:table-cell"><div className="h-3 bg-[#2b3139] rounded w-14 ml-auto" /></td>
+                        <td className="px-5 py-4 hidden lg:table-cell"><div className="h-3 bg-[#2b3139] rounded w-12 ml-auto" /></td>
+                        <td className="px-5 py-4 hidden xl:table-cell" />
+                        <td className="px-5 py-4" />
+                      </tr>
+                    ))
+                  : filtered.map((m, i) => (
+                    <tr key={m.symbol} className="border-b border-[#2b3139]/50 hover:bg-[#1e2329] transition cursor-pointer" onClick={() => navigate('/app/trade')}>
+                      <td className="px-5 py-4 text-[#848e9c] text-xs">{i + 1}</td>
+                      <td className="px-5 py-4">
+                        <div className="flex items-center gap-3">
+                          <div className="w-8 h-8 rounded-full bg-[#f0b90b]/10 flex items-center justify-center text-xs font-bold text-[#f0b90b] flex-shrink-0">
+                            {catIcon(m.cat)}
+                          </div>
+                          <div>
+                            <div className="flex items-center gap-1.5">
+                              <p className="font-semibold text-[#eaecef] text-sm">{m.symbol}</p>
+                              {m.live && <span className="w-1.5 h-1.5 rounded-full bg-[#0ecb81] animate-pulse" />}
+                            </div>
+                            <p className="text-[10px] text-[#848e9c]">{m.name}</p>
+                          </div>
                         </div>
-                        <div>
-                          <p className="font-semibold text-[#eaecef] text-sm">{m.symbol}</p>
-                          <p className="text-[10px] text-[#848e9c]">{m.name}</p>
+                      </td>
+                      <td className="px-5 py-4 text-right font-mono text-sm text-[#eaecef] font-medium">{fmtPrice(m.price)}</td>
+                      <td className="px-5 py-4 text-right">
+                        <span className={`inline-flex items-center gap-1 text-xs font-semibold px-2 py-1 rounded-lg ${m.change >= 0 ? 'bg-[#0ecb81]/10 text-[#0ecb81]' : 'bg-[#f6465d]/10 text-[#f6465d]'}`}>
+                          {m.change >= 0 ? <TrendingUp size={10} /> : <TrendingDown size={10} />}
+                          {m.change >= 0 ? '+' : ''}{m.change.toFixed(2)}%
+                        </span>
+                      </td>
+                      <td className="px-5 py-4 text-right text-[#848e9c] text-xs hidden md:table-cell">{m.vol}</td>
+                      <td className="px-5 py-4 text-right text-[#848e9c] text-xs hidden lg:table-cell">{m.mcap}</td>
+                      <td className="px-5 py-4 hidden xl:table-cell">
+                        <div className="flex justify-end">
+                          <ResponsiveContainer width={80} height={36}>
+                            <LineChart data={sparkline(m.change >= 0)}>
+                              <Line type="monotone" dataKey="v" stroke={m.change >= 0 ? '#0ecb81' : '#f6465d'} strokeWidth={1.5} dot={false} />
+                              <Tooltip contentStyle={{ display: 'none' }} />
+                            </LineChart>
+                          </ResponsiveContainer>
                         </div>
-                      </div>
-                    </td>
-                    <td className="px-5 py-4 text-right font-mono text-sm text-[#eaecef] font-medium">${m.price.toLocaleString()}</td>
-                    <td className="px-5 py-4 text-right">
-                      <span className={`inline-flex items-center gap-1 text-xs font-semibold px-2 py-1 rounded-lg ${m.up ? 'bg-[#0ecb81]/10 text-[#0ecb81]' : 'bg-[#f6465d]/10 text-[#f6465d]'}`}>
-                        {m.up ? <TrendingUp size={10} /> : <TrendingDown size={10} />}
-                        {m.up ? '+' : ''}{m.change}%
-                      </span>
-                    </td>
-                    <td className="px-5 py-4 text-right text-[#848e9c] text-xs hidden md:table-cell">{m.vol}</td>
-                    <td className="px-5 py-4 text-right text-[#848e9c] text-xs hidden lg:table-cell">{m.mcap}</td>
-                    <td className="px-5 py-4 hidden xl:table-cell">
-                      <div className="flex justify-end">
-                        <ResponsiveContainer width={80} height={36}>
-                          <LineChart data={sparkline(m.up)}>
-                            <Line type="monotone" dataKey="v" stroke={m.up ? '#0ecb81' : '#f6465d'} strokeWidth={1.5} dot={false} />
-                            <Tooltip contentStyle={{ display: 'none' }} />
-                          </LineChart>
-                        </ResponsiveContainer>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
+                      </td>
+                      <td className="px-5 py-4 text-right">
+                        <button onClick={e => { e.stopPropagation(); navigate('/app/trade') }}
+                          className="text-[10px] font-semibold px-3 py-1.5 rounded-lg bg-[#f0b90b]/10 text-[#f0b90b] hover:bg-[#f0b90b]/20 transition border border-[#f0b90b]/20">
+                          Trade
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
               </tbody>
             </table>
           </div>
+        </div>
+      )}
+
+      {/* Empty state */}
+      {tab !== 'new' && !loading && filtered.length === 0 && (
+        <div className="bg-[#161a1e] border border-[#2b3139] rounded-xl py-14 text-center">
+          <Search size={24} className="text-[#2b3139] mx-auto mb-3" />
+          <p className="text-sm text-[#848e9c]">No markets match "{search}"</p>
         </div>
       )}
     </div>

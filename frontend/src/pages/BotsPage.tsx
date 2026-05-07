@@ -2,12 +2,13 @@ import { useEffect, useState, useCallback } from 'react'
 import { getBotStatus, startBot, stopBot, getBotTrades, updateBotParams, getBotPnlHistory } from '../lib/api'
 import { useAuthStore } from '../store/authStore'
 import toast from 'react-hot-toast'
-import { Bot, Play, Square, RefreshCw, TrendingUp, Activity, Zap, Brain, Settings, Save, ChevronDown, BarChart2, AlertCircle } from 'lucide-react'
+import { Bot, Play, Square, RefreshCw, TrendingUp, Activity, Zap, Brain, Settings, Save, ChevronDown, BarChart2, Lock, KeyRound, ArrowRight } from 'lucide-react'
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceLine } from 'recharts'
+import { useNavigate } from 'react-router-dom'
 
 interface TradeLog {
   id: number; ticker: string; action: string; price: number; qty: number
-  pnl: number | null; reason: string | null; paper: boolean; created_at: string
+  pnl: number | null; reason: string | null; exchange: string; created_at: string
 }
 
 interface BotStatus {
@@ -16,11 +17,12 @@ interface BotStatus {
 
 interface PnlPoint { date: string; pnl: number; cumulative: number }
 
-const TICKERS = ['BTC-USD', 'ETH-USD', 'SOL-USD', 'NVDA', 'AAPL', 'TSLA', 'BNB-USD', 'MSFT', 'GOOGL', 'AMZN']
+const TICKERS = ['BTC-USD', 'ETH-USD', 'SOL-USD', 'XRP-USD', 'BNB-USD', 'ADA-USD', 'AVAX-USD', 'DOGE-USD', 'NVDA', 'AAPL', 'TSLA', 'MSFT', 'GOOGL', 'AMZN', 'META']
 
 export default function BotsPage() {
+  const navigate = useNavigate()
   const { user } = useAuthStore()
-  const exchanges = user?.exchange_connections ?? []
+  const exchanges = (user as unknown as { exchange_connections?: { exchange: string; label: string; api_key_masked?: string }[] })?.exchange_connections ?? []
 
   const [status, setStatus]               = useState<BotStatus>({ running: false })
   const [trades, setTrades]               = useState<TradeLog[]>([])
@@ -30,15 +32,15 @@ export default function BotsPage() {
   const [showSettings, setShowSettings]   = useState(false)
   const [savingParams, setSavingParams]   = useState(false)
   const [showTickerDD, setShowTickerDD]   = useState(false)
-  const [showExchangeDD, setShowExchangeDD] = useState(false)
+  const [showRouteDD, setShowRouteDD]     = useState(false)
 
+  // Route: '__balance__' = use platform balance, else = exchange label
   const [params, setParams] = useState({
     ticker: 'BTC-USD',
-    paper: true,
-    initial_capital: user?.default_capital || 1000,
-    risk_per_trade_pct: user?.risk_per_trade || 1.0,
-    max_drawdown_pct: user?.max_drawdown || 10.0,
-    exchange_label: exchanges[0]?.label || '',
+    route: '__balance__',          // '__balance__' or exchange label
+    initial_capital: (user as unknown as { default_capital?: number })?.default_capital || 1000,
+    risk_per_trade_pct: (user as unknown as { risk_per_trade?: number })?.risk_per_trade || 1.0,
+    max_drawdown_pct: (user as unknown as { max_drawdown?: number })?.max_drawdown || 10.0,
   })
 
   const fetchData = useCallback(async () => {
@@ -64,28 +66,38 @@ export default function BotsPage() {
 
   useEffect(() => {
     if (user) {
+      const u = user as unknown as { default_capital?: number; risk_per_trade?: number; max_drawdown?: number }
       setParams(p => ({
         ...p,
-        initial_capital: user.default_capital || p.initial_capital,
-        risk_per_trade_pct: user.risk_per_trade || p.risk_per_trade_pct,
-        max_drawdown_pct: user.max_drawdown || p.max_drawdown_pct,
-        exchange_label: p.exchange_label || exchanges[0]?.label || '',
+        initial_capital: u.default_capital || p.initial_capital,
+        risk_per_trade_pct: u.risk_per_trade || p.risk_per_trade_pct,
+        max_drawdown_pct: u.max_drawdown || p.max_drawdown_pct,
       }))
     }
   }, [user])
 
   const handleStart = async () => {
-    if (!params.paper && exchanges.length === 0) {
-      toast.error('No exchange API key connected. Go to Profile → Exchanges to add one.')
+    if (exchanges.length === 0) {
+      toast.error('Connect an exchange API key first to use the AI Bot.')
       return
     }
-    if (!params.paper && (!user?.balance_usdt || user.balance_usdt < params.initial_capital)) {
-      toast.error(`Insufficient balance. Need $${params.initial_capital.toLocaleString()} USDT for live trading.`)
+    const usingBalance = params.route === '__balance__'
+    const balanceUsdt = (user as unknown as { balance_usdt?: number })?.balance_usdt ?? 0
+    if (usingBalance && balanceUsdt < params.initial_capital) {
+      toast.error(`Insufficient balance. Need $${params.initial_capital.toLocaleString()} USDT.`)
       return
     }
     setActionLoading(true)
     try {
-      const res = await startBot({ ...params })
+      const payload = {
+        ticker: params.ticker,
+        paper: false,
+        initial_capital: params.initial_capital,
+        risk_per_trade_pct: params.risk_per_trade_pct,
+        max_drawdown_pct: params.max_drawdown_pct,
+        exchange_label: usingBalance ? undefined : params.route,
+      }
+      const res = await startBot(payload)
       setStatus(s => ({ ...s, running: true }))
       toast.success(res.data?.message || 'Bot started successfully')
       fetchData()
@@ -123,6 +135,58 @@ export default function BotsPage() {
   const winningTrades = pnlTrades.filter(t => (t.pnl ?? 0) > 0).length
   const winRate       = pnlTrades.length > 0 ? ((winningTrades / pnlTrades.length) * 100).toFixed(1) : '—'
 
+  const routeLabel = params.route === '__balance__'
+    ? 'Platform Balance'
+    : (exchanges.find(e => e.label === params.route)?.label ?? params.route)
+
+  // ── API Key Gate ──
+  if (exchanges.length === 0) {
+    return (
+      <div className="space-y-5">
+        <h1 className="text-xl font-bold text-[#eaecef]">AI Trading Bots</h1>
+
+        <div className="flex flex-col items-center justify-center text-center py-16 px-6">
+          <div className="w-20 h-20 rounded-full bg-[#f0b90b]/10 border-2 border-[#f0b90b]/20 flex items-center justify-center mb-6">
+            <Lock size={32} className="text-[#f0b90b]" />
+          </div>
+          <h2 className="text-xl font-bold text-[#eaecef] mb-3">Exchange API Key Required</h2>
+          <p className="text-sm text-[#848e9c] max-w-sm leading-relaxed mb-2">
+            To use the AI Trading Bot you must connect at least one exchange API key (Binance, Bybit, OKX, etc.).
+          </p>
+          <p className="text-xs text-[#4a5568] mb-8 max-w-sm">
+            All bot trades are live — no paper mode. Your exchange API key is used to place real orders on your behalf.
+          </p>
+
+          <button onClick={() => navigate('/app/profile')}
+            className="flex items-center gap-2 bg-[#f0b90b] hover:bg-[#d9a60b] text-black font-bold px-6 py-3 rounded-xl text-sm transition-all shadow-lg shadow-[#f0b90b]/20">
+            <KeyRound size={15} /> Connect Exchange Key
+          </button>
+          <button onClick={() => navigate('/app/profile')}
+            className="mt-3 flex items-center gap-1 text-xs text-[#848e9c] hover:text-[#eaecef] transition">
+            Go to Profile → Exchanges <ArrowRight size={10} />
+          </button>
+
+          {/* Steps */}
+          <div className="mt-10 w-full max-w-sm space-y-3 text-left">
+            {[
+              { n: '1', t: 'Connect Exchange', d: 'Profile → FinAPI tab → add Binance, Bybit, OKX or any supported exchange.' },
+              { n: '2', t: 'Choose Route',     d: 'Select "Platform Balance" (uses your FinAi wallet) or your exchange API directly.' },
+              { n: '3', t: 'Start the Bot',    d: 'Set capital, risk %, and the AI bot trades live with real orders.' },
+            ].map(s => (
+              <div key={s.n} className="flex items-start gap-3 bg-[#161a1e] border border-[#2b3139] rounded-xl px-4 py-3">
+                <div className="w-6 h-6 rounded-full bg-[#f0b90b]/10 flex items-center justify-center text-xs font-bold text-[#f0b90b] flex-shrink-0 mt-0.5">{s.n}</div>
+                <div>
+                  <p className="text-xs font-semibold text-[#eaecef]">{s.t}</p>
+                  <p className="text-[10px] text-[#848e9c] mt-0.5">{s.d}</p>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+    )
+  }
+
   return (
     <div className="space-y-5">
       {/* Header */}
@@ -130,7 +194,7 @@ export default function BotsPage() {
         <div className="flex items-center gap-3">
           <h1 className="text-xl font-bold text-[#eaecef]">AI Trading Bots</h1>
           <span className={`text-xs px-2.5 py-1 rounded-full font-medium ${status.running ? 'bg-[#0ecb81]/10 text-[#0ecb81] border border-[#0ecb81]/20' : 'bg-[#2b3139] text-[#848e9c]'}`}>
-            {status.running ? 'Live' : 'Offline'}
+            {status.running ? '● Live' : 'Offline'}
           </span>
         </div>
         <div className="flex items-center gap-2">
@@ -144,17 +208,6 @@ export default function BotsPage() {
           </button>
         </div>
       </div>
-
-      {/* API key warning if live mode but no exchange */}
-      {!params.paper && exchanges.length === 0 && (
-        <div className="flex items-start gap-2.5 bg-[#f6465d]/5 border border-[#f6465d]/20 rounded-xl px-4 py-3">
-          <AlertCircle size={14} className="text-[#f6465d] flex-shrink-0 mt-0.5" />
-          <p className="text-xs text-[#848e9c]">
-            <span className="text-[#f6465d] font-semibold">No exchange connected</span> — Live bots require an exchange API key.{' '}
-            <a href="/app/profile" className="text-[#f0b90b] underline">Add one in Profile → Exchanges</a>.
-          </p>
-        </div>
-      )}
 
       {/* Settings Panel */}
       {showSettings && (
@@ -173,7 +226,7 @@ export default function BotsPage() {
             <div>
               <label className="text-xs text-[#848e9c] mb-1.5 block">Asset / Ticker</label>
               <div className="relative">
-                <button onClick={() => setShowTickerDD(v => !v)}
+                <button onClick={() => { setShowTickerDD(v => !v); setShowRouteDD(false) }}
                   className="w-full flex items-center justify-between bg-[#0b0e11] border border-[#2b3139] focus:border-[#f0b90b] rounded-xl px-3 py-2.5 text-sm text-[#eaecef] transition">
                   <span className="font-mono font-medium">{params.ticker}</span>
                   <ChevronDown size={12} className="text-[#848e9c]" />
@@ -191,62 +244,55 @@ export default function BotsPage() {
               </div>
             </div>
 
+            {/* Route — Balance or Exchange API */}
+            <div>
+              <label className="text-xs text-[#848e9c] mb-1.5 block">Trade Route</label>
+              <div className="relative">
+                <button onClick={() => { setShowRouteDD(v => !v); setShowTickerDD(false) }}
+                  className="w-full flex items-center justify-between bg-[#0b0e11] border border-[#2b3139] focus:border-[#f0b90b] rounded-xl px-3 py-2.5 text-sm text-[#eaecef] transition">
+                  <span className="flex items-center gap-2">
+                    {params.route === '__balance__'
+                      ? <><span className="w-2 h-2 rounded-full bg-[#0ecb81]" /> Platform Balance</>
+                      : <><span className="w-2 h-2 rounded-full bg-[#f0b90b]" /> {routeLabel}</>
+                    }
+                  </span>
+                  <ChevronDown size={12} className="text-[#848e9c]" />
+                </button>
+                {showRouteDD && (
+                  <div className="absolute top-full mt-1 left-0 right-0 bg-[#1e2329] border border-[#2b3139] rounded-xl z-20 shadow-xl overflow-hidden">
+                    <button onClick={() => { setParams(p => ({ ...p, route: '__balance__' })); setShowRouteDD(false) }}
+                      className={`w-full text-left px-4 py-3 text-sm transition hover:bg-[#2b3139] flex items-center gap-3 ${params.route === '__balance__' ? 'text-[#0ecb81] font-semibold' : 'text-[#eaecef]'}`}>
+                      <span className="w-2 h-2 rounded-full bg-[#0ecb81] flex-shrink-0" />
+                      <div>
+                        <p className="font-medium">Platform Balance</p>
+                        <p className="text-[10px] text-[#848e9c] mt-0.5">Trade via your FinAi wallet USDT balance</p>
+                      </div>
+                    </button>
+                    {exchanges.map(ex => (
+                      <button key={ex.exchange} onClick={() => { setParams(p => ({ ...p, route: ex.label || ex.exchange })); setShowRouteDD(false) }}
+                        className={`w-full text-left px-4 py-3 text-sm transition hover:bg-[#2b3139] flex items-center gap-3 border-t border-[#2b3139] ${params.route === (ex.label || ex.exchange) ? 'text-[#f0b90b] font-semibold' : 'text-[#eaecef]'}`}>
+                        <span className="w-2 h-2 rounded-full bg-[#f0b90b] flex-shrink-0" />
+                        <div>
+                          <p className="font-medium">{ex.label || ex.exchange}</p>
+                          <p className="text-[10px] text-[#848e9c] mt-0.5">Live API · {ex.api_key_masked ?? '••••••••'}</p>
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+
             {/* Capital */}
             <div>
               <label className="text-xs text-[#848e9c] mb-1.5 block">
                 Initial Capital (USDT)
-                <span className="ml-2 text-[#4a5568]">Balance: ${(user?.balance_usdt ?? 0).toLocaleString('en-US', { maximumFractionDigits: 2 })}</span>
+                <span className="ml-2 text-[#4a5568]">Balance: ${((user as unknown as { balance_usdt?: number })?.balance_usdt ?? 0).toLocaleString('en-US', { maximumFractionDigits: 2 })}</span>
               </label>
               <input type="number" min={10} step={100} value={params.initial_capital}
                 onChange={e => setParams(p => ({ ...p, initial_capital: parseFloat(e.target.value) || 0 }))}
                 className="w-full bg-[#0b0e11] border border-[#2b3139] focus:border-[#f0b90b] rounded-xl px-3 py-2.5 text-sm font-mono text-[#eaecef] focus:outline-none transition" />
             </div>
-
-            {/* Mode */}
-            <div>
-              <label className="text-xs text-[#848e9c] mb-1.5 block">Trading Mode</label>
-              <div className="grid grid-cols-2 gap-1 bg-[#0b0e11] p-1 rounded-xl border border-[#2b3139]">
-                <button onClick={() => setParams(p => ({ ...p, paper: true }))}
-                  className={`py-2 rounded-lg text-xs font-bold transition ${params.paper ? 'bg-[#f0b90b] text-black' : 'text-[#848e9c] hover:text-[#eaecef]'}`}>
-                  Paper
-                </button>
-                <button onClick={() => setParams(p => ({ ...p, paper: false }))}
-                  className={`py-2 rounded-lg text-xs font-bold transition ${!params.paper ? 'bg-[#f6465d] text-white' : 'text-[#848e9c] hover:text-[#eaecef]'}`}>
-                  Live
-                </button>
-              </div>
-            </div>
-
-            {/* Exchange selector (shown for live mode) */}
-            {!params.paper && (
-              <div>
-                <label className="text-xs text-[#848e9c] mb-1.5 block">Exchange / API Key</label>
-                {exchanges.length === 0 ? (
-                  <div className="bg-[#0b0e11] border border-[#f6465d]/30 rounded-xl px-3 py-2.5 text-xs text-[#f6465d]">
-                    No exchange connected — <a href="/app/profile" className="underline">Add in Profile</a>
-                  </div>
-                ) : (
-                  <div className="relative">
-                    <button onClick={() => setShowExchangeDD(v => !v)}
-                      className="w-full flex items-center justify-between bg-[#0b0e11] border border-[#2b3139] focus:border-[#f0b90b] rounded-xl px-3 py-2.5 text-sm text-[#eaecef] transition">
-                      <span>{params.exchange_label || exchanges[0]?.label || 'Select exchange'}</span>
-                      <ChevronDown size={12} className="text-[#848e9c]" />
-                    </button>
-                    {showExchangeDD && (
-                      <div className="absolute top-full mt-1 left-0 right-0 bg-[#1e2329] border border-[#2b3139] rounded-xl z-20 shadow-xl overflow-hidden">
-                        {exchanges.map(ex => (
-                          <button key={ex.exchange} onClick={() => { setParams(p => ({ ...p, exchange_label: ex.label || ex.exchange })); setShowExchangeDD(false) }}
-                            className={`w-full text-left px-4 py-2.5 text-sm transition hover:bg-[#2b3139] ${params.exchange_label === (ex.label || ex.exchange) ? 'text-[#f0b90b] font-semibold' : 'text-[#eaecef]'}`}>
-                            <span className="font-medium">{ex.label || ex.exchange}</span>
-                            <span className="ml-2 text-xs text-[#4a5568]">{ex.api_key_masked}</span>
-                          </button>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                )}
-              </div>
-            )}
 
             {/* Risk per trade */}
             <div>
@@ -278,10 +324,11 @@ export default function BotsPage() {
             <div className="bg-[#0b0e11] rounded-xl p-3 text-xs space-y-1.5 border border-[#2b3139]">
               <p className="text-[#848e9c] font-semibold mb-1">Strategy Summary</p>
               <div className="flex justify-between"><span className="text-[#4a5568]">Ticker</span><span className="text-[#f0b90b] font-mono">{params.ticker}</span></div>
+              <div className="flex justify-between"><span className="text-[#4a5568]">Route</span><span className="text-[#eaecef] font-medium truncate max-w-[120px]">{routeLabel}</span></div>
               <div className="flex justify-between"><span className="text-[#4a5568]">Capital</span><span className="text-[#eaecef] font-mono">${params.initial_capital.toLocaleString()}</span></div>
               <div className="flex justify-between"><span className="text-[#4a5568]">Risk/trade</span><span className="text-[#0ecb81] font-mono">{params.risk_per_trade_pct}% = ${(params.initial_capital * params.risk_per_trade_pct / 100).toFixed(2)}</span></div>
-              <div className="flex justify-between"><span className="text-[#4a5568]">Stop at</span><span className="text-[#f6465d] font-mono">-{params.max_drawdown_pct}% = -${(params.initial_capital * params.max_drawdown_pct / 100).toFixed(2)}</span></div>
-              <div className="flex justify-between"><span className="text-[#4a5568]">Mode</span><span className={params.paper ? 'text-[#f0b90b] font-semibold' : 'text-[#f6465d] font-semibold'}>{params.paper ? 'Paper' : 'LIVE'}</span></div>
+              <div className="flex justify-between"><span className="text-[#4a5568]">Stop at</span><span className="text-[#f6465d] font-mono">-{params.max_drawdown_pct}%</span></div>
+              <div className="flex justify-between"><span className="text-[#4a5568]">Mode</span><span className="text-[#f6465d] font-semibold">LIVE</span></div>
             </div>
           </div>
         </div>
@@ -302,7 +349,7 @@ export default function BotsPage() {
 
             <div>
               <h2 className="font-semibold text-[#eaecef]">FinAi Trading Bot</h2>
-              <p className="text-xs text-[#848e9c] mt-0.5">{params.ticker} · {params.paper ? 'Paper' : 'Live'} · Grok AI</p>
+              <p className="text-xs text-[#848e9c] mt-0.5">{params.ticker} · Live · Grok AI</p>
             </div>
 
             {status.running ? (
@@ -323,19 +370,17 @@ export default function BotsPage() {
                 <span className="text-[#f0b90b] font-mono font-medium">{params.ticker}</span>
               </div>
               <div className="flex justify-between text-xs">
+                <span className="text-[#848e9c]">Route</span>
+                <span className="text-[#eaecef] font-medium truncate max-w-[130px]">{routeLabel}</span>
+              </div>
+              <div className="flex justify-between text-xs">
                 <span className="text-[#848e9c]">Mode</span>
-                <span className={`font-semibold ${params.paper ? 'text-[#f0b90b]' : 'text-[#f6465d]'}`}>{params.paper ? 'Paper Trading' : 'LIVE Trading'}</span>
+                <span className="text-[#f6465d] font-semibold">LIVE Trading</span>
               </div>
               <div className="flex justify-between text-xs">
                 <span className="text-[#848e9c]">Capital</span>
                 <span className="text-[#0ecb81] font-mono font-medium">${params.initial_capital.toLocaleString()}</span>
               </div>
-              {!params.paper && params.exchange_label && (
-                <div className="flex justify-between text-xs">
-                  <span className="text-[#848e9c]">Exchange</span>
-                  <span className="text-[#eaecef] font-mono">{params.exchange_label}</span>
-                </div>
-              )}
               <div className="flex justify-between text-xs">
                 <span className="text-[#848e9c]">Risk/Trade</span>
                 <span className="text-[#eaecef] font-mono">{params.risk_per_trade_pct}%</span>
@@ -445,7 +490,8 @@ export default function BotsPage() {
               <ReferenceLine y={0} stroke="#2b3139" strokeDasharray="4 4" />
               <Area type="monotone" dataKey="cumulative"
                 stroke={totalPnl >= 0 ? '#0ecb81' : '#f6465d'} strokeWidth={2}
-                fill={totalPnl >= 0 ? 'url(#pnlGrad)' : 'url(#pnlGradRed)'} dot={false} />
+                fill={totalPnl >= 0 ? 'url(#pnlGrad)' : 'url(#pnlGradRed)'}
+              />
             </AreaChart>
           </ResponsiveContainer>
         )}
@@ -456,8 +502,8 @@ export default function BotsPage() {
         <Brain size={16} className="text-[#f0b90b] flex-shrink-0 mt-0.5" />
         <p className="text-xs text-[#848e9c]">
           <span className="text-[#f0b90b] font-semibold">AI Signal Engine:</span> The bot monitors trend analysis signals every 30 seconds.
-          It buys on BULLISH signals with &gt;65% confidence and sells on BEARISH signals or when stop-loss is triggered.
-          Live mode requires an exchange API key. Configure your parameters above before starting.
+          It buys on BULLISH signals (&gt;65% confidence) and sells on BEARISH signals or stop-loss trigger.
+          All trades are live — no paper mode. Configure route above to select Platform Balance or a connected exchange API.
         </p>
       </div>
 
@@ -477,7 +523,7 @@ export default function BotsPage() {
                 <th className="text-right px-4 py-3 font-medium">Price</th>
                 <th className="text-right px-4 py-3 font-medium">Qty</th>
                 <th className="text-right px-4 py-3 font-medium">P&amp;L</th>
-                <th className="text-left px-4 py-3 font-medium">Reason</th>
+                <th className="text-left px-4 py-3 font-medium">Route</th>
               </tr>
             </thead>
             <tbody>
@@ -489,7 +535,7 @@ export default function BotsPage() {
                     <div className="flex flex-col items-center gap-2">
                       <Bot size={28} className="text-[#2b3139]" />
                       <p className="text-sm text-[#848e9c]">No trades yet</p>
-                      <p className="text-xs text-[#4a5568]">Configure and start the bot to begin trading</p>
+                      <p className="text-xs text-[#4a5568]">Configure and start the bot to begin live trading</p>
                     </div>
                   </td>
                 </tr>
@@ -501,7 +547,7 @@ export default function BotsPage() {
                   <td className="px-4 py-3">
                     <div className="flex items-center gap-2">
                       <div className="w-6 h-6 rounded-full bg-[#f0b90b]/10 flex items-center justify-center text-[9px] font-bold text-[#f0b90b] flex-shrink-0">
-                        {t.ticker[0]}
+                        {(t.ticker ?? '?')[0]}
                       </div>
                       <span className="text-xs font-medium text-[#eaecef]">{t.ticker}</span>
                     </div>
@@ -511,7 +557,7 @@ export default function BotsPage() {
                       {t.action}
                     </span>
                   </td>
-                  <td className="px-4 py-3 text-right font-mono text-xs text-[#eaecef]">${t.price.toLocaleString()}</td>
+                  <td className="px-4 py-3 text-right font-mono text-xs text-[#eaecef]">${(t.price ?? 0).toLocaleString()}</td>
                   <td className="px-4 py-3 text-right font-mono text-xs text-[#848e9c]">{t.qty}</td>
                   <td className="px-4 py-3 text-right font-mono text-xs">
                     {t.pnl !== null ? (
@@ -520,7 +566,9 @@ export default function BotsPage() {
                       </span>
                     ) : <span className="text-[#848e9c]">Open</span>}
                   </td>
-                  <td className="px-4 py-3 text-xs text-[#848e9c] max-w-[180px] truncate">{t.reason ?? '—'}</td>
+                  <td className="px-4 py-3 text-xs text-[#848e9c]">
+                    {t.exchange === 'internal' || t.exchange === 'manual' ? 'Balance' : (t.exchange ?? '—').toUpperCase()}
+                  </td>
                 </tr>
               ))}
             </tbody>
