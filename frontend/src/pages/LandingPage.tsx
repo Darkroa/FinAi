@@ -207,24 +207,13 @@ export default function LandingPage() {
       <section className="py-10 sm:py-14 border-y border-[#2b3139] bg-[#0d1014]">
         <div className="max-w-5xl mx-auto px-4 sm:px-6">
           <p className="text-center text-xs text-[#4a5568] font-semibold uppercase tracking-widest mb-8">Trusted & Integrated Partners</p>
-          <div className="flex flex-wrap items-center justify-center gap-6 sm:gap-10">
-            {[
-              { name: 'Binance',   abbr: 'BNB',    color: '#f0b90b' },
-              { name: 'Bybit',     abbr: 'BYBT',   color: '#f7a600' },
-              { name: 'OKX',       abbr: 'OKX',    color: '#0ecb81' },
-              { name: 'Coinbase',  abbr: 'COIN',   color: '#0052ff' },
-              { name: 'Kraken',    abbr: 'KRKN',   color: '#5741d9' },
-              { name: 'KuCoin',    abbr: 'KCS',    color: '#23af91' },
-              { name: 'Grok AI',   abbr: 'AI',     color: '#f0b90b' },
-            ].map(p => (
-              <div key={p.name} className="flex items-center gap-2.5 opacity-60 hover:opacity-100 transition-opacity cursor-default">
-                <div className="w-8 h-8 rounded-lg flex items-center justify-center text-[10px] font-extrabold"
-                  style={{ background: p.color + '20', color: p.color, border: `1px solid ${p.color}30` }}>
-                  {p.abbr.slice(0, 2)}
-                </div>
-                <span className="text-sm font-semibold text-[#848e9c]">{p.name}</span>
-              </div>
-            ))}
+          <div className="flex items-center justify-center">
+            <img
+              src="/partners.png"
+              alt="Partners: AWS, Anthropic, Apple, Broadcom, Cisco, CrowdStrike, Google, JPMorgan Chase, Linux Foundation, Microsoft, NVIDIA, Palo Alto Networks"
+              className="w-full max-w-2xl opacity-70 hover:opacity-100 transition-opacity duration-300 object-contain"
+              style={{ filter: 'brightness(0.9) contrast(0.95)' }}
+            />
           </div>
         </div>
       </section>
