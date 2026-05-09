@@ -69,19 +69,15 @@ const ASSET_META: Record<string, { name: string; vol: string; mcap: string }> = 
   'GLD':   { name: 'SPDR Gold Shares',  vol: '$1.4B',  mcap: '—'      },
 }
 
-const NEW_LISTINGS: NewListing[] = [
-  { symbol: 'WLD/USDT',  name: 'Worldcoin',    price: 1.28,  change: 8.4,  recommendation: 'BUY',  confidence: 78, reason: 'Strong breakout above 20-day MA with volume surge. AI detects bullish accumulation pattern.', cat: 'crypto' },
-  { symbol: 'STRK/USDT', name: 'StarkNet',     price: 0.562, change: 12.1, recommendation: 'BUY',  confidence: 72, reason: 'L2 narrative momentum. Network TVL growing 34% week-over-week. Oversold RSI bounce.', cat: 'crypto' },
-  { symbol: 'ONDO/USDT', name: 'Ondo Finance', price: 0.918, change: 5.8,  recommendation: 'HOLD', confidence: 61, reason: 'RWA tokenization leader but near resistance. Wait for breakout above $1.00 for entry.', cat: 'crypto' },
-  { symbol: 'ENA/USDT',  name: 'Ethena',       price: 0.44,  change: -3.2, recommendation: 'SELL', confidence: 68, reason: 'Bearish divergence on RSI. Protocol TVL declining. High funding rate creating sell pressure.', cat: 'crypto' },
-  { symbol: 'BOME/USDT', name: 'Book of Meme', price: 0.0082,change: 18.4, recommendation: 'BUY',  confidence: 55, reason: 'Meme cycle momentum. High risk/reward. Strict stop-loss at -15% recommended.', cat: 'crypto' },
-  { symbol: 'W/USDT',    name: 'Wormhole',     price: 0.195, change: 6.2,  recommendation: 'BUY',  confidence: 65, reason: 'Cross-chain bridge volume up 45% in 7 days. Institutional interest growing.', cat: 'crypto' },
-  { symbol: 'ARM',       name: 'Arm Holdings',  price: 118.5, change: 3.8,  recommendation: 'BUY',  confidence: 74, reason: 'AI chip architecture exposure. Strong earnings beat. Semiconductor cycle recovery.', cat: 'stocks' },
-  { symbol: 'RDDT',      name: 'Reddit Inc.',   price: 63.20, change: -2.1, recommendation: 'HOLD', confidence: 58, reason: 'Post-IPO stabilization. AI data licensing deals are a catalyst but valuation is stretched.', cat: 'stocks' },
-  { symbol: 'ALAB',      name: 'Astera Labs',   price: 44.10, change: 7.3,  recommendation: 'BUY',  confidence: 70, reason: 'Data center connectivity play. Revenue growth 128% YoY. Key beneficiary of AI buildout.', cat: 'stocks' },
-]
-
 type Tab = 'all' | 'crypto' | 'stocks' | 'metals' | 'new'
+
+interface NewsItem {
+  title: string
+  source: string
+  url: string
+  published: string
+  description: string
+}
 
 export default function MarketsPage() {
   const navigate = useNavigate()
@@ -91,6 +87,26 @@ export default function MarketsPage() {
   const [markets, setMarkets] = useState<MarketItem[]>([])
   const [loading, setLoading] = useState(true)
   const [lastUpdate, setLastUpdate] = useState<Date | null>(null)
+  const [recommendations, setRecommendations] = useState<NewListing[]>([])
+  const [recLoading, setRecLoading] = useState(false)
+  const [news, setNews] = useState<NewsItem[]>([])
+  const [newsLoading, setNewsLoading] = useState(false)
+
+  const fetchRecommendations = useCallback(async () => {
+    setRecLoading(true)
+    try {
+      const res = await fetch('/api/public/recommendations')
+      if (res.ok) setRecommendations(await res.json())
+    } catch { /* silent */ } finally { setRecLoading(false) }
+  }, [])
+
+  const fetchNews = useCallback(async () => {
+    setNewsLoading(true)
+    try {
+      const res = await fetch('/api/public/news')
+      if (res.ok) setNews(await res.json())
+    } catch { /* silent */ } finally { setNewsLoading(false) }
+  }, [])
 
   const fetchMarkets = useCallback(async () => {
     try {
@@ -144,6 +160,18 @@ export default function MarketsPage() {
     return () => clearInterval(id)
   }, [fetchMarkets])
 
+  useEffect(() => {
+    fetchRecommendations()
+    const id = setInterval(fetchRecommendations, 60000)
+    return () => clearInterval(id)
+  }, [fetchRecommendations])
+
+  useEffect(() => {
+    fetchNews()
+    const id = setInterval(fetchNews, 120000)
+    return () => clearInterval(id)
+  }, [fetchNews])
+
   const filtered = markets.filter(m => {
     if (tab !== 'all' && tab !== 'new' && m.cat !== tab) return false
     return (
@@ -152,7 +180,7 @@ export default function MarketsPage() {
     )
   })
 
-  const filteredNew = NEW_LISTINGS.filter(n =>
+  const filteredNew = recommendations.filter(n =>
     n.symbol.toLowerCase().includes(search.toLowerCase()) ||
     n.name.toLowerCase().includes(search.toLowerCase())
   )
@@ -223,12 +251,44 @@ export default function MarketsPage() {
 
       {/* New / Trending tab */}
       {tab === 'new' && (
-        <div className="space-y-3">
-          <div className="flex items-center gap-2 mb-1">
-            <Star size={13} className="text-[#f0b90b]" />
-            <p className="text-xs font-bold text-[#eaecef]">New Listings & Trending</p>
-            <span className="text-[10px] bg-[#f0b90b]/10 text-[#f0b90b] px-2 py-0.5 rounded-full font-medium">AI Recommendations</span>
+        <div className="space-y-5">
+          {/* Live News Section */}
+          <div>
+            <div className="flex items-center gap-2 mb-3">
+              <span className="text-[#f0b90b] text-base">📰</span>
+              <p className="text-xs font-bold text-[#eaecef]">Live Market News</p>
+              {newsLoading && <div className="w-3 h-3 border border-[#f0b90b] border-t-transparent rounded-full animate-spin" />}
+            </div>
+            {news.length === 0 && !newsLoading ? (
+              <p className="text-xs text-[#848e9c]">Loading news...</p>
+            ) : (
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                {news.slice(0, 6).map((n, i) => (
+                  <a key={i} href={n.url} target="_blank" rel="noopener noreferrer"
+                    className="bg-[#161a1e] border border-[#2b3139] hover:border-[#f0b90b]/30 rounded-xl p-3.5 transition-all block">
+                    <p className="text-xs font-semibold text-[#eaecef] leading-snug line-clamp-2 mb-1.5">{n.title}</p>
+                    <div className="flex items-center justify-between">
+                      <span className="text-[10px] text-[#f0b90b] font-medium">{n.source}</span>
+                      {n.published && (
+                        <span className="text-[10px] text-[#4a5568]">
+                          {new Date(n.published).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}
+                        </span>
+                      )}
+                    </div>
+                  </a>
+                ))}
+              </div>
+            )}
           </div>
+
+          {/* AI Recommendations Section */}
+          <div>
+            <div className="flex items-center gap-2 mb-3">
+              <Star size={13} className="text-[#f0b90b]" />
+              <p className="text-xs font-bold text-[#eaecef]">AI Recommendations</p>
+              <span className="text-[10px] bg-[#f0b90b]/10 text-[#f0b90b] px-2 py-0.5 rounded-full font-medium">Live</span>
+              {recLoading && <div className="w-3 h-3 border border-[#f0b90b] border-t-transparent rounded-full animate-spin" />}
+            </div>
           {filteredNew.map(n => {
             const isUp   = n.change >= 0
             const recColor = n.recommendation === 'BUY' ? 'text-[#0ecb81] bg-[#0ecb81]/10 border-[#0ecb81]/20'
@@ -276,6 +336,7 @@ export default function MarketsPage() {
               </div>
             )
           })}
+          </div>
         </div>
       )}
 

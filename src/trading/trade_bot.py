@@ -9,11 +9,25 @@ from src.database.models import TrendAnalysis, TradeLog
 from src.database.session import SessionLocal
 from src.notifications.notifier import Notifier
 
-from alpaca.trading.client import TradingClient
-from alpaca.trading.requests import MarketOrderRequest
-from alpaca.trading.enums import OrderSide, TimeInForce
-
 notifier = Notifier()
+
+
+def _place_binance_order(side: str, symbol: str, qty: float, api_key: str, secret: str) -> dict:
+    """Place a market order on Binance via ccxt. Returns order dict or raises."""
+    try:
+        import ccxt
+        exchange = ccxt.binance({"apiKey": api_key, "secret": secret, "enableRateLimit": True})
+        pair = symbol.replace("-", "/").replace("_", "/")
+        if "/" not in pair:
+            pair = pair[:3] + "/" + pair[3:]
+        if side.upper() == "BUY":
+            order = exchange.create_market_buy_order(pair, qty)
+        else:
+            order = exchange.create_market_sell_order(pair, qty)
+        return {"order_id": str(order.get("id", "")), "status": order.get("status", "submitted")}
+    except Exception as e:
+        logger.warning(f"Binance order failed ({symbol} {side}): {e}")
+        raise
 
 user_bot_managers: Dict[str, "UserBotManager"] = {}
 
@@ -42,16 +56,8 @@ class TradingBotInstance:
         self.running = False
         self.thread = None
         self.latest_price = 100.0
-
-        self.trading_client = None
-        import os
-        api_key = os.getenv("ALPACA_API_KEY")
-        secret_key = os.getenv("ALPACA_SECRET_KEY")
-        if api_key and secret_key:
-            try:
-                self.trading_client = TradingClient(api_key, secret_key, paper=paper)
-            except Exception as e:
-                logger.warning(f"Alpaca connection failed: {e}")
+        self.binance_api_key: str | None = None
+        self.binance_secret: str | None = None
 
     def start(self):
         if self.running:
@@ -186,14 +192,11 @@ class TradingBotInstance:
 
     def _open_position(self, qty: float, price: float, reason: str):
         try:
-            if not self.paper and self.trading_client:
-                order_data = MarketOrderRequest(
-                    symbol=self.ticker,
-                    qty=round(qty, 4),
-                    side=OrderSide.BUY,
-                    time_in_force=TimeInForce.DAY,
-                )
-                self.trading_client.submit_order(order_data)
+            if not self.paper and self.binance_api_key and self.binance_secret:
+                try:
+                    _place_binance_order("BUY", self.ticker, round(qty, 4), self.binance_api_key, self.binance_secret)
+                except Exception as e:
+                    logger.warning(f"Binance BUY skipped, using internal balance: {e}")
 
             self.position = qty
             self.entry_price = price
@@ -218,14 +221,11 @@ class TradingBotInstance:
             return
         pnl = (price - self.entry_price) * self.position
         try:
-            if not self.paper and self.trading_client:
-                order_data = MarketOrderRequest(
-                    symbol=self.ticker,
-                    qty=round(self.position, 4),
-                    side=OrderSide.SELL,
-                    time_in_force=TimeInForce.DAY,
-                )
-                self.trading_client.submit_order(order_data)
+            if not self.paper and self.binance_api_key and self.binance_secret:
+                try:
+                    _place_binance_order("SELL", self.ticker, round(self.position, 4), self.binance_api_key, self.binance_secret)
+                except Exception as e:
+                    logger.warning(f"Binance SELL skipped, using internal balance: {e}")
 
             self.capital += self.position * price
             trade = {
@@ -340,7 +340,9 @@ class UserBotManager:
     def start_bot(self, ticker: str, paper: bool = True,
                   initial_capital: float = 1000.0,
                   risk_per_trade_pct: float = 1.0,
-                  max_drawdown_pct: float = 10.0) -> str:
+                  max_drawdown_pct: float = 10.0,
+                  binance_api_key: str | None = None,
+                  binance_secret: str | None = None) -> str:
         if ticker in self.bots and self.bots[ticker].running:
             return f"Bot for {ticker} is already running."
         bot = TradingBotInstance(
@@ -351,10 +353,14 @@ class UserBotManager:
             max_drawdown_pct=max_drawdown_pct,
             risk_per_trade_pct=risk_per_trade_pct,
         )
+        if binance_api_key and binance_secret:
+            bot.binance_api_key = binance_api_key
+            bot.binance_secret = binance_secret
         self.bots[ticker] = bot
         bot.start()
-        logger.info(f"User {self.user_email} started {'paper' if paper else 'LIVE'} bot on {ticker} | capital=${initial_capital} risk={risk_per_trade_pct}% dd={max_drawdown_pct}%")
-        return f"✅ Bot started on {ticker} ({'Paper' if paper else 'LIVE'}) | Capital: ${initial_capital:,.2f}"
+        broker = "Binance" if (binance_api_key and binance_secret) else "Platform Balance"
+        logger.info(f"User {self.user_email} started {'paper' if paper else 'LIVE'} bot on {ticker} via {broker} | capital=${initial_capital} risk={risk_per_trade_pct}% dd={max_drawdown_pct}%")
+        return f"✅ Bot started on {ticker} ({'Paper' if paper else 'LIVE'}) | Capital: ${initial_capital:,.2f} | Broker: {broker}"
 
     def stop_bot(self, ticker: str = "ALL") -> str:
         if ticker == "ALL":

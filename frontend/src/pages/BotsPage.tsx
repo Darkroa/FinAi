@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback } from 'react'
-import { getBotStatus, startBot, stopBot, getBotTrades, updateBotParams, getBotPnlHistory } from '../lib/api'
+import { getBotStatus, startBot, stopBot, getBotTrades, updateBotParams, getBotPnlHistory, listApiKeys } from '../lib/api'
 import { useAuthStore } from '../store/authStore'
 import toast from 'react-hot-toast'
 import { Bot, Play, Square, RefreshCw, TrendingUp, Activity, Zap, Brain, Settings, Save, ChevronDown, BarChart2, Lock, KeyRound, ArrowRight } from 'lucide-react'
@@ -33,6 +33,16 @@ export default function BotsPage() {
   const [savingParams, setSavingParams]   = useState(false)
   const [showTickerDD, setShowTickerDD]   = useState(false)
   const [showRouteDD, setShowRouteDD]     = useState(false)
+  const [hasApiKey, setHasApiKey]         = useState<boolean | null>(null)
+
+  useEffect(() => {
+    listApiKeys()
+      .then(res => {
+        const keys = Array.isArray(res.data) ? res.data : []
+        setHasApiKey(keys.some((k: { is_active: boolean }) => k.is_active))
+      })
+      .catch(() => setHasApiKey(false))
+  }, [])
 
   // Route: '__balance__' = use platform balance, else = exchange label
   const [params, setParams] = useState({
@@ -134,6 +144,45 @@ export default function BotsPage() {
   const routeLabel = params.route === '__balance__'
     ? 'Platform Balance'
     : (exchanges.find(e => e.label === params.route)?.label ?? params.route)
+
+  if (hasApiKey === null) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="w-6 h-6 border-2 border-[#f0b90b] border-t-transparent rounded-full animate-spin" />
+      </div>
+    )
+  }
+
+  if (hasApiKey === false) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-[60vh] gap-6 text-center px-4">
+        <div className="w-20 h-20 rounded-full bg-[#f0b90b]/10 border-2 border-[#f0b90b]/30 flex items-center justify-center">
+          <Lock size={36} className="text-[#f0b90b]" />
+        </div>
+        <div>
+          <h2 className="text-xl font-bold text-[#eaecef] mb-2">FinAi API Key Required</h2>
+          <p className="text-sm text-[#848e9c] max-w-md">
+            To access the AI Trading Bot, you need a FinAi API key. This key authenticates your bot session and keeps your trading activity secure.
+          </p>
+        </div>
+        <div className="bg-[#161a1e] border border-[#f0b90b]/20 rounded-2xl p-6 max-w-sm w-full space-y-3 text-left">
+          <p className="text-xs font-semibold text-[#f0b90b] uppercase tracking-widest">How to get access</p>
+          <ol className="space-y-2 text-sm text-[#848e9c]">
+            <li className="flex gap-2"><span className="text-[#f0b90b] font-bold">1.</span> Go to your Profile page</li>
+            <li className="flex gap-2"><span className="text-[#f0b90b] font-bold">2.</span> Open the <span className="text-[#eaecef] font-medium">FinAPI</span> tab</li>
+            <li className="flex gap-2"><span className="text-[#f0b90b] font-bold">3.</span> Create a new API key with name <span className="font-mono text-[#eaecef]">bot</span></li>
+            <li className="flex gap-2"><span className="text-[#f0b90b] font-bold">4.</span> Return here to start trading</li>
+          </ol>
+        </div>
+        <button
+          onClick={() => navigate('/app/profile')}
+          className="flex items-center gap-2 bg-[#f0b90b] hover:bg-[#d9a60b] text-black font-bold px-6 py-3 rounded-xl transition">
+          <KeyRound size={16} /> Go to Profile — Create Key
+          <ArrowRight size={14} />
+        </button>
+      </div>
+    )
+  }
 
   return (
     <div className="space-y-5">
