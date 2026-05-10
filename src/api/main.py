@@ -48,6 +48,10 @@ async def startup_event():
         with engine.connect() as _conn:
             _conn.execute(_text("ALTER TABLE users ADD COLUMN IF NOT EXISTS transfer_pin VARCHAR(255)"))
             _conn.execute(_text("ALTER TABLE users ADD COLUMN IF NOT EXISTS pending_deletion BOOLEAN DEFAULT FALSE"))
+            _conn.execute(_text("ALTER TABLE trade_logs ADD COLUMN IF NOT EXISTS stop_loss FLOAT"))
+            _conn.execute(_text("ALTER TABLE trade_logs ADD COLUMN IF NOT EXISTS take_profit FLOAT"))
+            _conn.execute(_text("ALTER TABLE trade_logs ADD COLUMN IF NOT EXISTS leverage FLOAT DEFAULT 1.0"))
+            _conn.execute(_text("ALTER TABLE trade_logs ADD COLUMN IF NOT EXISTS lot_size FLOAT"))
             _conn.commit()
     except Exception:
         pass

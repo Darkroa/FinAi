@@ -5,13 +5,14 @@ import {
   submitKYC, getMe, createApiKey, listApiKeys, revokeApiKey,
   connectExchange, disconnectExchange,
   changePassword, setTransferPin, requestDeleteAccount, saveWebhookSettings,
-  sendWhatsAppCode, verifyWhatsApp, getTelegramChatId
+  sendWhatsAppCode, verifyWhatsApp, getTelegramChatId, generateTelegramCode
 } from '../lib/api'
 import toast from 'react-hot-toast'
 import {
   User, Camera, Shield, CheckCircle, Clock, XCircle,
   Mail, Lock, Key, Zap, Plus, Trash2, Eye, EyeOff,
-  Copy, AlertCircle, Star, Send, MessageCircle, LogOut, ChevronDown
+  Copy, AlertCircle, Star, Send, MessageCircle, LogOut, ChevronDown,
+  Wifi, WifiOff, RefreshCw
 } from 'lucide-react'
 
 const TIERS = [
@@ -400,6 +401,13 @@ function FinApiTab({ user, setUser }: { user: ReturnType<typeof useAuthStore>['u
   const [findingChatId, setFindingChatId]   = useState(false)
   const [foundChatId, setFoundChatId]       = useState<string | null>(null)
 
+  // New Telegram code flow
+  const tgVerified = prefs.telegram_verified === true
+  const tgLinkedName = (prefs.telegram_first_name as string) || ''
+  const tgLinkedChatId = (prefs.telegram_chat_id as string) || ''
+  const [tgCode, setTgCode]                 = useState<string | null>(null)
+  const [generatingTgCode, setGeneratingTgCode] = useState(false)
+
   const waVerified = prefs.whatsapp_verified === true
   const waPhone    = (prefs.whatsapp_number as string) || ''
   const [waInput, setWaInput]               = useState('')
@@ -493,6 +501,27 @@ function FinApiTab({ user, setUser }: { user: ReturnType<typeof useAuthStore>['u
     } catch (err: unknown) {
       toast.error((err as { response?: { data?: { detail?: string } } }).response?.data?.detail || 'Failed to fetch chat ID')
     } finally { setFindingChatId(false) }
+  }
+
+  const handleGenerateTgCode = async () => {
+    setGeneratingTgCode(true)
+    try {
+      const res = await generateTelegramCode()
+      setTgCode(res.data.code)
+      toast.success('Code generated — send it to @FinAitradebot!')
+    } catch (err: unknown) {
+      toast.error((err as { response?: { data?: { detail?: string } } }).response?.data?.detail || 'Failed to generate code')
+    } finally { setGeneratingTgCode(false) }
+  }
+
+  const handleDisconnectTelegram = async () => {
+    try {
+      await saveWebhookSettings({ telegram_bot_token: '', telegram_chat_id: '' })
+      const res = await getMe()
+      setUser(res.data)
+      setTgCode(null)
+      toast.success('Telegram disconnected')
+    } catch { toast.error('Failed to disconnect') }
   }
 
   const handleSendWaCode = async () => {
@@ -700,42 +729,70 @@ function FinApiTab({ user, setUser }: { user: ReturnType<typeof useAuthStore>['u
         <div className="p-4 space-y-4">
           <p className="text-[11px] text-[#848e9c]">Connect Telegram and WhatsApp to receive real-time trade alerts and AI signals.</p>
 
-          {/* Telegram */}
+          {/* Telegram — via @FinAitradebot */}
           <div className="bg-[#0b0e11] border border-[#2b3139] rounded-xl p-4 space-y-3">
-            <div className="flex items-center gap-2">
-              <Send size={12} className="text-[#229ED9]" />
-              <span className="text-xs font-semibold text-[#eaecef]">Telegram Bot</span>
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Send size={12} className="text-[#229ED9]" />
+                <span className="text-xs font-semibold text-[#eaecef]">Telegram (@FinAitradebot)</span>
+              </div>
+              {tgVerified && (
+                <span className="flex items-center gap-1 text-[10px] text-[#0ecb81] bg-[#0ecb81]/10 border border-[#0ecb81]/20 px-2 py-0.5 rounded-full">
+                  <Wifi size={9} /> Connected
+                </span>
+              )}
             </div>
-            <ol className="text-[10px] text-[#848e9c] space-y-0.5 list-decimal list-inside">
-              <li>Create a bot via <span className="text-[#229ED9]">@BotFather</span> and copy the token</li>
-              <li>Send <span className="text-[#f0b90b]">/start</span> to your bot in Telegram</li>
-              <li>Paste the token below and click <span className="text-[#f0b90b]">Find Chat ID</span></li>
-            </ol>
-            <Field label="Bot Token">
-              <input value={tgToken} onChange={e => { setTgToken(e.target.value); setFoundChatId(null) }}
-                placeholder="1234567890:ABCdefGhIJKlmNoPQRsTUVwxyZ" className={inp} />
-            </Field>
-            <div className="flex gap-2">
-              <button type="button" onClick={handleFindChatId} disabled={findingChatId || !tgToken.trim()}
-                className="flex-1 bg-[#229ED9]/20 hover:bg-[#229ED9]/30 disabled:opacity-50 border border-[#229ED9]/30 text-[#229ED9] font-semibold py-2 rounded-lg text-xs transition">
-                {findingChatId ? 'Searching…' : '🔍 Find My Chat ID'}
-              </button>
-            </div>
-            {foundChatId && (
-              <div className="flex items-center gap-2 bg-[#0ecb81]/10 border border-[#0ecb81]/20 rounded-lg px-3 py-2">
-                <CheckCircle size={12} className="text-[#0ecb81] flex-shrink-0" />
-                <span className="text-xs text-[#0ecb81] font-mono">{foundChatId}</span>
-                <span className="text-[10px] text-[#848e9c] ml-auto">auto-filled below</span>
+
+            {tgVerified ? (
+              <div className="space-y-2">
+                <div className="flex items-center gap-2 bg-[#0ecb81]/8 border border-[#0ecb81]/15 rounded-lg px-3 py-2.5">
+                  <CheckCircle size={13} className="text-[#0ecb81] flex-shrink-0" />
+                  <div>
+                    <p className="text-xs font-medium text-[#eaecef]">{tgLinkedName || 'Telegram User'}</p>
+                    <p className="text-[10px] text-[#848e9c]">Chat ID: {tgLinkedChatId} · Alerts enabled</p>
+                  </div>
+                </div>
+                <button onClick={handleDisconnectTelegram}
+                  className="w-full border border-[#f6465d]/30 hover:bg-[#f6465d]/10 text-[#f6465d] font-medium py-2 rounded-lg text-xs transition">
+                  Disconnect Telegram
+                </button>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                <ol className="text-[10px] text-[#848e9c] space-y-1 list-decimal list-inside">
+                  <li>Open Telegram and search for <span className="text-[#229ED9] font-mono">@FinAitradebot</span></li>
+                  <li>Click <span className="text-[#f0b90b]">Start</span> to begin a chat</li>
+                  <li>Click <span className="text-[#f0b90b]">Generate Code</span> below and send the code to the bot</li>
+                </ol>
+                {tgCode ? (
+                  <div className="space-y-2">
+                    <div className="bg-[#229ED9]/10 border border-[#229ED9]/20 rounded-xl p-3 text-center">
+                      <p className="text-[10px] text-[#848e9c] mb-1">Send this code to @FinAitradebot:</p>
+                      <div className="flex items-center justify-center gap-2">
+                        <code className="text-lg font-mono font-bold text-[#229ED9] tracking-widest">{tgCode}</code>
+                        <button onClick={() => { navigator.clipboard.writeText(tgCode); toast.success('Copied!') }}
+                          className="p-1 text-[#229ED9] hover:bg-[#229ED9]/10 rounded-lg transition">
+                          <Copy size={13}/>
+                        </button>
+                      </div>
+                    </div>
+                    <a href="https://t.me/FinAitradebot" target="_blank" rel="noopener noreferrer"
+                      className="flex items-center justify-center gap-2 w-full bg-[#229ED9] hover:bg-[#1a8bc4] text-white font-semibold py-2.5 rounded-lg text-xs transition">
+                      <Send size={12}/> Open @FinAitradebot
+                    </a>
+                    <p className="text-[10px] text-[#4a5568] text-center">After sending the code, this page will update automatically on next refresh.</p>
+                    <button onClick={() => setTgCode(null)} className="w-full text-xs text-[#848e9c] hover:text-[#eaecef] py-1 transition">
+                      Generate new code
+                    </button>
+                  </div>
+                ) : (
+                  <button onClick={handleGenerateTgCode} disabled={generatingTgCode}
+                    className="w-full bg-[#229ED9]/20 hover:bg-[#229ED9]/30 disabled:opacity-50 border border-[#229ED9]/30 text-[#229ED9] font-semibold py-2.5 rounded-lg text-xs transition flex items-center justify-center gap-2">
+                    {generatingTgCode ? <><RefreshCw size={12} className="animate-spin" /> Generating…</> : <><Send size={12}/> Generate Telegram Code</>}
+                  </button>
+                )}
               </div>
             )}
-            <Field label="Chat ID">
-              <input value={tgChatId} onChange={e => setTgChatId(e.target.value)}
-                placeholder="-1001234567890 (auto-filled or paste manually)" className={inp} />
-            </Field>
-            <button onClick={handleSaveWebhook} disabled={savingWebhook}
-              className="w-full bg-[#f0b90b] hover:bg-[#d4a30a] disabled:opacity-60 text-black font-semibold py-2.5 rounded-lg text-xs transition">
-              {savingWebhook ? 'Saving…' : 'Save Telegram Settings'}
-            </button>
           </div>
 
           {/* WhatsApp */}
@@ -827,6 +884,14 @@ function SecurityTab({ user }: { user: ReturnType<typeof useAuthStore>['user'] }
   const [deleting, setDeleting]     = useState(false)
   const [showDelConfirm, setShowDelConfirm] = useState(false)
 
+  const prefs = (user?.notification_preferences as Record<string, unknown>) || {}
+  const waVerified = prefs.whatsapp_verified === true
+  const waPhone = (prefs.whatsapp_number as string) || ''
+  const tgVerified = prefs.telegram_verified === true
+  const tgName = (prefs.telegram_first_name as string) || ''
+  const emailVerified = user?.is_mail_verified === true
+  const accountTier = user?.account_tier ?? 0
+
   const handleChangePw = async (e: React.FormEvent) => {
     e.preventDefault()
     if (newPw !== confirmPw) return toast.error('Passwords do not match')
@@ -868,6 +933,51 @@ function SecurityTab({ user }: { user: ReturnType<typeof useAuthStore>['user'] }
 
   return (
     <div className="space-y-4">
+
+      {/* Connection Status Overview — Tier 3 */}
+      {accountTier >= 3 && (
+        <div className="bg-[#161a1e] border border-[#2b3139] rounded-xl overflow-hidden">
+          <div className="flex items-center gap-2 px-4 py-3 border-b border-[#2b3139] bg-[#1a1f25]">
+            <Wifi size={13} className="text-[#f0b90b]" />
+            <span className="text-xs font-semibold text-[#eaecef]">Notification Channels</span>
+          </div>
+          <div className="p-4 grid grid-cols-3 gap-3">
+            {/* Email */}
+            <div className={`flex flex-col items-center gap-2 rounded-xl p-3 border ${emailVerified ? 'border-[#0ecb81]/30 bg-[#0ecb81]/5' : 'border-[#f6465d]/30 bg-[#f6465d]/5'}`}>
+              <div className={`w-8 h-8 rounded-full flex items-center justify-center ${emailVerified ? 'bg-[#0ecb81]/10' : 'bg-[#f6465d]/10'}`}>
+                <Mail size={14} className={emailVerified ? 'text-[#0ecb81]' : 'text-[#f6465d]'} />
+              </div>
+              <span className="text-[10px] font-semibold text-[#848e9c]">Email</span>
+              <span className={`text-[9px] font-bold flex items-center gap-1 ${emailVerified ? 'text-[#0ecb81]' : 'text-[#f6465d]'}`}>
+                <span className={`w-1.5 h-1.5 rounded-full inline-block ${emailVerified ? 'bg-[#0ecb81]' : 'bg-[#f6465d]'}`} />
+                {emailVerified ? 'Connected' : 'Not verified'}
+              </span>
+            </div>
+            {/* WhatsApp */}
+            <div className={`flex flex-col items-center gap-2 rounded-xl p-3 border ${waVerified ? 'border-[#25D366]/30 bg-[#25D366]/5' : 'border-[#f6465d]/30 bg-[#f6465d]/5'}`}>
+              <div className={`w-8 h-8 rounded-full flex items-center justify-center ${waVerified ? 'bg-[#25D366]/10' : 'bg-[#f6465d]/10'}`}>
+                <MessageCircle size={14} className={waVerified ? 'text-[#25D366]' : 'text-[#f6465d]'} />
+              </div>
+              <span className="text-[10px] font-semibold text-[#848e9c]">WhatsApp</span>
+              <span className={`text-[9px] font-bold flex items-center gap-1 ${waVerified ? 'text-[#25D366]' : 'text-[#f6465d]'}`}>
+                <span className={`w-1.5 h-1.5 rounded-full inline-block ${waVerified ? 'bg-[#25D366]' : 'bg-[#f6465d]'}`} />
+                {waVerified ? waPhone.slice(-4) ? `···${waPhone.slice(-4)}` : 'Connected' : 'Not linked'}
+              </span>
+            </div>
+            {/* Telegram */}
+            <div className={`flex flex-col items-center gap-2 rounded-xl p-3 border ${tgVerified ? 'border-[#229ED9]/30 bg-[#229ED9]/5' : 'border-[#f6465d]/30 bg-[#f6465d]/5'}`}>
+              <div className={`w-8 h-8 rounded-full flex items-center justify-center ${tgVerified ? 'bg-[#229ED9]/10' : 'bg-[#f6465d]/10'}`}>
+                <Send size={14} className={tgVerified ? 'text-[#229ED9]' : 'text-[#f6465d]'} />
+              </div>
+              <span className="text-[10px] font-semibold text-[#848e9c]">Telegram</span>
+              <span className={`text-[9px] font-bold flex items-center gap-1 ${tgVerified ? 'text-[#229ED9]' : 'text-[#f6465d]'}`}>
+                <span className={`w-1.5 h-1.5 rounded-full inline-block ${tgVerified ? 'bg-[#229ED9]' : 'bg-[#f6465d]'} animate-pulse`} />
+                {tgVerified ? tgName || 'Connected' : 'Not linked'}
+              </span>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Change Password */}
       <form onSubmit={handleChangePw} className="bg-[#161a1e] border border-[#2b3139] rounded-xl overflow-hidden">

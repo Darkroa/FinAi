@@ -79,6 +79,8 @@ export default function TradePage() {
   const [amount, setAmount]       = useState('')
   const [stopLoss, setStopLoss]   = useState('')
   const [takeProfit, setTakeProfit] = useState('')
+  const [leverage, setLeverage]   = useState(1)
+  const [lotSize, setLotSize]     = useState('')
   const [tf, setTf]               = useState('1h')
   const [pair, setPair]           = useState('BTC/USDT')
   const [showPairs, setShowP]     = useState(false)
@@ -175,6 +177,10 @@ export default function TradePage() {
         amount: qty,
         paper: false,
         exchange_label: usingBalance ? undefined : selExchange,
+        stop_loss: stopLoss ? parseFloat(stopLoss) : undefined,
+        take_profit: takeProfit ? parseFloat(takeProfit) : undefined,
+        leverage: leverage > 1 ? leverage : undefined,
+        lot_size: lotSize ? parseFloat(lotSize) : undefined,
       })
       const d = res.data
       const exLabel = usingBalance ? 'Platform Balance' : selectedConn?.exchange?.toUpperCase() ?? selExchange
@@ -205,6 +211,8 @@ export default function TradePage() {
       setAmount('')
       setStopLoss('')
       setTakeProfit('')
+      setLeverage(1)
+      setLotSize('')
       fetchHistory()
       setBottomTab('positions')
     } catch (err: unknown) {
@@ -461,11 +469,30 @@ export default function TradePage() {
                     className="w-full bg-[#0b0e11] border border-[#2b3139] focus:border-[#0ecb81]/60 rounded-xl px-3 py-2 text-xs font-mono text-[#eaecef] focus:outline-none transition" />
                 </div>
               </div>
+              {/* Leverage + Lot Size */}
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="text-[10px] text-[#848e9c] mb-1 block">Leverage: {leverage}x</label>
+                  <input type="range" min={1} max={125} step={1} value={leverage}
+                    onChange={e => setLeverage(Number(e.target.value))}
+                    className="w-full accent-[#f0b90b] h-1.5 rounded-full cursor-pointer" />
+                  <div className="flex justify-between text-[9px] text-[#4a5568] mt-0.5">
+                    <span>1x</span><span>25x</span><span>50x</span><span>125x</span>
+                  </div>
+                </div>
+                <div>
+                  <label className="text-[10px] text-[#848e9c] mb-1 block">Lot Size (optional)</label>
+                  <input value={lotSize} onChange={e => setLotSize(e.target.value)} placeholder="e.g. 0.01"
+                    className="w-full bg-[#0b0e11] border border-[#2b3139] focus:border-[#f0b90b] rounded-xl px-3 py-2 text-xs font-mono text-[#eaecef] focus:outline-none transition" />
+                </div>
+              </div>
+
               {(stopLoss || takeProfit) && (
                 <div className="text-[10px] text-[#848e9c] bg-[#0b0e11] rounded-lg px-2.5 py-2 space-y-0.5 border border-[#2b3139]">
-                  {stopLoss && <p className="text-[#f6465d]">SL @ ${parseFloat(stopLoss).toLocaleString()} — auto-close if price falls here</p>}
-                  {takeProfit && <p className="text-[#0ecb81]">TP @ ${parseFloat(takeProfit).toLocaleString()} — auto-close if price rises here</p>}
-                  <p className="text-[#4a5568]">Monitor your position and close manually when these levels are hit.</p>
+                  {stopLoss && <p className="text-[#f6465d]">🛑 SL @ ${parseFloat(stopLoss).toLocaleString()} — Auto-executed by FinAi when triggered</p>}
+                  {takeProfit && <p className="text-[#0ecb81]">✅ TP @ ${parseFloat(takeProfit).toLocaleString()} — Auto-executed by FinAi when triggered</p>}
+                  {leverage > 1 && <p className="text-[#f0b90b]">⚡ {leverage}x leverage applied</p>}
+                  <p className="text-[#4a5568]">FinAi monitors and auto-executes SL/TP every 30 seconds.</p>
                 </div>
               )}
 

@@ -218,6 +218,10 @@ class TradeLog(Base):
     reason = Column(String(200), nullable=True)
     paper = Column(Boolean, default=True)
     exchange = Column(String(50), nullable=True)
+    stop_loss = Column(Float, nullable=True)
+    take_profit = Column(Float, nullable=True)
+    leverage = Column(Float, nullable=True, default=1.0)
+    lot_size = Column(Float, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
 
 

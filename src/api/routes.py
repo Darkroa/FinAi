@@ -129,6 +129,9 @@ class WebhookSettingsRequest(BaseModel):
     telegram_chat_id: Optional[str] = None
     whatsapp_number: Optional[str] = None
 
+class TelegramLinkRequest(BaseModel):
+    code: str
+
 class BotStartRequest(BaseModel):
     ticker: str = "BTC-USD"
     paper: bool = True
@@ -150,6 +153,10 @@ class TradeExecuteRequest(BaseModel):
     amount: float
     paper: bool = True
     exchange_label: Optional[str] = None
+    stop_loss: Optional[float] = None
+    take_profit: Optional[float] = None
+    leverage: Optional[float] = 1.0
+    lot_size: Optional[float] = None
 
 class WhatsAppCodeRequest(BaseModel):
     phone: str
@@ -1340,6 +1347,10 @@ async def execute_trade(body: TradeExecuteRequest, current_user=Depends(get_curr
         reason=f"{body.order_type} order via trading terminal ({exchange_name})",
         paper=False,
         exchange=exchange_name,
+        stop_loss=body.stop_loss if body.side == "buy" else None,
+        take_profit=body.take_profit if body.side == "buy" else None,
+        leverage=body.leverage or 1.0,
+        lot_size=body.lot_size,
     )
     db.add(log)
     db.commit()
@@ -1387,11 +1398,175 @@ async def execute_trade(body: TradeExecuteRequest, current_user=Depends(get_curr
             "total_usdt": total_cost,
             "new_balance": user.balance_usdt,
             "exchange": log.exchange,
+            "stop_loss": log.stop_loss,
+            "take_profit": log.take_profit,
+            "leverage": log.leverage,
+            "lot_size": log.lot_size,
             "created_at": log.created_at.isoformat() if log.created_at else None,
         },
         "exchange_result": exchange_result,
         "exchange_error": exchange_error,
     }
+
+
+# ===================== Telegram Webhook (FinAitradebot) =====================
+# In-memory code store for Telegram linking
+_telegram_link_codes: dict = {}
+
+@router.post("/users/telegram-generate-code")
+async def generate_telegram_link_code(current_user=Depends(get_current_user), db: Session = Depends(get_db)):
+    """Generate a unique code for user to send to @FinAitradebot to link their account."""
+    user = db.query(User).filter(User.email == current_user["email"]).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    import secrets
+    code = f"FinAi-{secrets.randbelow(900000) + 100000}"
+    _telegram_link_codes[code] = {"user_id": user.id, "email": user.email}
+    return {
+        "code": code,
+        "bot_url": "https://t.me/FinAitradebot",
+        "instructions": f"Send this code to @FinAitradebot in Telegram to link your account: {code}"
+    }
+
+
+@router.post("/telegram/webhook")
+async def telegram_webhook(request: Request, db: Session = Depends(get_db)):
+    """Receive webhook updates from Telegram bot (@FinAitradebot)."""
+    try:
+        data = await request.json()
+    except Exception:
+        return {"ok": True}
+
+    message = data.get("message") or data.get("edited_message") or {}
+    text = message.get("text", "").strip()
+    chat = message.get("chat", {})
+    chat_id = str(chat.get("id", ""))
+    first_name = chat.get("first_name", "")
+
+    if not text or not chat_id:
+        return {"ok": True}
+
+    import httpx as _hx
+
+    bot_token = os.getenv("TELEGRAM_BOT_TOKEN", "")
+    if not bot_token:
+        return {"ok": True}
+
+    async def send_reply(msg: str):
+        try:
+            async with _hx.AsyncClient(timeout=5) as c:
+                await c.post(f"https://api.telegram.org/bot{bot_token}/sendMessage",
+                             json={"chat_id": chat_id, "text": msg, "parse_mode": "HTML"})
+        except Exception:
+            pass
+
+    # /start command
+    if text == "/start":
+        await send_reply(
+            f"👋 Welcome to <b>FinAi Trading Bot</b>, {first_name}!\n\n"
+            "To link your FinAi account:\n"
+            "1. Go to your Profile → Security tab\n"
+            "2. Click <b>Generate Code</b> under Telegram\n"
+            "3. Send the code here (e.g. <code>FinAi-627392</code>)\n\n"
+            "Commands after linking:\n"
+            "/status — portfolio status\n"
+            "/balance — your USDT balance\n"
+            "/trades — recent trades\n"
+            "/help — show this menu"
+        )
+        return {"ok": True}
+
+    # Code linking
+    if text.startswith("FinAi-"):
+        code = text.strip()
+        link_data = _telegram_link_codes.get(code)
+        if not link_data:
+            await send_reply("❌ Invalid or expired code. Generate a new one from your Profile → Security tab.")
+            return {"ok": True}
+        user = db.query(User).filter(User.id == link_data["user_id"]).first()
+        if user:
+            prefs = dict(user.notification_preferences or {})
+            prefs["telegram_chat_id"] = chat_id
+            prefs["telegram_verified"] = True
+            prefs["telegram_first_name"] = first_name
+            user.notification_preferences = prefs
+            db.commit()
+            _telegram_link_codes.pop(code, None)
+            await send_reply(
+                f"✅ <b>Account linked successfully!</b>\n\n"
+                f"Welcome, {first_name}! Your FinAi account (<code>{link_data['email']}</code>) is now connected.\n\n"
+                "You'll receive real-time alerts for:\n"
+                "• Price alerts\n• Stop Loss / Take Profit triggers\n• Bot trade signals\n\n"
+                "Type /help to see available commands."
+            )
+        else:
+            await send_reply("❌ User not found. Please try again.")
+        return {"ok": True}
+
+    # Find user by chat_id in prefs
+    all_users = db.query(User).all()
+    linked_user = None
+    for u in all_users:
+        prefs = dict(u.notification_preferences or {})
+        if prefs.get("telegram_chat_id") == chat_id:
+            linked_user = u
+            break
+
+    if not linked_user:
+        await send_reply("⚠️ Account not linked. Send your FinAi code (e.g. <code>FinAi-627392</code>) to get started.")
+        return {"ok": True}
+
+    # Handle commands for linked users
+    cmd = text.lower().split()[0] if text else ""
+    if cmd == "/status":
+        from src.users.bot_manager import get_user_bot_manager
+        mgr = get_user_bot_manager(linked_user.email, linked_user.id)
+        status = mgr.get_status()
+        if not status:
+            await send_reply("ℹ️ No active bots running.")
+        else:
+            lines = ["📊 <b>Bot Status</b>\n"]
+            for bot_id, s in status.items():
+                running = "🟢" if s.get("running") else "🔴"
+                lines.append(f"{running} <b>{s.get('bot_name', bot_id)}</b>")
+                lines.append(f"  Ticker: {s.get('ticker', '—')} | Value: ${s.get('portfolio_value', 0):.2f}")
+                lines.append(f"  P&L: ${s.get('realized_pnl', 0):.2f} | DD: {s.get('current_drawdown_pct', 0):.1f}%")
+            await send_reply("\n".join(lines))
+
+    elif cmd == "/balance":
+        bal = linked_user.balance_usdt or 0
+        await send_reply(f"💰 <b>Your Balance</b>\n${bal:,.2f} USDT")
+
+    elif cmd == "/trades":
+        from src.database.models import TradeLog as _TL
+        trades = (
+            db.query(_TL)
+            .filter(_TL.user_id == linked_user.id)
+            .order_by(_TL.created_at.desc())
+            .limit(5)
+            .all()
+        )
+        if not trades:
+            await send_reply("No trades yet.")
+        else:
+            lines = ["📜 <b>Last 5 Trades</b>\n"]
+            for t in trades:
+                pnl_str = f" | P&L: ${t.pnl:.2f}" if t.pnl is not None else ""
+                lines.append(f"• {t.action} {t.ticker} @ ${t.price:.2f}{pnl_str}")
+            await send_reply("\n".join(lines))
+
+    elif cmd == "/help":
+        await send_reply(
+            "📖 <b>FinAi Bot Commands</b>\n\n"
+            "/status — Active bot portfolio\n"
+            "/balance — Your USDT balance\n"
+            "/trades — Last 5 trades\n"
+            "/help — This menu"
+        )
+    else:
+        await send_reply("❓ Unknown command. Type /help for available commands.")
+
+    return {"ok": True}
 
 
 # ===================== Public Bot Routes (API Key) =====================

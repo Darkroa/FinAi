@@ -1,6 +1,7 @@
 import asyncio
+import os
 from telegram import Update
-from telegram.ext import Application, CommandHandler, ContextTypes
+from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes
 from twilio.rest import Client
 from loguru import logger
 from src.trading.trade_bot import bot_manager

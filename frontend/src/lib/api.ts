@@ -152,6 +152,10 @@ export const executeTrade = (data: {
   amount: number
   paper?: boolean
   exchange_label?: string
+  stop_loss?: number
+  take_profit?: number
+  leverage?: number
+  lot_size?: number
 }) => api.post('/trade/execute', data)
 
 // Security — change password / PIN / delete request
@@ -198,3 +202,21 @@ export const createAlert = (data: {
 }) => api.post('/alerts', data)
 export const deleteAlert = (id: number) => api.delete(`/alerts/${id}`)
 export const toggleAlert = (id: number) => api.post(`/alerts/${id}/toggle`)
+
+// Telegram — generate link code for @FinAitradebot
+export const generateTelegramCode = () => api.post('/users/telegram-generate-code')
+
+// Trade execute with SL/TP/leverage
+export const executeTradeAdvanced = (data: {
+  pair: string
+  side: string
+  order_type: string
+  price: number
+  amount: number
+  paper?: boolean
+  exchange_label?: string
+  stop_loss?: number | null
+  take_profit?: number | null
+  leverage?: number
+  lot_size?: number | null
+}) => api.post('/trade/execute', data)
