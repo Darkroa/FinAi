@@ -72,6 +72,8 @@ const EMPTY_PARAMS = {
   max_drawdown_pct: 10,
   strategy: 'sma' as 'sma' | 'finlux',
   take_profit_pct: 4,
+  stop_loss_pct: 3,
+  leverage: 1,
   direction: 'auto' as 'auto' | 'buy' | 'sell',
   bot_name: '',
 }
@@ -231,6 +233,8 @@ export default function BotsPage() {
         exchange_label:     usingBalance ? undefined : params.route,
         strategy:           params.strategy,
         take_profit_pct:    params.take_profit_pct,
+        stop_loss_pct:      params.stop_loss_pct,
+        leverage:           params.leverage,
         direction:          params.direction,
         bot_name:           params.bot_name || undefined,
       })
@@ -486,6 +490,47 @@ export default function BotsPage() {
               </div>
             </div>
 
+            {/* Stop Loss */}
+            <div>
+              <label className="text-xs text-[#848e9c] mb-1.5 block">
+                Stop Loss: <span className="text-[#f6465d] font-semibold">{params.stop_loss_pct}%</span>
+                {params.stop_loss_pct >= 20 && <span className="ml-1 text-[#f6465d] font-bold text-[10px]">⚠ High Risk</span>}
+              </label>
+              <input type="range" min={0.5} max={50} step={0.5} value={params.stop_loss_pct}
+                onChange={e => setParams(p => ({ ...p, stop_loss_pct: parseFloat(e.target.value) }))}
+                className="w-full accent-[#f6465d]" />
+              <div className="flex justify-between text-[10px] text-[#4a5568] mt-1">
+                <span>0.5%</span><span>Auto-exit on loss</span><span>50%</span>
+              </div>
+            </div>
+
+            {/* Leverage */}
+            <div className="sm:col-span-2 lg:col-span-3">
+              <label className="text-xs text-[#848e9c] mb-1.5 block flex items-center gap-2">
+                Leverage:
+                <span className={`font-bold text-sm ${params.leverage >= 100 ? 'text-[#f6465d]' : params.leverage >= 20 ? 'text-[#f0b90b]' : 'text-[#eaecef]'}`}>
+                  1:{params.leverage}
+                </span>
+                {params.leverage >= 100 && <span className="text-[#f6465d] text-[10px] font-bold">⚠ EXTREME — High liquidation risk</span>}
+                {params.leverage >= 20 && params.leverage < 100 && <span className="text-[#f0b90b] text-[10px] font-bold">⚠ High leverage</span>}
+              </label>
+              <input type="range" min={1} max={1200} step={1} value={params.leverage}
+                onChange={e => setParams(p => ({ ...p, leverage: parseInt(e.target.value) }))}
+                className="w-full accent-[#f0b90b] h-2" />
+              <div className="flex justify-between text-[10px] text-[#4a5568] mt-1">
+                <span>1:1</span><span>1:10</span><span>1:50</span><span>1:100</span><span>1:500</span><span>1:1000</span><span>1:1200</span>
+              </div>
+              <div className="flex gap-2 mt-2 flex-wrap">
+                {[1, 5, 10, 25, 50, 100, 200, 500, 1000, 1200].map(lv => (
+                  <button key={lv} type="button"
+                    onClick={() => setParams(p => ({ ...p, leverage: lv }))}
+                    className={`text-[10px] px-2 py-1 rounded-lg border transition font-mono ${params.leverage === lv ? 'bg-[#f0b90b] text-black border-[#f0b90b]' : 'border-[#2b3139] text-[#848e9c] hover:border-[#f0b90b]/40 hover:text-[#eaecef]'}`}>
+                    1:{lv}
+                  </button>
+                ))}
+              </div>
+            </div>
+
             {/* Risk per trade */}
             <div>
               <label className="text-xs text-[#848e9c] mb-1.5 block">
@@ -520,7 +565,8 @@ export default function BotsPage() {
                 <span><span className="text-[#4a5568]">Strategy</span> <span className="text-[#eaecef] font-semibold uppercase">{params.strategy}</span></span>
                 <span><span className="text-[#4a5568]">Direction</span> <span className="text-[#eaecef] font-semibold capitalize">{params.direction}</span></span>
                 <span><span className="text-[#4a5568]">TP</span> <span className="text-[#0ecb81] font-semibold">+{params.take_profit_pct}%</span></span>
-                <span><span className="text-[#4a5568]">SL</span> <span className="text-[#f6465d] font-semibold">-3% (fixed)</span></span>
+                <span><span className="text-[#4a5568]">SL</span> <span className="text-[#f6465d] font-semibold">-{params.stop_loss_pct}%</span></span>
+                <span><span className="text-[#4a5568]">Leverage</span> <span className="text-[#f0b90b] font-semibold">1:{params.leverage}</span></span>
                 <span><span className="text-[#4a5568]">Mode</span> <span className="text-[#f6465d] font-semibold">LIVE</span></span>
               </div>
               <div className="flex gap-2">

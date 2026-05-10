@@ -6,7 +6,7 @@ import { useTickerPrices, useLivePricesMap } from '../hooks/useTickerPrices'
 import {
   TrendingUp, TrendingDown, Zap, Activity,
   ArrowUpRight, Bot, BarChart2, RefreshCw, Eye, EyeOff,
-  ArrowRight, Bitcoin, DollarSign, Brain, X, Send
+  ArrowRight, Bitcoin, DollarSign
 } from 'lucide-react'
 
 function getGreeting() {
@@ -344,33 +344,6 @@ export default function DashboardPage() {
         </div>
       )}
 
-      {/* Floating AI Chat Button */}
-      <FloatingAIButton />
-    </div>
-  )
-}
-
-function FloatingAIButton() {
-  const navigate = useNavigate()
-  const [showTooltip, setShowTooltip] = useState(false)
-
-  return (
-    <div className="fixed bottom-24 right-4 z-50 flex flex-col items-end gap-2">
-      {showTooltip && (
-        <div className="bg-[#1a1f25] border border-[#f0b90b]/30 rounded-xl px-3 py-2 shadow-xl mb-1 max-w-[180px]">
-          <p className="text-[11px] font-semibold text-[#eaecef]">FinAi Assistant</p>
-          <p className="text-[10px] text-[#848e9c]">Ask about markets, signals & trades</p>
-        </div>
-      )}
-      <button
-        onClick={() => navigate('/app/recommendations')}
-        onMouseEnter={() => setShowTooltip(true)}
-        onMouseLeave={() => setShowTooltip(false)}
-        className="w-14 h-14 rounded-full bg-gradient-to-br from-[#f0b90b] to-[#d4a30a] shadow-2xl shadow-[#f0b90b]/30 flex items-center justify-center transition-all hover:scale-110 active:scale-95 border-2 border-[#f0b90b]/60"
-        aria-label="Open FinAi Assistant"
-      >
-        <Brain size={24} className="text-black" />
-      </button>
     </div>
   )
 }

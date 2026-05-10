@@ -10,7 +10,6 @@ import {
 } from 'recharts'
 import toast from 'react-hot-toast'
 import { useAuthStore } from '../store/authStore'
-import { useTickerPrices } from '../hooks/useTickerPrices'
 import { executeTrade, getBotTrades, getOpenPositions, closeManualTrade } from '../lib/api'
 
 const PAIRS = ['BTC/USDT', 'ETH/USDT', 'BNB/USDT', 'SOL/USDT']
@@ -22,6 +21,48 @@ const FALLBACKS: Record<string, { price: number; change: number }> = {
   'ETH/USDT': { price: 2380,  change: 1.8 },
   'BNB/USDT': { price: 628,   change: 0.9 },
   'SOL/USDT': { price: 85,    change: 1.2 },
+}
+
+// Faster live-price hook for TradePage — polls every 8 seconds
+function useTradeLivePrice(pair: string) {
+  const symbolMap: Record<string, string> = {
+    'BTC/USDT': 'bitcoin',
+    'ETH/USDT': 'ethereum',
+    'BNB/USDT': 'binancecoin',
+    'SOL/USDT': 'solana',
+  }
+  const [data, setData] = useState<{ price: number; change: number; live: boolean }>({
+    ...FALLBACKS[pair] ?? { price: 100, change: 0 },
+    live: false,
+  })
+  const pairRef = useRef(pair)
+  pairRef.current = pair
+
+  const fetch_ = useCallback(async () => {
+    try {
+      const res = await fetch('/api/public/prices')
+      if (!res.ok) return
+      const json = await res.json()
+      const key = symbolMap[pairRef.current]
+      if (key && json[key]) {
+        setData({ price: json[key].usd, change: json[key].usd_24h_change, live: true })
+      }
+    } catch { /* keep previous */ }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  useEffect(() => {
+    // Reset to fallback on pair change immediately
+    setData({ ...FALLBACKS[pair] ?? { price: 100, change: 0 }, live: false })
+    fetch_()
+  }, [pair, fetch_])
+
+  useEffect(() => {
+    const id = setInterval(fetch_, 8000)
+    return () => clearInterval(id)
+  }, [fetch_])
+
+  return data
 }
 
 function generateLineData(base: number) {
@@ -70,8 +111,7 @@ interface OpenPosition {
 }
 
 export default function TradePage() {
-  const { user }    = useAuthStore()
-  const tickerItems = useTickerPrices(30000)
+  const { user } = useAuthStore()
 
   const [side, setSide]           = useState<'buy' | 'sell'>('buy')
   const [orderType, setType]      = useState<'market' | 'limit'>('limit')
@@ -121,32 +161,33 @@ export default function TradePage() {
 
   useEffect(() => { fetchHistory() }, [fetchHistory])
 
-  const getPriceData = (p: string) => {
-    const item = tickerItems.find(i => i.symbol === p)
-    if (item?.live) {
-      const pr = parseFloat(item.price.replace(/[$,]/g, ''))
-      const ch = parseFloat(item.change.replace(/[%+]/g, ''))
-      return { price: pr, change: ch, live: true }
-    }
-    return { ...(FALLBACKS[p] ?? { price: 100, change: 0 }), live: false }
-  }
+  // Fast live price for TradePage (8s polling)
+  const { price: livePrice, change: liveChange, live: isLive } = useTradeLivePrice(pair)
 
-  const { price: livePrice, change: liveChange, live: isLive } = getPriceData(pair)
   const lineData   = generateLineData(livePrice)
   const candleData = generateCandleData(livePrice)
   const orderBook  = makeOrderBook(livePrice)
 
-  const prevPair     = useRef(pair)
-  const priceInitRef = useRef(false)
+  // For market orders: always sync price input. For limit: only on first load/pair change.
+  const prevPair       = useRef(pair)
+  const priceInitRef   = useRef(false)
+  const userEditedRef  = useRef(false)
 
   useEffect(() => {
     const pairChanged = prevPair.current !== pair
-    if ((pairChanged || !priceInitRef.current) && livePrice > 0) {
-      setPrice(livePrice.toFixed(2))
-      prevPair.current     = pair
-      priceInitRef.current = true
+    if (pairChanged) {
+      // Reset user-edit flag on pair change so price resync happens
+      userEditedRef.current = false
+      priceInitRef.current  = false
+      prevPair.current      = pair
     }
-  }, [pair, livePrice])
+    if (livePrice > 0) {
+      if (!priceInitRef.current || orderType === 'market' || !userEditedRef.current) {
+        setPrice(livePrice.toFixed(2))
+        priceInitRef.current = true
+      }
+    }
+  }, [pair, livePrice, orderType])
 
   const userBalance = user?.balance_usdt ?? 0
   const asset       = pair.split('/')[0]
@@ -416,7 +457,8 @@ export default function TradePage() {
                     <label className="text-xs text-[#848e9c]">Price (USDT)</label>
                     <span className="text-[10px] text-[#0ecb81]">{isLive ? '● live' : '○ cached'}</span>
                   </div>
-                  <input value={price} onChange={e => setPrice(e.target.value)}
+                  <input value={price}
+                    onChange={e => { userEditedRef.current = true; setPrice(e.target.value) }}
                     className="w-full bg-[#0b0e11] border border-[#2b3139] focus:border-[#f0b90b] rounded-xl px-3 py-2.5 text-sm font-mono text-[#eaecef] focus:outline-none transition" />
                 </div>
               )}

@@ -1,5 +1,9 @@
+import os
+from pathlib import Path
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
+from fastapi.responses import FileResponse
 from prometheus_fastapi_instrumentator import Instrumentator
 from loguru import logger
 
@@ -98,25 +102,47 @@ async def shutdown_event():
         logger.error(f"Error during shutdown: {e}")
 
 
-# ===================== Root Endpoint =====================
-@app.get("/")
-async def root():
-    return {
-        "message": "Welcome to FinAi - AI Powered Trading Platform",
-        "version": "1.0.0",
-        "status": "healthy",
-        "docs": "/docs",
-        "metrics": "/metrics",
-        "api_prefix": "/api"
-    }
+# ===================== Static Frontend Serving (Production) =====================
+FRONTEND_DIST = Path(__file__).parent.parent.parent / "frontend" / "dist"
+
+if FRONTEND_DIST.exists():
+    app.mount("/assets", StaticFiles(directory=str(FRONTEND_DIST / "assets")), name="assets")
+
+    @app.get("/")
+    async def serve_root():
+        return FileResponse(str(FRONTEND_DIST / "index.html"))
+
+    @app.get("/{full_path:path}")
+    async def serve_spa(full_path: str):
+        # Don't intercept API, docs, metrics, or static asset routes
+        if full_path.startswith(("api/", "docs", "redoc", "openapi.json", "metrics", "assets/")):
+            from fastapi import HTTPException
+            raise HTTPException(status_code=404)
+        index = FRONTEND_DIST / "index.html"
+        if index.exists():
+            return FileResponse(str(index))
+        from fastapi import HTTPException
+        raise HTTPException(status_code=404)
+else:
+    # ===================== Root Endpoint (Dev only) =====================
+    @app.get("/")
+    async def root():
+        return {
+            "message": "Welcome to FinAi - AI Powered Trading Platform",
+            "version": "1.0.0",
+            "status": "healthy",
+            "docs": "/docs",
+            "metrics": "/metrics",
+            "api_prefix": "/api"
+        }
 
 
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(
-        "main:app", 
-        host="0.0.0.0", 
+        "main:app",
+        host="0.0.0.0",
         port=8000,
-        reload=True,           # Enable auto-reload during development
+        reload=True,
         log_level="info"
     )
