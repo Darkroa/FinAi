@@ -14,17 +14,17 @@ import FloatingAI from '../components/FloatingAI'
 
 const navItems = [
   { to: '/app/dashboard',    icon: LayoutDashboard, label: 'Dashboard' },
-  { to: '/app/markets',          icon: BarChart2,       label: 'Markets'        },
-  { to: '/app/recommendations',  icon: Lightbulb,       label: 'Signals'        },
-  { to: '/app/trade',        icon: TrendingUp,      label: 'Trade'     },
-  { to: '/app/wallet',       icon: Wallet,          label: 'Wallet'    },
-  { to: '/app/transactions', icon: Receipt,         label: 'History'   },
-  { to: '/app/bots',         icon: Bot,             label: 'AI Bots'   },
-  { to: '/app/alerts',       icon: Bell,            label: 'Alerts'    },
-  { to: '/app/calendar',     icon: CalendarDays,    label: 'Calendar'  },
-  { to: '/app/support',      icon: MessageSquare,   label: 'Support'   },
-  { to: '/app/settings',     icon: Settings,        label: 'Settings'  },
-  { to: '/app/profile',      icon: User,            label: 'Profile'   },
+  { to: '/app/markets',      icon: BarChart2,       label: 'Markets' },
+  { to: '/app/bots',         icon: Bot,             label: 'AI Bots' },
+  { to: '/app/trade',        icon: TrendingUp,      label: 'Trade' },
+  { to: '/app/recommendations', icon: Lightbulb,    label: 'Signals' },
+  { to: '/app/wallet',       icon: Wallet,          label: 'Wallet' },
+  { to: '/app/transactions', icon: Receipt,         label: 'History' },
+  { to: '/app/alerts',       icon: Bell,            label: 'Alerts' },
+  { to: '/app/calendar',     icon: CalendarDays,    label: 'Calendar' },
+  { to: '/app/settings',     icon: Settings,        label: 'Settings' },
+  { to: '/app/profile',      icon: User,            label: 'Profile' },
+  { to: '/app/support',      icon: MessageSquare,   label: 'Support' },
 ]
 
 interface AppNotification {
