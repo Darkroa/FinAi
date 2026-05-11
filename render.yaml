@@ -1,22 +1,22 @@
 version: 1
 
-# PostgreSQL Database
+# ==================== DATABASES ====================
 databases:
   - name: finai-postgres
     databaseName: finforge
     user: finuser
-    password: ${POSTGRES_PASSWORD}
     region: oregon
     plan: free
 
-# Redis for Celery / caching
+# ==================== SERVICES ====================
 services:
+  # Redis for Celery
   - type: redis
     name: finai-redis
     region: oregon
     plan: free
 
-  # FastAPI Backend (API + serves React frontend)
+  # FastAPI Backend
   - type: web
     name: finai-api
     env: docker
