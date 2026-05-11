@@ -12,24 +12,59 @@ import toast from 'react-hot-toast'
 import { useAuthStore } from '../store/authStore'
 import { executeTrade, getBotTrades, getOpenPositions, closeManualTrade } from '../lib/api'
 
-const PAIRS = ['BTC/USDT', 'ETH/USDT', 'BNB/USDT', 'SOL/USDT']
+const PAIRS = [
+  'BTC/USDT', 'ETH/USDT', 'BNB/USDT', 'SOL/USDT',
+  'XRP/USDT', 'DOGE/USDT', 'ADA/USDT', 'AVAX/USDT',
+  'LINK/USDT', 'DOT/USDT', 'UNI/USDT', 'MATIC/USDT',
+  'LTC/USDT', 'XLM/USDT',
+  'XAU/USD', 'XAG/USD', 'OIL/WTI',
+  'AAPL', 'TSLA', 'NVDA', 'MSFT', 'SPY',
+]
 const TF    = ['1m', '5m', '15m', '1h', '4h', '1D']
 type ChartMode = 'line' | 'candle'
 
 const FALLBACKS: Record<string, { price: number; change: number }> = {
-  'BTC/USDT': { price: 81000, change: 2.4 },
-  'ETH/USDT': { price: 2380,  change: 1.8 },
-  'BNB/USDT': { price: 628,   change: 0.9 },
-  'SOL/USDT': { price: 85,    change: 1.2 },
+  'BTC/USDT':   { price: 97000, change: 2.4  },
+  'ETH/USDT':   { price: 3200,  change: 1.8  },
+  'BNB/USDT':   { price: 628,   change: 0.9  },
+  'SOL/USDT':   { price: 155,   change: 1.2  },
+  'XRP/USDT':   { price: 0.52,  change: 0.7  },
+  'DOGE/USDT':  { price: 0.12,  change: 1.1  },
+  'ADA/USDT':   { price: 0.45,  change: 0.5  },
+  'AVAX/USDT':  { price: 38,    change: 1.4  },
+  'LINK/USDT':  { price: 14,    change: 0.8  },
+  'DOT/USDT':   { price: 7.2,   change: 0.6  },
+  'UNI/USDT':   { price: 8.5,   change: 1.0  },
+  'MATIC/USDT': { price: 0.90,  change: 0.4  },
+  'LTC/USDT':   { price: 85,    change: 0.3  },
+  'XLM/USDT':   { price: 0.11,  change: 0.2  },
+  'XAU/USD':    { price: 3200,  change: 0.5  },
+  'XAG/USD':    { price: 32,    change: 0.4  },
+  'OIL/WTI':    { price: 71,    change: -0.3 },
+  'AAPL':       { price: 195,   change: 0.6  },
+  'TSLA':       { price: 175,   change: 1.2  },
+  'NVDA':       { price: 875,   change: 1.8  },
+  'MSFT':       { price: 415,   change: 0.7  },
+  'SPY':        { price: 526,   change: 0.4  },
 }
 
 // Faster live-price hook for TradePage — polls every 8 seconds
 function useTradeLivePrice(pair: string) {
   const symbolMap: Record<string, string> = {
-    'BTC/USDT': 'bitcoin',
-    'ETH/USDT': 'ethereum',
-    'BNB/USDT': 'binancecoin',
-    'SOL/USDT': 'solana',
+    'BTC/USDT':   'bitcoin',
+    'ETH/USDT':   'ethereum',
+    'BNB/USDT':   'binancecoin',
+    'SOL/USDT':   'solana',
+    'XRP/USDT':   'ripple',
+    'DOGE/USDT':  'dogecoin',
+    'ADA/USDT':   'cardano',
+    'AVAX/USDT':  'avalanche-2',
+    'LINK/USDT':  'chainlink',
+    'DOT/USDT':   'polkadot',
+    'UNI/USDT':   'uniswap',
+    'MATIC/USDT': 'matic-network',
+    'LTC/USDT':   'litecoin',
+    'XLM/USDT':   'stellar',
   }
   const [data, setData] = useState<{ price: number; change: number; live: boolean }>({
     ...FALLBACKS[pair] ?? { price: 100, change: 0 },

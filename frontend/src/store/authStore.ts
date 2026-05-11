@@ -28,6 +28,12 @@ export interface User {
   risk_per_trade?: number
   max_drawdown?: number
   created_at?: string
+  notification_preferences?: { email?: boolean; whatsapp?: boolean; telegram?: boolean }
+  subscription?: string
+  telegram_chat_id?: string
+  whatsapp_number?: string
+  telegram_connected?: boolean
+  whatsapp_connected?: boolean
 }
 
 interface AuthState {

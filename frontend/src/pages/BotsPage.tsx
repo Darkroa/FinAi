@@ -70,7 +70,7 @@ const EMPTY_PARAMS = {
   initial_capital: 1000,
   risk_per_trade_pct: 2,
   max_drawdown_pct: 10,
-  strategy: 'sma' as 'sma' | 'finlux',
+  strategy: 'sma' as 'sma' | 'finlux' | 'auto' | 'live',
   take_profit_pct: 4,
   stop_loss_pct: 3,
   leverage: 1,
@@ -408,17 +408,23 @@ export default function BotsPage() {
             <div>
               <label className="text-xs text-[#848e9c] mb-1.5 block">Strategy</label>
               <div className="grid grid-cols-2 gap-1 bg-[#0b0e11] p-1 rounded-xl border border-[#2b3139]">
-                {(['sma', 'finlux'] as const).map(s => (
+                {([
+                  ['sma',    'SMA'],
+                  ['finlux', 'FinLux'],
+                  ['auto',   '🤖 AUTO'],
+                  ['live',   '⚡ LIVE'],
+                ] as const).map(([s, label]) => (
                   <button key={s} onClick={() => setParams(p => ({ ...p, strategy: s }))}
                     className={`py-2 rounded-lg text-xs font-semibold transition ${params.strategy === s ? 'bg-[#f0b90b] text-black' : 'text-[#848e9c] hover:text-[#eaecef]'}`}>
-                    {s === 'sma' ? 'SMA' : 'FinLux'}
+                    {label}
                   </button>
                 ))}
               </div>
               <p className="text-[10px] text-[#4a5568] mt-1">
-                {params.strategy === 'sma'
-                  ? 'SMA-6 momentum crossover'
-                  : 'LuxAlgo Trendlines with Breaks'}
+                {params.strategy === 'sma'    ? 'SMA-6 momentum crossover' :
+                 params.strategy === 'finlux' ? 'LuxAlgo Trendlines with Breaks' :
+                 params.strategy === 'auto'   ? 'AI selects best strategy dynamically' :
+                                               'Immediate execution — no strategy filter'}
               </p>
             </div>
 

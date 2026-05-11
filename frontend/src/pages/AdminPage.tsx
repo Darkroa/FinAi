@@ -229,6 +229,15 @@ export default function AdminPage() {
                     <option value="rejected">Rejected</option>
                   </select>
                 </div>
+                <div className="col-span-2"><label className="text-xs text-[#848e9c] mb-1 block">Subscription Plan</label>
+                  <select value={editForm.subscription ?? 'free'} onChange={e => setEditForm((f: any) => ({ ...f, subscription: e.target.value }))} className={inp}>
+                    <option value="free">Free</option>
+                    <option value="pro">Pro — $500/mo</option>
+                    <option value="elite">Elite — $1,000/mo</option>
+                    <option value="elite+">Elite+ — $2,000/mo</option>
+                    <option value="custom">Custom — Unlimited</option>
+                  </select>
+                </div>
               </div>
               <div className="flex flex-wrap gap-3">
                 {[['is_active', 'Active'], ['is_banned', 'Banned'], ['is_admin', 'Admin'], ['profile_locked', 'Profile Locked']].map(([key, lbl]) => (
@@ -280,6 +289,15 @@ export default function AdminPage() {
                     <td className="px-4 py-3">
                       <span className={`text-xs font-bold ${tierColor(u.account_tier || 0)}`}>Tier {u.account_tier || 0}</span>
                       <span className={`ml-2 text-[10px] px-1.5 py-0.5 rounded-full ${u.kyc_status === 'approved' ? 'bg-[#0ecb81]/10 text-[#0ecb81]' : u.kyc_status === 'submitted' ? 'bg-[#f0b90b]/10 text-[#f0b90b]' : 'bg-[#2b3139] text-[#848e9c]'}`}>{u.kyc_status || 'pending'}</span>
+                      <div className="mt-1">
+                        <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-semibold ${
+                          u.subscription === 'custom' ? 'bg-[#a78bfa]/10 text-[#a78bfa]' :
+                          u.subscription === 'elite+' ? 'bg-[#38bdf8]/10 text-[#38bdf8]' :
+                          u.subscription === 'elite'  ? 'bg-[#0ecb81]/10 text-[#0ecb81]' :
+                          u.subscription === 'pro'    ? 'bg-[#f0b90b]/10 text-[#f0b90b]' :
+                                                        'bg-[#2b3139] text-[#848e9c]'
+                        }`}>{(u.subscription || 'free').toUpperCase()}</span>
+                      </div>
                     </td>
                     <td className="px-4 py-3 text-right font-mono text-xs text-[#eaecef]">${(u.balance_usdt || 0).toFixed(2)}</td>
                     <td className="px-4 py-3">
@@ -291,7 +309,7 @@ export default function AdminPage() {
                       </div>
                     </td>
                     <td className="px-4 py-3 text-right">
-                      <button onClick={() => { setEditingUser(u); setEditForm({ first_name: u.first_name, last_name: u.last_name, email: u.email, phone: u.phone, balance_usdt: u.balance_usdt, account_tier: u.account_tier, kyc_status: u.kyc_status, is_active: u.is_active, is_banned: u.is_banned, is_admin: u.is_admin, profile_locked: u.profile_locked }) }}
+                      <button onClick={() => { setEditingUser(u); setEditForm({ first_name: u.first_name, last_name: u.last_name, email: u.email, phone: u.phone, balance_usdt: u.balance_usdt, account_tier: u.account_tier, kyc_status: u.kyc_status, is_active: u.is_active, is_banned: u.is_banned, is_admin: u.is_admin, profile_locked: u.profile_locked, subscription: u.subscription || 'free' }) }}
                         className="p-1.5 rounded-lg text-[#848e9c] hover:text-[#f0b90b] hover:bg-[#f0b90b]/10 transition">
                         <Edit3 size={13} />
                       </button>

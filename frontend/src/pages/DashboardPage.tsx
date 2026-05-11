@@ -5,8 +5,9 @@ import { getEvents, getBotStatus, getTodayPnl, getBotTrades } from '../lib/api'
 import { useTickerPrices, useLivePricesMap } from '../hooks/useTickerPrices'
 import {
   TrendingUp, TrendingDown, Zap, Activity,
-  ArrowUpRight, Bot, BarChart2, RefreshCw, Eye, EyeOff,
-  ArrowRight, Bitcoin, DollarSign
+  ArrowUpRight, ArrowDownLeft, Bot, Newspaper,
+  RefreshCw, Eye, EyeOff, ArrowRight, Bitcoin, DollarSign,
+  Send, Users, Server, Package
 } from 'lucide-react'
 
 function getGreeting() {
@@ -266,24 +267,44 @@ export default function DashboardPage() {
         </div>
       </div>
 
-      {/* Quick Access */}
+      {/* Quick Actions — 6 buttons */}
       <div>
-        <p className="text-xs font-bold text-[#eaecef] mb-3">Quick Access</p>
-        <div className="grid grid-cols-3 gap-2.5">
+        <p className="text-xs font-bold text-[#eaecef] mb-3">Quick Actions</p>
+        <div className="grid grid-cols-3 gap-2">
           {[
-            { label: 'Withdraw', icon: ArrowUpRight, path: '/app/wallet',  color: 'text-[#f6465d]', bg: 'bg-[#f6465d]/10' },
-            { label: 'Markets',  icon: BarChart2,    path: '/app/markets', color: 'text-[#848e9c]', bg: 'bg-[#2b3139]'    },
-            { label: 'Bots',     icon: Zap,          path: '/app/bots',    color: 'text-[#f0b90b]', bg: 'bg-[#f0b90b]/10' },
+            { label: 'Deposit',   icon: ArrowDownLeft, path: '/app/wallet?tab=deposit',  color: 'text-[#0ecb81]', bg: 'bg-[#0ecb81]/10' },
+            { label: 'Withdraw',  icon: ArrowUpRight,  path: '/app/wallet?tab=withdraw', color: 'text-[#f6465d]', bg: 'bg-[#f6465d]/10' },
+            { label: 'Send',      icon: Send,          path: '/app/wallet?tab=p2p',      color: 'text-[#f0b90b]', bg: 'bg-[#f0b90b]/10' },
+            { label: 'P2P',       icon: Users,         path: '/app/wallet?tab=p2p',      color: 'text-[#848e9c]', bg: 'bg-[#2b3139]'    },
+            { label: 'Rent VPS',  icon: Server,        path: '/app/wallet?tab=vps',      color: 'text-[#a78bfa]', bg: 'bg-[#a78bfa]/10' },
+            { label: 'Buy Asset', icon: Package,       path: '/app/wallet?tab=asset',    color: 'text-[#38bdf8]', bg: 'bg-[#38bdf8]/10' },
           ].map(({ label, icon: Icon, path, color, bg }) => (
             <button key={label} onClick={() => navigate(path)}
-              className="flex flex-col items-center gap-2 bg-[#161a1e] border border-[#2b3139] rounded-xl py-4 hover:border-[#3c4451] hover:bg-[#1e2329] transition-all">
-              <div className={`w-9 h-9 rounded-full ${bg} flex items-center justify-center`}>
-                <Icon size={16} className={color} />
+              className="flex flex-col items-center gap-2 bg-[#161a1e] border border-[#2b3139] rounded-xl py-3.5 hover:border-[#3c4451] hover:bg-[#1e2329] transition-all">
+              <div className={`w-8 h-8 rounded-full ${bg} flex items-center justify-center`}>
+                <Icon size={14} className={color} />
               </div>
-              <span className="text-[11px] font-semibold text-[#848e9c]">{label}</span>
+              <span className="text-[10px] font-semibold text-[#848e9c]">{label}</span>
             </button>
           ))}
         </div>
+      </div>
+
+      {/* Secondary nav row */}
+      <div className="grid grid-cols-3 gap-2.5">
+        {[
+          { label: 'News',  icon: Newspaper, path: '/app/markets?tab=news', color: 'text-[#f0b90b]', bg: 'bg-[#f0b90b]/10' },
+          { label: 'Bots',  icon: Zap,       path: '/app/bots',             color: 'text-[#0ecb81]', bg: 'bg-[#0ecb81]/10' },
+          { label: 'Trade', icon: Activity,  path: '/app/trade',            color: 'text-[#848e9c]', bg: 'bg-[#2b3139]'    },
+        ].map(({ label, icon: Icon, path, color, bg }) => (
+          <button key={label} onClick={() => navigate(path)}
+            className="flex flex-col items-center gap-2 bg-[#161a1e] border border-[#2b3139] rounded-xl py-4 hover:border-[#3c4451] hover:bg-[#1e2329] transition-all">
+            <div className={`w-9 h-9 rounded-full ${bg} flex items-center justify-center`}>
+              <Icon size={16} className={color} />
+            </div>
+            <span className="text-[11px] font-semibold text-[#848e9c]">{label}</span>
+          </button>
+        ))}
       </div>
 
       {/* AI Events — live from backend */}

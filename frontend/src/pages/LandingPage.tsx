@@ -24,19 +24,29 @@ const stats = [
 
 const plans = [
   {
-    name: 'Starter', price: 0, period: 'Free forever',
-    features: ['1 AI bot', 'Basic market data', 'Email alerts', '5 API calls/min'],
+    name: 'Free', price: 0, period: 'Free forever',
+    features: ['1 AI bot', '1 API key', 'Basic market data', 'Email alerts', 'Community support'],
     cta: 'Get Started Free', highlight: false,
   },
   {
-    name: 'Pro', price: 49, period: '/month',
-    features: ['5 AI bots', 'Live market data', 'Telegram & WhatsApp', 'Unlimited API', 'Priority support'],
-    cta: 'Start Pro', highlight: true,
+    name: 'Pro', price: 500, period: '/month',
+    features: ['10 AI bots', '5 API keys', 'Live market data', 'Telegram & WhatsApp', 'Priority support'],
+    cta: 'Go Pro', highlight: true,
   },
   {
-    name: 'Elite', price: 149, period: '/month',
-    features: ['Unlimited bots', 'VPS hosting included', 'Custom strategies', 'Dedicated support', 'White-label'],
+    name: 'Elite', price: 1000, period: '/month',
+    features: ['20 AI bots', '20 API keys', 'VPS hosting included', 'Custom strategies', 'Dedicated support'],
     cta: 'Go Elite', highlight: false,
+  },
+  {
+    name: 'Elite+', price: 2000, period: '/month',
+    features: ['40 AI bots', '40 API keys', 'All Elite features', 'White-label option', 'SLA guarantee'],
+    cta: 'Go Elite+', highlight: false,
+  },
+  {
+    name: 'Custom', price: -1, period: 'Contact us',
+    features: ['Unlimited bots & keys', 'Custom infrastructure', 'On-premise option', 'Enterprise SLA', 'Dedicated team'],
+    cta: 'Contact Sales', highlight: false,
   },
 ]
 
@@ -220,17 +230,18 @@ export default function LandingPage() {
 
       {/* ─── PRICING ─── */}
       <section id="pricing" className="py-14 sm:py-20 bg-[#161a1e] border-y border-[#2b3139]">
-        <div className="max-w-4xl mx-auto px-4 sm:px-6">
+        <div className="max-w-6xl mx-auto px-4 sm:px-6">
           <div className="text-center mb-10">
             <p className="text-xs text-[#f0b90b] font-bold tracking-widest uppercase mb-3">Pricing</p>
             <h2 className="text-2xl sm:text-3xl font-bold text-[#eaecef] mb-3">Simple, transparent pricing</h2>
             <p className="text-[#848e9c] text-sm">Start free, scale as you grow. No hidden fees.</p>
           </div>
 
-          <div className="grid sm:grid-cols-3 gap-4 sm:items-start">
+          {/* Scrollable carousel */}
+          <div className="flex gap-4 overflow-x-auto pb-4 snap-x snap-mandatory scrollbar-hide -mx-4 px-4 sm:mx-0 sm:px-0 sm:grid sm:grid-cols-5 sm:overflow-visible sm:pb-0">
             {plans.map(p => (
               <div key={p.name} className={[
-                'relative rounded-xl border flex flex-col overflow-hidden transition-all',
+                'relative rounded-xl border flex flex-col overflow-hidden transition-all snap-start flex-shrink-0 w-[75vw] sm:w-auto',
                 p.highlight
                   ? 'bg-[#1a1f26] border-[#f0b90b]/60 shadow-lg shadow-[#f0b90b]/8'
                   : 'bg-[#0b0e11] border-[#2b3139] hover:border-[#3c4451]',
@@ -242,23 +253,30 @@ export default function LandingPage() {
                 )}
                 <div className="p-5 flex flex-col flex-1">
                   <h3 className={`font-bold text-base mb-1 ${p.highlight ? 'text-[#f0b90b]' : 'text-[#eaecef]'}`}>{p.name}</h3>
-                  <div className="flex items-end gap-1 mb-5">
-                    <span className="text-3xl font-extrabold font-mono text-[#eaecef]">
-                      {p.price === 0 ? 'Free' : `$${p.price}`}
-                    </span>
-                    {p.price > 0 && <span className="text-sm mb-1 text-[#848e9c]">{p.period}</span>}
+                  <div className="flex items-end gap-1 mb-4">
+                    {p.price === -1 ? (
+                      <span className="text-xl font-extrabold font-mono text-[#eaecef]">Custom</span>
+                    ) : p.price === 0 ? (
+                      <span className="text-2xl font-extrabold font-mono text-[#eaecef]">Free</span>
+                    ) : (
+                      <>
+                        <span className="text-2xl font-extrabold font-mono text-[#eaecef]">${p.price.toLocaleString()}</span>
+                        <span className="text-xs mb-1 text-[#848e9c]">{p.period}</span>
+                      </>
+                    )}
                   </div>
-                  <ul className="space-y-2.5 flex-1">
+                  <ul className="space-y-2 flex-1 mb-4">
                     {p.features.map(f => (
                       <li key={f} className="flex items-center gap-2 text-xs">
-                        <Check size={11} className="text-[#0ecb81] flex-shrink-0" />
+                        <Check size={10} className="text-[#0ecb81] flex-shrink-0" />
                         <span className="text-[#848e9c]">{f}</span>
                       </li>
                     ))}
                   </ul>
-                  <button onClick={() => navigate('/login')}
+                  <button
+                    onClick={() => p.price === -1 ? navigate('/login') : navigate('/subscribe')}
                     className={[
-                      'mt-5 w-full py-3 rounded-lg text-sm font-bold transition-all',
+                      'w-full py-2.5 rounded-lg text-xs font-bold transition-all',
                       p.highlight
                         ? 'bg-[#f0b90b] hover:bg-[#d4a30a] text-black'
                         : 'bg-[#f0b90b]/8 hover:bg-[#f0b90b]/15 text-[#f0b90b] border border-[#f0b90b]/20',

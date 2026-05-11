@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { getMyTransactions } from '../lib/api'
 import {
-  ArrowDownLeft, ArrowUpRight, Send, RefreshCw,
+  ArrowDownLeft, ArrowUpRight, RefreshCw,
   Clock, CheckCircle, XCircle, Search, SlidersHorizontal
 } from 'lucide-react'
 

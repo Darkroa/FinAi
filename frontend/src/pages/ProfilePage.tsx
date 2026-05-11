@@ -934,50 +934,48 @@ function SecurityTab({ user }: { user: ReturnType<typeof useAuthStore>['user'] }
   return (
     <div className="space-y-4">
 
-      {/* Connection Status Overview — Tier 3 */}
-      {accountTier >= 3 && (
-        <div className="bg-[#161a1e] border border-[#2b3139] rounded-xl overflow-hidden">
-          <div className="flex items-center gap-2 px-4 py-3 border-b border-[#2b3139] bg-[#1a1f25]">
-            <Wifi size={13} className="text-[#f0b90b]" />
-            <span className="text-xs font-semibold text-[#eaecef]">Notification Channels</span>
+      {/* Connection Status Overview */}
+      <div className="bg-[#161a1e] border border-[#2b3139] rounded-xl overflow-hidden">
+        <div className="flex items-center gap-2 px-4 py-3 border-b border-[#2b3139] bg-[#1a1f25]">
+          <Wifi size={13} className="text-[#f0b90b]" />
+          <span className="text-xs font-semibold text-[#eaecef]">Notification Channels</span>
+        </div>
+        <div className="p-4 grid grid-cols-3 gap-3">
+          {/* Email */}
+          <div className={`flex flex-col items-center gap-2 rounded-xl p-3 border ${emailVerified ? 'border-[#0ecb81]/30 bg-[#0ecb81]/5' : 'border-[#2b3139]'}`}>
+            <div className={`w-8 h-8 rounded-full flex items-center justify-center ${emailVerified ? 'bg-[#0ecb81]/10' : 'bg-[#2b3139]'}`}>
+              <Mail size={14} className={emailVerified ? 'text-[#0ecb81]' : 'text-[#848e9c]'} />
+            </div>
+            <span className="text-[10px] font-semibold text-[#848e9c]">Email</span>
+            <span className={`text-[9px] font-bold flex items-center gap-1 ${emailVerified ? 'text-[#0ecb81]' : 'text-[#848e9c]'}`}>
+              <span className={`w-1.5 h-1.5 rounded-full inline-block ${emailVerified ? 'bg-[#0ecb81]' : 'bg-[#848e9c]'}`} />
+              {emailVerified ? 'Verified' : 'Not verified'}
+            </span>
           </div>
-          <div className="p-4 grid grid-cols-3 gap-3">
-            {/* Email */}
-            <div className={`flex flex-col items-center gap-2 rounded-xl p-3 border ${emailVerified ? 'border-[#0ecb81]/30 bg-[#0ecb81]/5' : 'border-[#f6465d]/30 bg-[#f6465d]/5'}`}>
-              <div className={`w-8 h-8 rounded-full flex items-center justify-center ${emailVerified ? 'bg-[#0ecb81]/10' : 'bg-[#f6465d]/10'}`}>
-                <Mail size={14} className={emailVerified ? 'text-[#0ecb81]' : 'text-[#f6465d]'} />
-              </div>
-              <span className="text-[10px] font-semibold text-[#848e9c]">Email</span>
-              <span className={`text-[9px] font-bold flex items-center gap-1 ${emailVerified ? 'text-[#0ecb81]' : 'text-[#f6465d]'}`}>
-                <span className={`w-1.5 h-1.5 rounded-full inline-block ${emailVerified ? 'bg-[#0ecb81]' : 'bg-[#f6465d]'}`} />
-                {emailVerified ? 'Connected' : 'Not verified'}
-              </span>
+          {/* WhatsApp */}
+          <div className={`flex flex-col items-center gap-2 rounded-xl p-3 border ${waVerified ? 'border-[#25D366]/30 bg-[#25D366]/5' : 'border-[#2b3139]'}`}>
+            <div className={`w-8 h-8 rounded-full flex items-center justify-center ${waVerified ? 'bg-[#25D366]/10' : 'bg-[#2b3139]'}`}>
+              <MessageCircle size={14} className={waVerified ? 'text-[#25D366]' : 'text-[#848e9c]'} />
             </div>
-            {/* WhatsApp */}
-            <div className={`flex flex-col items-center gap-2 rounded-xl p-3 border ${waVerified ? 'border-[#25D366]/30 bg-[#25D366]/5' : 'border-[#f6465d]/30 bg-[#f6465d]/5'}`}>
-              <div className={`w-8 h-8 rounded-full flex items-center justify-center ${waVerified ? 'bg-[#25D366]/10' : 'bg-[#f6465d]/10'}`}>
-                <MessageCircle size={14} className={waVerified ? 'text-[#25D366]' : 'text-[#f6465d]'} />
-              </div>
-              <span className="text-[10px] font-semibold text-[#848e9c]">WhatsApp</span>
-              <span className={`text-[9px] font-bold flex items-center gap-1 ${waVerified ? 'text-[#25D366]' : 'text-[#f6465d]'}`}>
-                <span className={`w-1.5 h-1.5 rounded-full inline-block ${waVerified ? 'bg-[#25D366]' : 'bg-[#f6465d]'}`} />
-                {waVerified ? waPhone.slice(-4) ? `···${waPhone.slice(-4)}` : 'Connected' : 'Not linked'}
-              </span>
+            <span className="text-[10px] font-semibold text-[#848e9c]">WhatsApp</span>
+            <span className={`text-[9px] font-bold flex items-center gap-1 ${waVerified ? 'text-[#25D366]' : 'text-[#848e9c]'}`}>
+              <span className={`w-1.5 h-1.5 rounded-full inline-block ${waVerified ? 'bg-[#25D366]' : 'bg-[#848e9c]'}`} />
+              {waVerified ? (waPhone.slice(-4) ? `···${waPhone.slice(-4)}` : 'Connected') : 'Not linked'}
+            </span>
+          </div>
+          {/* Telegram */}
+          <div className={`flex flex-col items-center gap-2 rounded-xl p-3 border ${tgVerified ? 'border-[#229ED9]/30 bg-[#229ED9]/5' : 'border-[#2b3139]'}`}>
+            <div className={`w-8 h-8 rounded-full flex items-center justify-center ${tgVerified ? 'bg-[#229ED9]/10' : 'bg-[#2b3139]'}`}>
+              <Send size={14} className={tgVerified ? 'text-[#229ED9]' : 'text-[#848e9c]'} />
             </div>
-            {/* Telegram */}
-            <div className={`flex flex-col items-center gap-2 rounded-xl p-3 border ${tgVerified ? 'border-[#229ED9]/30 bg-[#229ED9]/5' : 'border-[#f6465d]/30 bg-[#f6465d]/5'}`}>
-              <div className={`w-8 h-8 rounded-full flex items-center justify-center ${tgVerified ? 'bg-[#229ED9]/10' : 'bg-[#f6465d]/10'}`}>
-                <Send size={14} className={tgVerified ? 'text-[#229ED9]' : 'text-[#f6465d]'} />
-              </div>
-              <span className="text-[10px] font-semibold text-[#848e9c]">Telegram</span>
-              <span className={`text-[9px] font-bold flex items-center gap-1 ${tgVerified ? 'text-[#229ED9]' : 'text-[#f6465d]'}`}>
-                <span className={`w-1.5 h-1.5 rounded-full inline-block ${tgVerified ? 'bg-[#229ED9]' : 'bg-[#f6465d]'} animate-pulse`} />
-                {tgVerified ? tgName || 'Connected' : 'Not linked'}
-              </span>
-            </div>
+            <span className="text-[10px] font-semibold text-[#848e9c]">Telegram</span>
+            <span className={`text-[9px] font-bold flex items-center gap-1 ${tgVerified ? 'text-[#229ED9]' : 'text-[#848e9c]'}`}>
+              <span className={`w-1.5 h-1.5 rounded-full inline-block ${tgVerified ? 'bg-[#229ED9]' : 'bg-[#848e9c]'}`} />
+              {tgVerified ? tgName || 'Connected' : 'Not linked'}
+            </span>
           </div>
         </div>
-      )}
+      </div>
 
       {/* Change Password */}
       <form onSubmit={handleChangePw} className="bg-[#161a1e] border border-[#2b3139] rounded-xl overflow-hidden">

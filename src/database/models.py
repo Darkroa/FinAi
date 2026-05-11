@@ -64,6 +64,15 @@ class User(Base):
     # Wallet balance (USDT equivalent)
     balance_usdt = Column(Float, default=0.0)
 
+    # Subscription
+    subscription = Column(String(50), default="free")   # free / pro / elite / elite+ / custom
+
+    # Notification channel bindings
+    telegram_chat_id = Column(String(100), nullable=True)
+    whatsapp_number = Column(String(50), nullable=True)
+    telegram_connected = Column(Boolean, default=False)
+    whatsapp_connected = Column(Boolean, default=False)
+
     # Security
     transfer_pin = Column(String(255), nullable=True)   # bcrypt-hashed PIN
     pending_deletion = Column(Boolean, default=False)   # flagged for admin deletion

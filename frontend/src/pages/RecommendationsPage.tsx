@@ -26,9 +26,9 @@ interface Rec {
 
 interface LivePrice { usd: number; usd_24h_change: number }
 interface PricesData {
-  [key: string]: LivePrice
   metals?: Record<string, LivePrice>
   stocks?: Record<string, LivePrice>
+  [key: string]: LivePrice | Record<string, LivePrice> | undefined
 }
 
 const BASE_RECS: Rec[] = [

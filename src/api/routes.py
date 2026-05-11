@@ -100,6 +100,7 @@ class AdminUpdateUser(BaseModel):
     is_banned: Optional[bool] = None
     is_admin: Optional[bool] = None
     profile_locked: Optional[bool] = None
+    subscription: Optional[str] = None
 
 class SupportTicketCreate(BaseModel):
     subject: str
@@ -240,6 +241,11 @@ def _user_dict(u: User) -> dict:
         "max_drawdown": u.max_drawdown,
         "preferred_tickers": u.preferred_tickers,
         "notification_preferences": u.notification_preferences,
+        "subscription": u.subscription or "free",
+        "telegram_chat_id": u.telegram_chat_id,
+        "whatsapp_number": u.whatsapp_number,
+        "telegram_connected": bool(u.telegram_connected),
+        "whatsapp_connected": bool(u.whatsapp_connected),
         "created_at": u.created_at.isoformat() if u.created_at else None,
     }
 
@@ -1567,6 +1573,127 @@ async def telegram_webhook(request: Request, db: Session = Depends(get_db)):
         await send_reply("❓ Unknown command. Type /help for available commands.")
 
     return {"ok": True}
+
+
+# ===================== WhatsApp Twilio Webhook =====================
+# In-memory WhatsApp link codes: code → {user_id, phone}
+_whatsapp_link_codes: dict = {}
+
+@router.post("/users/whatsapp-generate-code")
+async def generate_whatsapp_link_code(current_user=Depends(get_current_user), db: Session = Depends(get_db)):
+    """Generate a unique code for the user to send via WhatsApp to link their account."""
+    user = db.query(User).filter(User.email == current_user["email"]).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    import secrets as _sec
+    code = f"WA-{_sec.randbelow(900000) + 100000}"
+    _whatsapp_link_codes[code] = {"user_id": user.id, "email": user.email}
+    twilio_number = os.getenv("TWILIO_WHATSAPP_NUMBER", "+14155238886")
+    return {
+        "code": code,
+        "whatsapp_number": twilio_number,
+        "instructions": f"Send this code via WhatsApp to {twilio_number} to link your account: {code}",
+    }
+
+
+@router.post("/webhooks/whatsapp")
+async def whatsapp_webhook(request: Request, db: Session = Depends(get_db)):
+    """Receive inbound WhatsApp messages from Twilio."""
+    try:
+        form = await request.form()
+    except Exception:
+        return {"status": "ok"}
+
+    body    = str(form.get("Body", "")).strip()
+    from_   = str(form.get("From", ""))    # e.g. "whatsapp:+1234567890"
+    phone   = from_.replace("whatsapp:", "").strip()
+
+    if not body or not phone:
+        return {"status": "ok"}
+
+    import httpx as _hx
+    account_sid = os.getenv("TWILIO_ACCOUNT_SID", "")
+    auth_token  = os.getenv("TWILIO_AUTH_TOKEN", "")
+    wa_number   = os.getenv("TWILIO_WHATSAPP_NUMBER", "+14155238886")
+
+    async def send_wa(msg: str):
+        if not account_sid or not auth_token:
+            return
+        try:
+            async with _hx.AsyncClient(timeout=5) as c:
+                await c.post(
+                    f"https://api.twilio.com/2010-04-01/Accounts/{account_sid}/Messages.json",
+                    auth=(account_sid, auth_token),
+                    data={"From": f"whatsapp:{wa_number}", "To": from_, "Body": msg},
+                )
+        except Exception:
+            pass
+
+    # Check if body matches a link code
+    if body.upper().startswith("WA-"):
+        code = body.strip()
+        link_data = _whatsapp_link_codes.get(code)
+        if not link_data:
+            await send_wa("❌ Invalid or expired code. Go to FinAi Profile → FinAPI → WhatsApp to generate a new one.")
+            return {"status": "ok"}
+        user = db.query(User).filter(User.id == link_data["user_id"]).first()
+        if user:
+            user.whatsapp_number = phone
+            user.whatsapp_connected = True
+            # Persist in notification_preferences too
+            prefs = dict(user.notification_preferences or {})
+            prefs["whatsapp_number"] = phone
+            prefs["whatsapp_verified"] = True
+            user.notification_preferences = prefs
+            db.commit()
+            del _whatsapp_link_codes[code]
+            await send_wa(
+                f"✅ *FinAi WhatsApp Linked!*\n\n"
+                f"Your account ({user.email}) is now connected.\n\n"
+                "You'll receive trade alerts, bot status, and market events here.\n\n"
+                "Reply *HELP* for available commands."
+            )
+        return {"status": "ok"}
+
+    # Find user by phone
+    linked_user = db.query(User).filter(User.whatsapp_number == phone).first()
+    if not linked_user:
+        await send_wa(
+            "👋 Welcome to *FinAi Trading Bot*!\n\n"
+            "To link your account:\n"
+            "1. Go to your FinAi Profile → FinAPI tab\n"
+            "2. Click *Generate Code* under WhatsApp\n"
+            "3. Send the code here (e.g. WA-627392)"
+        )
+        return {"status": "ok"}
+
+    cmd = body.upper()
+    if cmd == "BALANCE" or cmd == "/BALANCE":
+        bal = linked_user.balance_usdt or 0
+        await send_wa(f"💰 *Your Balance*\n${bal:,.2f} USDT")
+    elif cmd == "STATUS" or cmd == "/STATUS":
+        manager = get_user_bot_manager(linked_user.email, linked_user.id)
+        status  = manager.get_status()
+        running = status.get("running", False)
+        bots    = status.get("bots", [])
+        msg = f"🤖 *Bot Status*: {'🟢 Running' if running else '🔴 Offline'}\n"
+        if bots:
+            for b in bots[:3]:
+                msg += f"\n• {b.get('ticker','?')} | PnL: ${b.get('realized_pnl', 0):.2f}"
+        await send_wa(msg)
+    elif cmd == "HELP" or cmd == "/HELP":
+        await send_wa(
+            "📖 *FinAi WhatsApp Commands*\n\n"
+            "BALANCE — Your USDT balance\n"
+            "STATUS — Bot portfolio status\n"
+            "HELP — This menu"
+        )
+    else:
+        await send_wa(
+            f"👋 Hi {linked_user.first_name or 'there'}!\n"
+            "Reply *HELP* for available commands."
+        )
+    return {"status": "ok"}
 
 
 # ===================== Public Bot Routes (API Key) =====================

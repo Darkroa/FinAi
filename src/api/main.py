@@ -56,6 +56,11 @@ async def startup_event():
             _conn.execute(_text("ALTER TABLE trade_logs ADD COLUMN IF NOT EXISTS take_profit FLOAT"))
             _conn.execute(_text("ALTER TABLE trade_logs ADD COLUMN IF NOT EXISTS leverage FLOAT DEFAULT 1.0"))
             _conn.execute(_text("ALTER TABLE trade_logs ADD COLUMN IF NOT EXISTS lot_size FLOAT"))
+            _conn.execute(_text("ALTER TABLE users ADD COLUMN IF NOT EXISTS subscription VARCHAR(50) DEFAULT 'free'"))
+            _conn.execute(_text("ALTER TABLE users ADD COLUMN IF NOT EXISTS telegram_chat_id VARCHAR(100)"))
+            _conn.execute(_text("ALTER TABLE users ADD COLUMN IF NOT EXISTS whatsapp_number VARCHAR(50)"))
+            _conn.execute(_text("ALTER TABLE users ADD COLUMN IF NOT EXISTS telegram_connected BOOLEAN DEFAULT FALSE"))
+            _conn.execute(_text("ALTER TABLE users ADD COLUMN IF NOT EXISTS whatsapp_connected BOOLEAN DEFAULT FALSE"))
             _conn.commit()
     except Exception:
         pass
