@@ -11,14 +11,14 @@ services:
     region: oregon
     plan: free
 
-  # Redis for Celery
+  # Redis for Celery / caching
   redis:
     type: redis
     name: finai-redis
     region: oregon
     plan: free
 
-  # FastAPI Backend — serves API + React frontend
+  # FastAPI Backend (API + serves React frontend)
   api:
     type: web
     name: finai-api
@@ -46,18 +46,25 @@ services:
         sync: false
       - key: TWILIO_AUTH_TOKEN
         sync: false
+      # Optional but recommended
+      - key: ENVIRONMENT
+        value: production
+      - key: CORS_ORIGINS
+        value: "*"
     regions: [oregon]
     plan: free
     healthCheckPath: /api/health
+    # Optional: auto-deploy on main branch
+    autoDeploy: true
 
-  # Celery Worker (background tasks)
+  # Celery Worker (tasks + beat scheduler)
   worker:
     type: worker
     name: finai-worker
     env: docker
     dockerfilePath: Dockerfile
     dockerContext: .
-    startCommand: celery -A src.celery_app.tasks worker --loglevel=info --beat
+    startCommand: celery -A src.celery_app.tasks worker --loglevel=info --beat --scheduler django_celery_beat.schedulers:DatabaseScheduler
     envVars:
       - key: DATABASE_URL
         fromDatabase:
@@ -73,6 +80,15 @@ services:
       - key: OPENAI_API_KEY
         sync: false
       - key: JWT_SECRET_KEY
+        fromService:
+          type: web
+          name: finai-api
+          property: JWT_SECRET_KEY
+      - key: TWILIO_ACCOUNT_SID
         sync: false
+      - key: TWILIO_AUTH_TOKEN
+        sync: false
+      - key: ENVIRONMENT
+        value: production
     regions: [oregon]
     plan: free
