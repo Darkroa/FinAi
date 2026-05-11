@@ -10,19 +10,24 @@ databases:
 
 # ==================== SERVICES ====================
 services:
-  # Redis for Celery
+  # Redis
   - type: redis
     name: finai-redis
     region: oregon
     plan: free
 
-  # FastAPI Backend
+  # FastAPI Web Service
   - type: web
     name: finai-api
     env: docker
     dockerfilePath: Dockerfile
     dockerContext: .
     startCommand: uvicorn src.api.main:app --host 0.0.0.0 --port $PORT
+    region: oregon
+    plan: free
+    healthCheckPath: /api/health
+    autoDeploy: true
+
     envVars:
       - key: DATABASE_URL
         fromDatabase:
@@ -47,10 +52,6 @@ services:
         value: production
       - key: CORS_ORIGINS
         value: "*"
-    regions: [oregon]
-    plan: free
-    healthCheckPath: /api/health
-    autoDeploy: true
 
   # Celery Worker
   - type: worker
@@ -59,6 +60,9 @@ services:
     dockerfilePath: Dockerfile
     dockerContext: .
     startCommand: celery -A src.celery_app.tasks worker --loglevel=info --beat
+    region: oregon
+    plan: free
+
     envVars:
       - key: DATABASE_URL
         fromDatabase:
@@ -84,5 +88,3 @@ services:
         sync: false
       - key: ENVIRONMENT
         value: production
-    regions: [oregon]
-    plan: free
