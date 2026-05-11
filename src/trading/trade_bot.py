@@ -119,8 +119,8 @@ class TradingBotInstance:
     FL_LENGTH  = 4
 
     def __init__(self, ticker: str, paper: bool = True, user_id: int = None,
-                 initial_capital: float = 10000.0, max_drawdown_pct: float = 9.0,
-                 risk_per_trade_pct: float = 9.0,
+                 initial_capital: float = 50000.0, max_drawdown_pct: float = 9.0,
+                 risk_per_trade_pct: float = 100,
                  strategy: str = "sma",
                  take_profit_pct: float = 4.0,
                  direction: str = "auto",

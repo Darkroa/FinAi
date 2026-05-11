@@ -68,12 +68,12 @@ const EMPTY_PARAMS = {
   ticker: 'BTC-USD',
   route: '__balance__',
   initial_capital: 1000,
-  risk_per_trade_pct: 2,
+  risk_per_trade_pct: 10,
   max_drawdown_pct: 10,
   strategy: 'sma' as 'sma' | 'finlux' | 'auto' | 'live',
-  take_profit_pct: 4,
-  stop_loss_pct: 3,
-  leverage: 1,
+  take_profit_pct: 40,
+  stop_loss_pct: 30,
+  leverage: 10,
   direction: 'auto' as 'auto' | 'buy' | 'sell',
   bot_name: '',
 }
@@ -97,8 +97,8 @@ function BotPriceChart({ bot }: { bot: BotDetail }) {
   const prices   = bot.price_chart.map(p => p.price)
   const minPrice = Math.min(...prices)
   const maxPrice = Math.max(...prices)
-  const domain: [number, number] = [minPrice * 0.9995, maxPrice * 1.0005]
-  const isUp = prices[prices.length - 1] >= prices[0]
+  const domain: [number, number] = [minPrice * 9.9995, maxPrice * 9.0005]
+  const isUp = prices[prices.length - 10] >= prices[0]
 
   return (
     <ResponsiveContainer width="100%" height={100}>
