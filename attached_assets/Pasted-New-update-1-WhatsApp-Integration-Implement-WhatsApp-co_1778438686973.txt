@@ -1,0 +1,81 @@
+New update 
+### 1 WhatsApp Integration
+- Implement WhatsApp connection exactly like Telegram:
+  - Generate connection code
+  - Open WhatsApp and send code
+  - User clicks "I've sent the code" or "Connect"
+- Set up Twilio webhook for WhatsApp messaging.
+
+### 3. Chat Interface
+- Redesign in-app market chat to display very cleanly and professionally.
+- Add proper candlestick chart support or similar trading chart view.
+
+### 4. AI Trading Bot
+- Ai bot per trade to long make it  collapse / to long 
+- Make bot fast during trade execution (remove any delay price should being flaunting is profitable or lose  ).
+
+### 5. Trades Section
+- Add more tradeable assets. That are available in trade
+- Update trading system to work like a real broker (not just exchange):
+  - Match live market movements
+  - Use user's app wallet balance o
+  - Allow custom trade configurations
+  - With Live floating profit or loss 
+
+### 6. Market Section
+- Implement financial news feed (without heavy API dependency).
+- Pull latest news from: Bloomberg, Reuters, CNBC, Yahoo Finance, etc. 
+-Mraket data : make all All Markets Crypto Metals Stock🔥 New
+
+### 7. Dashboard Updates
+- Remove "Withdrawal" and "Market" buttons.
+- Add these buttons instead: 
+  Deposit | Withdraw | Send | P2P | Rent VPS | Buy Asset
+- In Quick Access: Replace "Market" with "News".
+
+### 8. Admin Panel & Subscription System
+- Add "Subscription" column in user table (after Tier/KYC).
+- Default subscription for all new users = **Free**.
+- Admin must be able to change any user's subscription to:
+  Free / Pro / Elite / Elite+ / Custom
+
+### 9. Landing Page - Pricing Section
+And update the pricing package  to match subscription
+- Change pricing layout to slider/carousel (not long list).
+- Add new plans: Elite+ and Custom.
+- Updated Pricing:
+  - Pro        → $500
+  - Elite      → $1,000
+  - Elite+     → $2,000
+  - Custom     → Contact Support
+- When user clicks any plan → redirect to new page: **subscribepay** (or subscribepay.txt)
+- On payment page:
+  - Generate receipt / reference
+  - Add checkbox: "Pay from Wallet"
+  - If checked → debit wallet and upgrade subscription immediately.
+
+### 10. FinAi API Key & Bot Rules (Important)
+- One FinAi API Key = One Trading Bot.
+- Subscription Limits:
+  - Free     → Maximum 1 API Key (1 Bot)
+  - Pro      → Maximum 10 API Keys (10 Bots)
+  - Elite    → Maximum 20 API Keys (20 Bots)
+  - Elite+   → Maximum 40 API Keys (40 Bots)
+  - Custom   → Unlimited API Keys & Bots
+
+- Rule: If a Free user tries to create more than 1 bot → redirect to Pricing page.
+
+In profile make sure all saved profiles setting saved and match account configuration 
+
+Some issues with deploying because of check deployment log for error is about 2339: Property 'user' does not exist on typ e 'unknown'.
+src/pages/RecommendationsPage.tsx(30,3): er ror TS2411: Property 'metals' of type 'Reco rostring, LivePrice> | undefined' is not a ssignable to 'string' index type 'LivePrice
+•
+src/pages/RecommendationsPage.tsx (31,3): er ror TS2411: Property 'stocks'
+of type 'Reco
+rd<string, LivePrice> | undefined' is not a ssignable to 'string' index type 'LivePrice
+•
+src/pages/SettingsPage.tsx (12,11): error TS
+2339: Property 'notification_preferences' d oes not exist on type 'User'
+•
+src/pages/TransactionHistoryPage.tsx(4,32):
+error TS6133: 'Send' is declared but its v alue is never read.

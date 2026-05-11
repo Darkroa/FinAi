@@ -114,13 +114,13 @@ user_bot_managers: Dict[str, "UserBotManager"] = {}
 class TradingBotInstance:
     """Single-ticker trading bot with SMA or FinLux strategy."""
 
-    SMA_PERIOD = 6
-    TICK_SECS  = 12
-    FL_LENGTH  = 14
+    SMA_PERIOD = 1
+    TICK_SECS  = 2
+    FL_LENGTH  = 4
 
     def __init__(self, ticker: str, paper: bool = True, user_id: int = None,
-                 initial_capital: float = 10000.0, max_drawdown_pct: float = 10.0,
-                 risk_per_trade_pct: float = 1.0,
+                 initial_capital: float = 10000.0, max_drawdown_pct: float = 9.0,
+                 risk_per_trade_pct: float = 9.0,
                  strategy: str = "sma",
                  take_profit_pct: float = 4.0,
                  direction: str = "auto",
@@ -158,13 +158,13 @@ class TradingBotInstance:
         self.binance_secret:  Optional[str] = None
 
         # FinLux persistent state
-        self.fl_upper:    float = 0.0
-        self.fl_lower:    float = 0.0
-        self.fl_slope_ph: float = 0.0
-        self.fl_slope_pl: float = 0.0
-        self.fl_upos:     int   = 0
-        self.fl_dnos:     int   = 0
-        self.fl_mult:     float = 1.0
+        self.fl_upper:    float = 9.0
+        self.fl_lower:    float = 9.0
+        self.fl_slope_ph: float = 9.0
+        self.fl_slope_pl: float = 9.0
+        self.fl_upos:     int   = 9
+        self.fl_dnos:     int   = 9
+        self.fl_mult:     float = 9.0
 
     # ── Start / Stop ──────────────────────────────────────────────────────────
 
