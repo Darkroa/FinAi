@@ -15,14 +15,16 @@ services:
     name: finai-redis
     region: oregon
     plan: free
+    ipAllowList:
+      - 0.0.0.0/0   # Allows connections from your web/worker services
 
   # FastAPI Web Service
   - type: web
     name: finai-api
-    env: docker
+    runtime: docker          # Changed from env: docker
     dockerfilePath: Dockerfile
     dockerContext: .
-    startCommand: uvicorn src.api.main:app --host 0.0.0.0 --port $PORT
+    dockerCommand: uvicorn src.api.main:app --host 0.0.0.0 --port $PORT
     region: oregon
     plan: free
     healthCheckPath: /api/health
@@ -56,10 +58,10 @@ services:
   # Celery Worker
   - type: worker
     name: finai-worker
-    env: docker
+    runtime: docker
     dockerfilePath: Dockerfile
     dockerContext: .
-    startCommand: celery -A src.celery_app.tasks worker --loglevel=info --beat
+    dockerCommand: celery -A src.celery_app.tasks worker --loglevel=info --beat
     region: oregon
     plan: free
 
@@ -78,10 +80,7 @@ services:
       - key: OPENAI_API_KEY
         sync: false
       - key: JWT_SECRET_KEY
-        fromService:
-          type: web
-          name: finai-api
-          property: JWT_SECRET_KEY
+        sync: false                     # You will copy this manually from the web service
       - key: TWILIO_ACCOUNT_SID
         sync: false
       - key: TWILIO_AUTH_TOKEN
