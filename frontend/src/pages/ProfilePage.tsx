@@ -87,7 +87,7 @@ export default function ProfilePage() {
 
 
 /* ─────────────────────────── PERSONAL TAB ─────────────────────────── */
-function PersonalTab({ user, setUser }: { user: ReturnType<typeof useAuthStore>['user']; setUser: (u: unknown) => void }) {
+function PersonalTab({ user, setUser }: { user: ReturnType<typeof useAuthStore>['user']; setUser: (u: any) => void }) {
   const tier = TIERS[user?.account_tier ?? 0]
   const kycBadge = () => {
     switch (user?.kyc_status) {
@@ -113,7 +113,7 @@ function PersonalTab({ user, setUser }: { user: ReturnType<typeof useAuthStore>[
   const [showVerify, setShowVerify]   = useState(false)
   const [verifyCode, setVerifyCode]   = useState('')
   const [verifying, setVerifying]     = useState(false)
-  const [devCode, setDevCode]         = useState<string | null>(null)
+  const [_devCode, setDevCode]        = useState<string | null>(null)   
   const [photoLoading, setPhotoLoading] = useState(false)
   const fileRef = useRef<HTMLInputElement>(null)
   const set = (k: string) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) =>
@@ -379,7 +379,7 @@ function PersonalTab({ user, setUser }: { user: ReturnType<typeof useAuthStore>[
 
 
 /* ─────────────────────────── FINAPI TAB ─────────────────────────── */
-function FinApiTab({ user, setUser }: { user: ReturnType<typeof useAuthStore>['user']; setUser: (u: unknown) => void }) {
+function FinApiTab({ user, setUser }: { user: ReturnType<typeof useAuthStore>['user']; setUser: (u: any) => void }) {
   const [apiKeys, setApiKeys]         = useState<ApiKey[]>([])
   const [keysLoaded, setKeysLoaded]   = useState(false)
   const [newKeyName, setNewKeyName]   = useState('')
@@ -395,7 +395,7 @@ function FinApiTab({ user, setUser }: { user: ReturnType<typeof useAuthStore>['u
   const [connecting, setConnecting]   = useState(false)
 
   const prefs = (user?.notification_preferences as Record<string, unknown>) || {}
-  const [tgToken, setTgToken]   = useState((prefs.telegram_bot_token as string) || '')
+  const [tgToken, _setTgToken]   = useState((prefs.telegram_bot_token as string) || '')
   const [tgChatId, setTgChatId] = useState((prefs.telegram_chat_id as string) || '')
   const [savingWebhook, setSavingWebhook]   = useState(false)
   const [findingChatId, setFindingChatId]   = useState(false)

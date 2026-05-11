@@ -1,34 +1,38 @@
-import { useState, useEffect, useCallback } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useState, useEffect, useCallback } from 'react';
+import { useNavigate } from 'react-router-dom';
 import {
   TrendingUp, TrendingDown, Zap, RefreshCw, ArrowRight,
   Target, ShieldAlert, Clock, BarChart2, Activity, Search,
   Minus, AlertTriangle, CheckCircle2
-} from 'lucide-react'
-import { getEvents } from '../lib/api'
+} from 'lucide-react';
+import { getEvents } from '../lib/api';
 
 interface Rec {
-  symbol: string
-  name: string
-  cat: 'crypto' | 'stocks' | 'metals'
-  signal: 'BUY' | 'SELL' | 'HOLD'
-  confidence: number
-  entry: number
-  target: number
-  stopLoss: number
-  timeframe: string
-  risk: 'Low' | 'Medium' | 'High'
-  reason: string
-  technicals: string
-  sentiment: 'Bullish' | 'Bearish' | 'Neutral'
-  change24h: number
+  symbol: string;
+  name: string;
+  cat: 'crypto' | 'stocks' | 'metals';
+  signal: 'BUY' | 'SELL' | 'HOLD';
+  confidence: number;
+  entry: number;
+  target: number;
+  stopLoss: number;
+  timeframe: string;
+  risk: 'Low' | 'Medium' | 'High';
+  reason: string;
+  technicals: string;
+  sentiment: 'Bullish' | 'Bearish' | 'Neutral';
+  change24h: number;
 }
 
-interface LivePrice { usd: number; usd_24h_change: number }
+interface LivePrice {
+  usd: number;
+  usd_24h_change: number;
+}
+
 interface PricesData {
-  metals?: Record<string, LivePrice>
-  stocks?: Record<string, LivePrice>
-  [key: string]: LivePrice | Record<string, LivePrice> | undefined
+  metals?: Record<string, LivePrice>;
+  stocks?: Record<string, LivePrice>;
+  [key: string]: LivePrice | Record<string, LivePrice> | undefined;
 }
 
 const BASE_RECS: Rec[] = [
@@ -161,131 +165,152 @@ const BASE_RECS: Rec[] = [
     reason: 'Platinum is deeply undervalued versus gold and palladium. Hydrogen fuel cell adoption is a long-term demand driver. South African supply constraints persist. Technically oversold.',
     technicals: 'RSI 44 oversold · Long-term support · Divergence vs palladium · Accumulation zone', change24h: 0.6,
   },
-]
+];
 
-type SigFilter = 'ALL' | 'BUY' | 'SELL' | 'HOLD'
-type CatFilter = 'all' | 'crypto' | 'stocks' | 'metals'
+type SigFilter = 'ALL' | 'BUY' | 'SELL' | 'HOLD';
+type CatFilter = 'all' | 'crypto' | 'stocks' | 'metals';
 
-const SENTIMENT_SCORE = 62  // 0–100
+const SENTIMENT_SCORE = 62;
 
 export default function RecommendationsPage() {
-  const navigate = useNavigate()
-  const [search, setSearch]       = useState('')
-  const [sigFilter, setSigFilter] = useState<SigFilter>('ALL')
-  const [catFilter, setCatFilter] = useState<CatFilter>('all')
-  const [recs, setRecs]           = useState<Rec[]>(BASE_RECS)
-  const [livePrices, setLivePrices] = useState<Record<string, number>>({})
-  const [events, setEvents]       = useState<{ description: string; event_type: string; tickers_affected: string[]; created_at: string }[]>([])
-  const [loading, setLoading]     = useState(false)
-  const [lastUpdate, setLastUpdate] = useState(new Date())
+  const navigate = useNavigate();
+  const [search, setSearch] = useState('');
+  const [sigFilter, setSigFilter] = useState<SigFilter>('ALL');
+  const [catFilter, setCatFilter] = useState<CatFilter>('all');
+  const [recs, setRecs] = useState<Rec[]>(BASE_RECS);
+  const [livePrices, setLivePrices] = useState<Record<string, number>>({});
+  const [events, setEvents] = useState<{ description: string; event_type: string; tickers_affected: string[]; created_at: string }[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [lastUpdate, setLastUpdate] = useState(new Date());
 
   const fetchPrices = useCallback(async () => {
-    setLoading(true)
+    setLoading(true);
     try {
-      const res = await fetch('/api/public/prices')
-      if (!res.ok) return
-      const data: PricesData = await res.json()
+      const res = await fetch('/api/public/prices');
+      if (!res.ok) return;
 
-      const prices: Record<string, number> = {}
+      const data: PricesData = await res.json();
+      const prices: Record<string, number> = {};
 
+      // Crypto mapping
       const cryptoMap: Record<string, string> = {
-        bitcoin: 'BTC/USDT', ethereum: 'ETH/USDT', binancecoin: 'BNB/USDT',
-        solana: 'SOL/USDT', ripple: 'XRP/USDT', dogecoin: 'DOGE/USDT',
-        'avalanche-2': 'AVAX/USDT', chainlink: 'LINK/USDT',
-      }
-      for (const [id, sym] of Object.entries(cryptoMap)) {
-        if (data[id]) prices[sym] = data[id].usd
-      }
+        bitcoin: 'BTC/USDT',
+        ethereum: 'ETH/USDT',
+        binancecoin: 'BNB/USDT',
+        solana: 'SOL/USDT',
+        ripple: 'XRP/USDT',
+        dogecoin: 'DOGE/USDT',
+        'avalanche-2': 'AVAX/USDT',
+        chainlink: 'LINK/USDT',
+      };
 
-      const m = data.metals ?? {}
-      if (m.gold)    prices['XAU/USD'] = m.gold.usd
-      if (m.silver)  prices['XAG/USD'] = m.silver.usd
-      if (m.oil_wti) prices['OIL/WTI'] = m.oil_wti.usd
-      if (m.platinum)prices['XPT/USD'] = m.platinum.usd
+      Object.entries(cryptoMap).forEach(([id, sym]) => {
+        const priceData = (data as any)[id] as LivePrice | undefined;
+        if (priceData?.usd) prices[sym] = priceData.usd;
+      });
 
-      const s = data.stocks ?? {}
-      for (const sym of Object.keys(s)) {
-        prices[sym] = (s[sym] as LivePrice).usd
-      }
+      // Metals
+      const m = data.metals ?? {};
+      if (m.gold?.usd) prices['XAU/USD'] = m.gold.usd;
+      if (m.silver?.usd) prices['XAG/USD'] = m.silver.usd;
+      if (m.oil_wti?.usd) prices['OIL/WTI'] = m.oil_wti.usd;
+      if (m.platinum?.usd) prices['XPT/USD'] = m.platinum.usd;
 
-      setLivePrices(prices)
+      // Stocks
+      const s = data.stocks ?? {};
+      Object.entries(s).forEach(([sym, priceData]) => {
+        if ((priceData as LivePrice)?.usd) {
+          prices[sym] = (priceData as LivePrice).usd;
+        }
+      });
+
+      setLivePrices(prices);
+
+      // Update recommendations with live prices
       setRecs(BASE_RECS.map(r => {
-        const lp = prices[r.symbol]
-        if (!lp) return r
-        // refresh entry to live price
-        return { ...r, entry: lp }
-      }))
-      setLastUpdate(new Date())
-    } catch { /* silent */ } finally { setLoading(false) }
-  }, [])
+        const lp = prices[r.symbol];
+        return lp !== undefined ? { ...r, entry: lp } : r;
+      }));
+
+      setLastUpdate(new Date());
+    } catch (err) {
+      console.error('Failed to fetch prices:', err);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
 
   useEffect(() => {
-    fetchPrices()
-    getEvents(10).then(r => {
-      const data = r.data
-      setEvents(Array.isArray(data) ? data.slice(0, 6) : (data?.events ?? []).slice(0, 6))
-    }).catch(() => {})
-    const id = setInterval(fetchPrices, 30000)
-    return () => clearInterval(id)
-  }, [fetchPrices])
+    fetchPrices();
+
+    getEvents(10)
+      .then(r => {
+        const data = r.data;
+        setEvents(Array.isArray(data) ? data.slice(0, 6) : (data?.events ?? []).slice(0, 6));
+      })
+      .catch(() => {});
+
+    const id = setInterval(fetchPrices, 30000);
+    return () => clearInterval(id);
+  }, [fetchPrices]);
 
   const filtered = recs.filter(r => {
-    if (catFilter !== 'all' && r.cat !== catFilter) return false
-    if (sigFilter !== 'ALL' && r.signal !== sigFilter) return false
+    if (catFilter !== 'all' && r.cat !== catFilter) return false;
+    if (sigFilter !== 'ALL' && r.signal !== sigFilter) return false;
+
     return (
       r.symbol.toLowerCase().includes(search.toLowerCase()) ||
       r.name.toLowerCase().includes(search.toLowerCase())
-    )
-  })
+    );
+  });
 
-  const buys  = filtered.filter(r => r.signal === 'BUY').length
-  const sells = filtered.filter(r => r.signal === 'SELL').length
-  const holds = filtered.filter(r => r.signal === 'HOLD').length
+  const buys = filtered.filter(r => r.signal === 'BUY').length;
+  const sells = filtered.filter(r => r.signal === 'SELL').length;
+  const holds = filtered.filter(r => r.signal === 'HOLD').length;
 
   const fmtPrice = (p: number) => {
-    if (p >= 10000) return '$' + p.toLocaleString('en-US', { maximumFractionDigits: 0 })
-    if (p >= 100)   return '$' + p.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
-    if (p >= 1)     return '$' + p.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 4 })
-    return '$' + p.toLocaleString('en-US', { minimumFractionDigits: 4, maximumFractionDigits: 6 })
-  }
+    if (p >= 10000) return '$' + p.toLocaleString('en-US', { maximumFractionDigits: 0 });
+    if (p >= 100) return '$' + p.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    if (p >= 1) return '$' + p.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 4 });
+    return '$' + p.toLocaleString('en-US', { minimumFractionDigits: 4, maximumFractionDigits: 6 });
+  };
 
   const rr = (rec: Rec) => {
-    const reward = Math.abs(rec.target - rec.entry)
-    const risk   = Math.abs(rec.entry - rec.stopLoss)
-    return risk > 0 ? (reward / risk).toFixed(1) : '—'
-  }
+    const reward = Math.abs(rec.target - rec.entry);
+    const risk = Math.abs(rec.entry - rec.stopLoss);
+    return risk > 0 ? (reward / risk).toFixed(1) : '—';
+  };
 
   const sigColor = (s: string) => {
-    if (s === 'BUY')  return 'bg-[#0ecb81]/10 text-[#0ecb81] border-[#0ecb81]/25'
-    if (s === 'SELL') return 'bg-[#f6465d]/10 text-[#f6465d] border-[#f6465d]/25'
-    return 'bg-[#f0b90b]/10 text-[#f0b90b] border-[#f0b90b]/25'
-  }
+    if (s === 'BUY') return 'bg-[#0ecb81]/10 text-[#0ecb81] border-[#0ecb81]/25';
+    if (s === 'SELL') return 'bg-[#f6465d]/10 text-[#f6465d] border-[#f6465d]/25';
+    return 'bg-[#f0b90b]/10 text-[#f0b90b] border-[#f0b90b]/25';
+  };
 
   const riskColor = (r: string) => {
-    if (r === 'Low')    return 'text-[#0ecb81]'
-    if (r === 'High')   return 'text-[#f6465d]'
-    return 'text-[#f0b90b]'
-  }
+    if (r === 'Low') return 'text-[#0ecb81]';
+    if (r === 'High') return 'text-[#f6465d]';
+    return 'text-[#f0b90b]';
+  };
 
   const sentimentIcon = (s: string) => {
-    if (s === 'Bullish') return <TrendingUp size={11} className="text-[#0ecb81]" />
-    if (s === 'Bearish') return <TrendingDown size={11} className="text-[#f6465d]" />
-    return <Minus size={11} className="text-[#848e9c]" />
-  }
+    if (s === 'Bullish') return <TrendingUp size={11} className="text-[#0ecb81]" />;
+    if (s === 'Bearish') return <TrendingDown size={11} className="text-[#f6465d]" />;
+    return <Minus size={11} className="text-[#848e9c]" />;
+  };
 
   const sentimentGrade = SENTIMENT_SCORE >= 75 ? 'Extreme Greed'
     : SENTIMENT_SCORE >= 55 ? 'Greed'
     : SENTIMENT_SCORE >= 45 ? 'Neutral'
     : SENTIMENT_SCORE >= 25 ? 'Fear'
-    : 'Extreme Fear'
+    : 'Extreme Fear';
 
   const sentimentGradeColor = SENTIMENT_SCORE >= 55 ? 'text-[#0ecb81]'
     : SENTIMENT_SCORE >= 45 ? 'text-[#f0b90b]'
-    : 'text-[#f6465d]'
+    : 'text-[#f6465d]';
 
   return (
     <div className="space-y-5">
-
       {/* Header */}
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
@@ -295,8 +320,11 @@ export default function RecommendationsPage() {
             AI-generated signals · Updated {lastUpdate.toLocaleTimeString()}
           </p>
         </div>
-        <button onClick={fetchPrices} disabled={loading}
-          className="flex items-center gap-1.5 text-xs text-[#848e9c] hover:text-[#eaecef] border border-[#2b3139] px-3 py-1.5 rounded-lg transition">
+        <button
+          onClick={fetchPrices}
+          disabled={loading}
+          className="flex items-center gap-1.5 text-xs text-[#848e9c] hover:text-[#eaecef] border border-[#2b3139] px-3 py-1.5 rounded-lg transition"
+        >
           <RefreshCw size={12} className={loading ? 'animate-spin' : ''} /> Refresh
         </button>
       </div>
@@ -311,7 +339,7 @@ export default function RecommendationsPage() {
               <span className={`text-sm font-bold ${sentimentGradeColor}`}>{sentimentGrade}</span>
             </div>
           </div>
-          {/* Gradient bar */}
+
           <div className="flex-1 min-w-[140px] max-w-xs">
             <div className="h-2.5 rounded-full overflow-hidden relative"
               style={{ background: 'linear-gradient(90deg, #f6465d 0%, #f0b90b 40%, #f0b90b 60%, #0ecb81 100%)' }}>
@@ -322,7 +350,7 @@ export default function RecommendationsPage() {
               <span>Fear</span><span>Neutral</span><span>Greed</span>
             </div>
           </div>
-          {/* Signal summary */}
+
           <div className="flex items-center gap-3">
             <div className="text-center">
               <p className="text-base font-bold text-[#0ecb81]">{buys}</p>
@@ -343,182 +371,197 @@ export default function RecommendationsPage() {
       </div>
 
       <div className="flex flex-col lg:flex-row gap-5">
-
         {/* Left: Recommendations list */}
         <div className="flex-1 min-w-0 space-y-4">
-
           {/* Filters */}
           <div className="flex flex-col sm:flex-row gap-3">
-            {/* Search */}
             <div className="relative flex-1 min-w-0">
               <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-[#848e9c]" />
               <input
-                value={search} onChange={e => setSearch(e.target.value)}
+                value={search}
+                onChange={e => setSearch(e.target.value)}
                 placeholder="Search symbol or name…"
-                className="w-full bg-[#161a1e] border border-[#2b3139] rounded-xl pl-9 pr-4 py-2 text-sm text-[#eaecef] placeholder-[#4a5568] focus:outline-none focus:border-[#f0b90b] transition" />
+                className="w-full bg-[#161a1e] border border-[#2b3139] rounded-xl pl-9 pr-4 py-2 text-sm text-[#eaecef] placeholder-[#4a5568] focus:outline-none focus:border-[#f0b90b] transition"
+              />
             </div>
-            {/* Category */}
+
+            {/* Category Filter */}
             <div className="flex gap-1 bg-[#161a1e] border border-[#2b3139] rounded-xl p-1 flex-shrink-0">
               {(['all', 'crypto', 'stocks', 'metals'] as CatFilter[]).map(c => (
-                <button key={c} onClick={() => setCatFilter(c)}
-                  className={`text-xs px-3 py-1.5 rounded-lg capitalize font-medium transition ${catFilter === c ? 'bg-[#f0b90b] text-black' : 'text-[#848e9c] hover:text-[#eaecef]'}`}>
+                <button
+                  key={c}
+                  onClick={() => setCatFilter(c)}
+                  className={`text-xs px-3 py-1.5 rounded-lg capitalize font-medium transition ${
+                    catFilter === c ? 'bg-[#f0b90b] text-black' : 'text-[#848e9c] hover:text-[#eaecef]'
+                  }`}
+                >
                   {c === 'all' ? 'All' : c.charAt(0).toUpperCase() + c.slice(1)}
                 </button>
               ))}
             </div>
-            {/* Signal */}
+
+            {/* Signal Filter */}
             <div className="flex gap-1 bg-[#161a1e] border border-[#2b3139] rounded-xl p-1 flex-shrink-0">
               {(['ALL', 'BUY', 'SELL', 'HOLD'] as SigFilter[]).map(s => (
-                <button key={s} onClick={() => setSigFilter(s)}
+                <button
+                  key={s}
+                  onClick={() => setSigFilter(s)}
                   className={`text-xs px-3 py-1.5 rounded-lg font-bold transition ${
                     sigFilter === s
-                      ? s === 'BUY'  ? 'bg-[#0ecb81] text-black'
-                      : s === 'SELL' ? 'bg-[#f6465d] text-white'
-                      : s === 'HOLD' ? 'bg-[#f0b90b] text-black'
-                      : 'bg-[#f0b90b] text-black'
+                      ? s === 'BUY'
+                        ? 'bg-[#0ecb81] text-black'
+                        : s === 'SELL'
+                        ? 'bg-[#f6465d] text-white'
+                        : 'bg-[#f0b90b] text-black'
                       : 'text-[#848e9c] hover:text-[#eaecef]'
-                  }`}>
+                  }`}
+                >
                   {s}
                 </button>
               ))}
             </div>
           </div>
 
-          {/* Cards */}
+          {/* Recommendation Cards */}
           <div className="space-y-3">
             {filtered.length === 0 ? (
               <div className="bg-[#161a1e] border border-[#2b3139] rounded-xl py-14 text-center">
                 <BarChart2 size={24} className="text-[#2b3139] mx-auto mb-2" />
                 <p className="text-sm text-[#848e9c]">No recommendations match your filters</p>
               </div>
-            ) : filtered.map(r => {
-              const livePrice = livePrices[r.symbol]
-              const priceDiff = livePrice ? ((livePrice - r.entry) / r.entry * 100) : 0
-              const isAboveEntry = priceDiff > 0
+            ) : (
+              filtered.map(r => {
+                const livePrice = livePrices[r.symbol];
+                const priceDiff = livePrice ? ((livePrice - r.entry) / r.entry) * 100 : 0;
+                const isAboveEntry = priceDiff > 0;
 
-              return (
-                <div key={r.symbol} className="bg-[#161a1e] border border-[#2b3139] hover:border-[#f0b90b]/20 rounded-2xl p-4 sm:p-5 transition-all">
-
-                  {/* Top row */}
-                  <div className="flex items-start justify-between gap-3 mb-3">
-                    <div className="flex items-center gap-3">
-                      <div className="w-10 h-10 rounded-xl bg-[#f0b90b]/10 flex items-center justify-center text-sm font-extrabold text-[#f0b90b] flex-shrink-0">
-                        {r.symbol[0]}
-                      </div>
-                      <div>
-                        <div className="flex items-center gap-2 flex-wrap">
-                          <span className="font-bold text-[#eaecef] text-sm font-mono">{r.symbol}</span>
-                          <span className="text-[10px] text-[#848e9c]">{r.name}</span>
-                          <span className={`text-[10px] px-1.5 py-0.5 rounded capitalize border ${
-                            r.cat === 'crypto' ? 'text-[#f0b90b] border-[#f0b90b]/20 bg-[#f0b90b]/5'
-                            : r.cat === 'stocks' ? 'text-[#848e9c] border-[#2b3139]'
-                            : 'text-purple-400 border-purple-400/20 bg-purple-400/5'
-                          }`}>
-                            {r.cat}
-                          </span>
+                return (
+                  <div key={r.symbol} className="bg-[#161a1e] border border-[#2b3139] hover:border-[#f0b90b]/20 rounded-2xl p-4 sm:p-5 transition-all">
+                    {/* Top row */}
+                    <div className="flex items-start justify-between gap-3 mb-3">
+                      <div className="flex items-center gap-3">
+                        <div className="w-10 h-10 rounded-xl bg-[#f0b90b]/10 flex items-center justify-center text-sm font-extrabold text-[#f0b90b] flex-shrink-0">
+                          {r.symbol[0]}
                         </div>
-                        <div className="flex items-center gap-2 mt-0.5">
-                          {sentimentIcon(r.sentiment)}
-                          <span className={`text-[10px] font-medium ${
-                            r.sentiment === 'Bullish' ? 'text-[#0ecb81]'
-                            : r.sentiment === 'Bearish' ? 'text-[#f6465d]' : 'text-[#848e9c]'
-                          }`}>{r.sentiment}</span>
-                          <span className="text-[#2b3139]">·</span>
-                          <Clock size={9} className="text-[#4a5568]" />
-                          <span className="text-[10px] text-[#4a5568]">{r.timeframe}</span>
+                        <div>
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span className="font-bold text-[#eaecef] text-sm font-mono">{r.symbol}</span>
+                            <span className="text-[10px] text-[#848e9c]">{r.name}</span>
+                            <span className={`text-[10px] px-1.5 py-0.5 rounded capitalize border ${
+                              r.cat === 'crypto' ? 'text-[#f0b90b] border-[#f0b90b]/20 bg-[#f0b90b]/5'
+                              : r.cat === 'stocks' ? 'text-[#848e9c] border-[#2b3139]'
+                              : 'text-purple-400 border-purple-400/20 bg-purple-400/5'
+                            }`}>
+                              {r.cat}
+                            </span>
+                          </div>
+                          <div className="flex items-center gap-2 mt-0.5">
+                            {sentimentIcon(r.sentiment)}
+                            <span className={`text-[10px] font-medium ${
+                              r.sentiment === 'Bullish' ? 'text-[#0ecb81]'
+                              : r.sentiment === 'Bearish' ? 'text-[#f6465d]' : 'text-[#848e9c]'
+                            }`}>{r.sentiment}</span>
+                            <span className="text-[#2b3139]">·</span>
+                            <Clock size={9} className="text-[#4a5568]" />
+                            <span className="text-[10px] text-[#4a5568]">{r.timeframe}</span>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Signal badge */}
+                      <div className="flex flex-col items-end gap-2 flex-shrink-0">
+                        <span className={`text-sm font-extrabold px-3 py-1 rounded-lg border ${sigColor(r.signal)}`}>
+                          {r.signal === 'BUY' ? '▲ BUY' : r.signal === 'SELL' ? '▼ SELL' : '— HOLD'}
+                        </span>
+                        <div className="flex items-center gap-2">
+                          <div className="w-24 h-1.5 bg-[#2b3139] rounded-full overflow-hidden">
+                            <div className={`h-full rounded-full transition-all ${
+                              r.signal === 'BUY' ? 'bg-[#0ecb81]' : r.signal === 'SELL' ? 'bg-[#f6465d]' : 'bg-[#f0b90b]'
+                            }`} style={{ width: `${r.confidence}%` }} />
+                          </div>
+                          <span className="text-[10px] text-[#848e9c] font-mono">{r.confidence}%</span>
                         </div>
                       </div>
                     </div>
 
-                    {/* Signal badge */}
-                    <div className="flex flex-col items-end gap-2 flex-shrink-0">
-                      <span className={`text-sm font-extrabold px-3 py-1 rounded-lg border ${sigColor(r.signal)}`}>
-                        {r.signal === 'BUY' ? '▲ BUY' : r.signal === 'SELL' ? '▼ SELL' : '— HOLD'}
-                      </span>
-                      {/* Confidence bar */}
-                      <div className="flex items-center gap-2">
-                        <div className="w-24 h-1.5 bg-[#2b3139] rounded-full overflow-hidden">
-                          <div className={`h-full rounded-full transition-all ${
-                            r.signal === 'BUY' ? 'bg-[#0ecb81]' : r.signal === 'SELL' ? 'bg-[#f6465d]' : 'bg-[#f0b90b]'
-                          }`} style={{ width: `${r.confidence}%` }} />
-                        </div>
-                        <span className="text-[10px] text-[#848e9c] font-mono">{r.confidence}%</span>
+                    {/* Price levels */}
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mb-3">
+                      <div className="bg-[#0b0e11] rounded-xl px-3 py-2.5">
+                        <p className="text-[9px] text-[#4a5568] uppercase tracking-wider mb-0.5">Entry</p>
+                        <p className="text-xs font-bold font-mono text-[#eaecef]">{fmtPrice(r.entry)}</p>
+                        {livePrice && (
+                          <p className={`text-[9px] mt-0.5 font-medium ${isAboveEntry ? 'text-[#0ecb81]' : 'text-[#f6465d]'}`}>
+                            Live: {fmtPrice(livePrice)} ({isAboveEntry ? '+' : ''}{priceDiff.toFixed(2)}%)
+                          </p>
+                        )}
                       </div>
-                    </div>
-                  </div>
 
-                  {/* Price levels */}
-                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mb-3">
-                    <div className="bg-[#0b0e11] rounded-xl px-3 py-2.5">
-                      <p className="text-[9px] text-[#4a5568] uppercase tracking-wider mb-0.5">Entry</p>
-                      <p className="text-xs font-bold font-mono text-[#eaecef]">{fmtPrice(r.entry)}</p>
-                      {livePrice && (
-                        <p className={`text-[9px] mt-0.5 font-medium ${isAboveEntry ? 'text-[#0ecb81]' : 'text-[#f6465d]'}`}>
-                          Live: {fmtPrice(livePrice)} ({isAboveEntry ? '+' : ''}{priceDiff.toFixed(2)}%)
+                      <div className="bg-[#0b0e11] rounded-xl px-3 py-2.5">
+                        <p className="text-[9px] text-[#4a5568] uppercase tracking-wider mb-0.5 flex items-center gap-1">
+                          <Target size={8} /> Target
                         </p>
-                      )}
+                        <p className="text-xs font-bold font-mono text-[#0ecb81]">{fmtPrice(r.target)}</p>
+                        <p className="text-[9px] text-[#0ecb81] mt-0.5">
+                          +{(Math.abs(r.target - r.entry) / r.entry * 100).toFixed(1)}%
+                        </p>
+                      </div>
+
+                      <div className="bg-[#0b0e11] rounded-xl px-3 py-2.5">
+                        <p className="text-[9px] text-[#4a5568] uppercase tracking-wider mb-0.5 flex items-center gap-1">
+                          <ShieldAlert size={8} /> Stop Loss
+                        </p>
+                        <p className="text-xs font-bold font-mono text-[#f6465d]">{fmtPrice(r.stopLoss)}</p>
+                        <p className="text-[9px] text-[#f6465d] mt-0.5">
+                          -{(Math.abs(r.entry - r.stopLoss) / r.entry * 100).toFixed(1)}%
+                        </p>
+                      </div>
+
+                      <div className="bg-[#0b0e11] rounded-xl px-3 py-2.5">
+                        <p className="text-[9px] text-[#4a5568] uppercase tracking-wider mb-0.5">Risk/Reward</p>
+                        <p className="text-xs font-bold font-mono text-[#f0b90b]">1 : {rr(r)}</p>
+                        <p className={`text-[9px] mt-0.5 font-medium ${riskColor(r.risk)}`}>{r.risk} Risk</p>
+                      </div>
                     </div>
-                    <div className="bg-[#0b0e11] rounded-xl px-3 py-2.5">
-                      <p className="text-[9px] text-[#4a5568] uppercase tracking-wider mb-0.5 flex items-center gap-1">
-                        <Target size={8} /> Target
-                      </p>
-                      <p className="text-xs font-bold font-mono text-[#0ecb81]">{fmtPrice(r.target)}</p>
-                      <p className="text-[9px] text-[#0ecb81] mt-0.5">
-                        +{(Math.abs(r.target - r.entry) / r.entry * 100).toFixed(1)}%
-                      </p>
+
+                    {/* Reason */}
+                    <p className="text-[11px] text-[#848e9c] leading-relaxed mb-2.5">{r.reason}</p>
+
+                    {/* Technicals */}
+                    <div className="flex flex-wrap items-center gap-1.5 mb-3">
+                      {r.technicals.split(' · ').map((t, i) => (
+                        <span key={i} className="text-[9px] bg-[#0b0e11] border border-[#2b3139] text-[#848e9c] px-2 py-0.5 rounded-full font-mono">
+                          {t}
+                        </span>
+                      ))}
                     </div>
-                    <div className="bg-[#0b0e11] rounded-xl px-3 py-2.5">
-                      <p className="text-[9px] text-[#4a5568] uppercase tracking-wider mb-0.5 flex items-center gap-1">
-                        <ShieldAlert size={8} /> Stop Loss
-                      </p>
-                      <p className="text-xs font-bold font-mono text-[#f6465d]">{fmtPrice(r.stopLoss)}</p>
-                      <p className="text-[9px] text-[#f6465d] mt-0.5">
-                        -{(Math.abs(r.entry - r.stopLoss) / r.entry * 100).toFixed(1)}%
-                      </p>
-                    </div>
-                    <div className="bg-[#0b0e11] rounded-xl px-3 py-2.5">
-                      <p className="text-[9px] text-[#4a5568] uppercase tracking-wider mb-0.5">Risk/Reward</p>
-                      <p className="text-xs font-bold font-mono text-[#f0b90b]">1 : {rr(r)}</p>
-                      <p className={`text-[9px] mt-0.5 font-medium ${riskColor(r.risk)}`}>{r.risk} Risk</p>
+
+                    {/* Footer */}
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-1.5">
+                        <Zap size={10} className="text-[#f0b90b]" />
+                        <span className="text-[10px] text-[#4a5568]">AI Confidence: </span>
+                        <span className={`text-[10px] font-bold ${
+                          r.confidence >= 75 ? 'text-[#0ecb81]' : r.confidence >= 60 ? 'text-[#f0b90b]' : 'text-[#f6465d]'
+                        }`}>
+                          {r.confidence >= 75 ? 'High' : r.confidence >= 60 ? 'Moderate' : 'Low'}
+                        </span>
+                      </div>
+                      <button
+                        onClick={() => navigate('/app/trade')}
+                        className="flex items-center gap-1.5 text-xs font-semibold bg-[#f0b90b] hover:bg-[#d9a60b] text-black px-3 py-1.5 rounded-lg transition"
+                      >
+                        Trade Now <ArrowRight size={11} />
+                      </button>
                     </div>
                   </div>
-
-                  {/* Reason */}
-                  <p className="text-[11px] text-[#848e9c] leading-relaxed mb-2.5">{r.reason}</p>
-
-                  {/* Technicals strip */}
-                  <div className="flex flex-wrap items-center gap-1.5 mb-3">
-                    {r.technicals.split(' · ').map(t => (
-                      <span key={t} className="text-[9px] bg-[#0b0e11] border border-[#2b3139] text-[#848e9c] px-2 py-0.5 rounded-full font-mono">
-                        {t}
-                      </span>
-                    ))}
-                  </div>
-
-                  {/* Footer */}
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-1.5">
-                      <Zap size={10} className="text-[#f0b90b]" />
-                      <span className="text-[10px] text-[#4a5568]">AI Confidence: </span>
-                      <span className={`text-[10px] font-bold ${
-                        r.confidence >= 75 ? 'text-[#0ecb81]' : r.confidence >= 60 ? 'text-[#f0b90b]' : 'text-[#f6465d]'
-                      }`}>{r.confidence >= 75 ? 'High' : r.confidence >= 60 ? 'Moderate' : 'Low'}</span>
-                    </div>
-                    <button
-                      onClick={() => navigate('/app/trade')}
-                      className="flex items-center gap-1.5 text-xs font-semibold bg-[#f0b90b] hover:bg-[#d9a60b] text-black px-3 py-1.5 rounded-lg transition">
-                      Trade Now <ArrowRight size={11} />
-                    </button>
-                  </div>
-                </div>
-              )
-            })}
+                );
+              })
+            )}
           </div>
         </div>
 
-        {/* Right: AI Events feed */}
+        {/* Right Sidebar */}
         <div className="lg:w-72 flex-shrink-0 space-y-4">
-
           {/* Disclaimer */}
           <div className="flex items-start gap-2.5 bg-[#f0b90b]/5 border border-[#f0b90b]/20 rounded-xl px-3 py-3">
             <AlertTriangle size={13} className="text-[#f0b90b] flex-shrink-0 mt-0.5" />
@@ -542,23 +585,27 @@ export default function RecommendationsPage() {
                   <Activity size={18} className="text-[#2b3139] mx-auto mb-2" />
                   <p className="text-xs text-[#848e9c]">No events yet</p>
                 </div>
-              ) : events.map((ev, i) => (
-                <div key={i} className="px-4 py-3 hover:bg-[#1e2329] transition">
-                  <p className="text-[11px] text-[#eaecef] leading-relaxed line-clamp-3">{ev.description ?? ev.event_type}</p>
-                  <div className="flex items-center gap-1.5 mt-1.5">
-                    <span className="text-[9px] bg-[#f0b90b]/10 text-[#f0b90b] px-1.5 py-0.5 rounded font-medium">
-                      {ev.tickers_affected?.[0] ?? 'Market'}
-                    </span>
-                    <span className="text-[9px] text-[#4a5568]">
-                      {ev.created_at ? new Date(ev.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : ''}
-                    </span>
+              ) : (
+                events.map((ev, i) => (
+                  <div key={i} className="px-4 py-3 hover:bg-[#1e2329] transition">
+                    <p className="text-[11px] text-[#eaecef] leading-relaxed line-clamp-3">
+                      {ev.description ?? ev.event_type}
+                    </p>
+                    <div className="flex items-center gap-1.5 mt-1.5">
+                      <span className="text-[9px] bg-[#f0b90b]/10 text-[#f0b90b] px-1.5 py-0.5 rounded font-medium">
+                        {ev.tickers_affected?.[0] ?? 'Market'}
+                      </span>
+                      <span className="text-[9px] text-[#4a5568]">
+                        {ev.created_at ? new Date(ev.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : ''}
+                      </span>
+                    </div>
                   </div>
-                </div>
-              ))}
+                ))
+              )}
             </div>
           </div>
 
-          {/* Quick stats */}
+          {/* Quick Stats */}
           <div className="bg-[#161a1e] border border-[#2b3139] rounded-xl p-4 space-y-3">
             <p className="text-xs font-semibold text-[#eaecef] flex items-center gap-1.5">
               <CheckCircle2 size={12} className="text-[#0ecb81]" /> Signal Summary
@@ -566,7 +613,7 @@ export default function RecommendationsPage() {
             {[
               { label: 'Total signals', value: `${filtered.length}` },
               { label: 'Avg confidence', value: filtered.length > 0 ? `${Math.round(filtered.reduce((a, r) => a + r.confidence, 0) / filtered.length)}%` : '—' },
-              { label: 'Bullish bias', value: filtered.length > 0 ? `${Math.round(filtered.filter(r => r.signal === 'BUY').length / filtered.length * 100)}%` : '—' },
+              { label: 'Bullish bias', value: filtered.length > 0 ? `${Math.round((filtered.filter(r => r.signal === 'BUY').length / filtered.length) * 100)}%` : '—' },
               { label: 'High confidence (≥75%)', value: `${filtered.filter(r => r.confidence >= 75).length}` },
             ].map(s => (
               <div key={s.label} className="flex items-center justify-between">
@@ -578,5 +625,5 @@ export default function RecommendationsPage() {
         </div>
       </div>
     </div>
-  )
+  );
 }

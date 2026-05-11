@@ -231,33 +231,7 @@ export default function DashboardPage() {
             )}
           </div>
 
-          <div className="grid grid-cols-2 gap-2">
-            {[
-              {
-                label: 'Withdraw',
-                icon: ArrowUpRight,
-                path: '/app/wallet',
-                color: 'text-[#f6465d]',
-                bg: 'bg-[#f6465d]/10 hover:bg-[#f6465d]/20 border-[#f6465d]/20',
-              },
-              {
-                label: 'Markets',
-                icon: BarChart2,
-                path: '/app/markets',
-                color: 'text-[#848e9c]',
-                bg: 'bg-[#2b3139]/50 hover:bg-[#2b3139] border-[#2b3139]/60',
-              },
-            ].map(({ label, icon: Icon, path, color, bg }) => (
-              <button
-                key={label}
-                onClick={() => navigate(path)}
-                className={`flex flex-col items-center gap-1.5 py-3 rounded-xl border transition-all ${bg}`}
-              >
-                <Icon size={18} className={color} />
-                <span className="text-[11px] font-semibold text-[#eaecef]">{label}</span>
-              </button>
-            ))}
-          </div>
+      
         </div>
       </div>
 

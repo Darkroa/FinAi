@@ -1,46 +1,93 @@
-import { useState } from 'react'
-import { useAuthStore } from '../store/authStore'
-import { updateNotificationPreferences } from '../lib/api'
-import toast from 'react-hot-toast'
-import { Bell, Mail, MessageCircle, Send, Zap, Shield, Globe, Info } from 'lucide-react'
+import { useState, useEffect } from 'react';
+import { useAuthStore } from '../store/authStore';
+import { updateNotificationPreferences } from '../lib/api';
+import toast from 'react-hot-toast';
+import { Bell, Mail, MessageCircle, Send, Zap, Shield, Globe, Info } from 'lucide-react';
 
-interface NotifPrefs { email: boolean; whatsapp: boolean; telegram: boolean }
+interface NotifPrefs {
+  email: boolean;
+  whatsapp: boolean;
+  telegram: boolean;
+}
+
+// Extended user type for this page (safe approach)
+interface UserWithNotifs {
+  notification_preferences?: NotifPrefs;
+  // Add other user properties if needed
+}
 
 export default function SettingsPage() {
-  const { user, setUser } = useAuthStore()
-  const [notifs, setNotifs] = useState<NotifPrefs>(
-    user?.notification_preferences || { email: true, whatsapp: false, telegram: false }
-  )
-  const [saving, setSaving] = useState(false)
+  const { user, setUser } = useAuthStore();
+
+  const [notifs, setNotifs] = useState<NotifPrefs>({
+    email: true,
+    whatsapp: false,
+    telegram: false,
+  });
+  const [saving, setSaving] = useState(false);
+
+  // Load preferences from user when available
+  useEffect(() => {
+    if (user?.notification_preferences) {
+      setNotifs(user.notification_preferences);
+    }
+  }, [user]);
 
   const notifItems = [
-    { key: 'email'    as const, label: 'Email Notifications',   desc: 'Trade alerts, account updates, and security events', icon: Mail,          color: 'text-[#f0b90b]', bg: 'bg-[#f0b90b]/10' },
-    { key: 'whatsapp' as const, label: 'WhatsApp Alerts',       desc: 'Real-time trade signals and bot status via WhatsApp', icon: MessageCircle, color: 'text-[#0ecb81]', bg: 'bg-[#0ecb81]/10' },
-    { key: 'telegram' as const, label: 'Telegram Alerts',       desc: 'Market events and trade notifications via Telegram',  icon: Send,          color: 'text-[#3b82f6]', bg: 'bg-blue-500/10'   },
-  ]
+    {
+      key: 'email' as const,
+      label: 'Email Notifications',
+      desc: 'Trade alerts, account updates, and security events',
+      icon: Mail,
+      color: 'text-[#f0b90b]',
+      bg: 'bg-[#f0b90b]/10',
+    },
+    {
+      key: 'whatsapp' as const,
+      label: 'WhatsApp Alerts',
+      desc: 'Real-time trade signals and bot status via WhatsApp',
+      icon: MessageCircle,
+      color: 'text-[#0ecb81]',
+      bg: 'bg-[#0ecb81]/10',
+    },
+    {
+      key: 'telegram' as const,
+      label: 'Telegram Alerts',
+      desc: 'Market events and trade notifications via Telegram',
+      icon: Send,
+      color: 'text-[#3b82f6]',
+      bg: 'bg-blue-500/10',
+    },
+  ];
 
   const handleSave = async () => {
-    setSaving(true)
+    setSaving(true);
     try {
-      const res = await updateNotificationPreferences(notifs)
-      setUser(res.data)
-      toast.success('Notification preferences saved')
-    } catch {
-      toast.error('Failed to save preferences')
+      const res = await updateNotificationPreferences(notifs);
+
+      // Update store with new preferences
+      if (res.data) {
+        setUser(res.data);
+      }
+
+      toast.success('Notification preferences saved successfully');
+    } catch (err) {
+      console.error(err);
+      toast.error('Failed to save preferences');
     } finally {
-      setSaving(false)
+      setSaving(false);
     }
-  }
+  };
 
   const toggle = (key: keyof NotifPrefs) => {
-    setNotifs(prev => ({ ...prev, [key]: !prev[key] }))
-  }
+    setNotifs(prev => ({ ...prev, [key]: !prev[key] }));
+  };
 
   return (
     <div className="space-y-5 max-w-2xl">
       <h1 className="text-xl font-bold text-[#eaecef]">Settings</h1>
 
-      {/* Notifications */}
+      {/* Notifications Section */}
       <div className="bg-[#161a1e] border border-[#2b3139] rounded-xl overflow-hidden">
         <div className="flex items-center gap-2.5 px-5 py-4 border-b border-[#2b3139]">
           <div className="w-7 h-7 rounded-lg bg-[#f0b90b]/10 flex items-center justify-center">
@@ -62,23 +109,34 @@ export default function SettingsPage() {
                 <p className="text-sm font-medium text-[#eaecef]">{label}</p>
                 <p className="text-xs text-[#848e9c] leading-relaxed mt-0.5">{desc}</p>
               </div>
-              <button onClick={() => toggle(key)}
-                className={`relative w-11 h-6 rounded-full transition-all duration-200 flex-shrink-0 ${notifs[key] ? 'bg-[#f0b90b]' : 'bg-[#2b3139]'}`}>
-                <span className={`absolute top-0.5 w-5 h-5 rounded-full bg-white shadow transition-transform duration-200 ${notifs[key] ? 'translate-x-5' : 'translate-x-0.5'}`} />
+              <button
+                onClick={() => toggle(key)}
+                className={`relative w-11 h-6 rounded-full transition-all duration-200 flex-shrink-0 ${
+                  notifs[key] ? 'bg-[#f0b90b]' : 'bg-[#2b3139]'
+                }`}
+              >
+                <span
+                  className={`absolute top-0.5 w-5 h-5 rounded-full bg-white shadow transition-transform duration-200 ${
+                    notifs[key] ? 'translate-x-5' : 'translate-x-0.5'
+                  }`}
+                />
               </button>
             </div>
           ))}
         </div>
 
         <div className="px-5 py-4 border-t border-[#2b3139] bg-[#0b0e11]/30">
-          <button onClick={handleSave} disabled={saving}
-            className="bg-[#f0b90b] hover:bg-[#d4a30a] disabled:opacity-60 text-black font-semibold px-5 py-2.5 rounded-xl text-sm transition">
+          <button
+            onClick={handleSave}
+            disabled={saving}
+            className="bg-[#f0b90b] hover:bg-[#d4a30a] disabled:opacity-60 text-black font-semibold px-6 py-2.5 rounded-xl text-sm transition w-full sm:w-auto"
+          >
             {saving ? 'Saving…' : 'Save Preferences'}
           </button>
         </div>
       </div>
 
-      {/* App preferences */}
+      {/* App Preferences */}
       <div className="bg-[#161a1e] border border-[#2b3139] rounded-xl overflow-hidden">
         <div className="flex items-center gap-2.5 px-5 py-4 border-b border-[#2b3139]">
           <div className="w-7 h-7 rounded-lg bg-[#0ecb81]/10 flex items-center justify-center">
@@ -92,8 +150,8 @@ export default function SettingsPage() {
         <div className="divide-y divide-[#2b3139]/60">
           {[
             { label: 'Confirm before trade orders', desc: 'Show a confirmation dialog before placing orders' },
-            { label: 'Sound alerts',                desc: 'Play audio when a trade executes or a bot signals' },
-            { label: 'Compact number format',       desc: 'Display large numbers as 1.2M instead of 1,200,000' },
+            { label: 'Sound alerts', desc: 'Play audio when a trade executes or a bot signals' },
+            { label: 'Compact number format', desc: 'Display large numbers as 1.2M instead of 1,200,000' },
           ].map(item => (
             <div key={item.label} className="flex items-center justify-between gap-4 px-5 py-4">
               <div>
@@ -108,7 +166,7 @@ export default function SettingsPage() {
         </div>
       </div>
 
-      {/* Language / Region */}
+      {/* Language & Region */}
       <div className="bg-[#161a1e] border border-[#2b3139] rounded-xl overflow-hidden">
         <div className="flex items-center gap-2.5 px-5 py-4 border-b border-[#2b3139]">
           <div className="w-7 h-7 rounded-lg bg-blue-500/10 flex items-center justify-center">
@@ -139,14 +197,16 @@ export default function SettingsPage() {
               <option>BTC — Bitcoin</option>
             </select>
           </div>
-          <button onClick={() => toast.success('Preferences saved')}
-            className="bg-[#f0b90b] hover:bg-[#d4a30a] text-black font-semibold px-5 py-2.5 rounded-xl text-sm transition">
+          <button
+            onClick={() => toast.success('Preferences saved')}
+            className="bg-[#f0b90b] hover:bg-[#d4a30a] text-black font-semibold px-5 py-2.5 rounded-xl text-sm transition"
+          >
             Save
           </button>
         </div>
       </div>
 
-      {/* Security note */}
+      {/* Security Note */}
       <div className="bg-[#161a1e] border border-[#2b3139] rounded-xl overflow-hidden">
         <div className="flex items-center gap-2.5 px-5 py-4 border-b border-[#2b3139]">
           <div className="w-7 h-7 rounded-lg bg-[#f6465d]/10 flex items-center justify-center">
@@ -166,5 +226,5 @@ export default function SettingsPage() {
         </div>
       </div>
     </div>
-  )
+  );
 }
