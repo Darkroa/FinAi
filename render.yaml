@@ -1,26 +1,23 @@
 version: 1
 
-services:
-  # PostgreSQL Database
-  postgres:
-    type: pgsql
-    name: finai-postgres
+# PostgreSQL Database
+databases:
+  - name: finai-postgres
     databaseName: finforge
     user: finuser
     password: ${POSTGRES_PASSWORD}
     region: oregon
     plan: free
 
-  # Redis for Celery / caching
-  redis:
-    type: redis
+# Redis for Celery / caching
+services:
+  - type: redis
     name: finai-redis
     region: oregon
     plan: free
 
   # FastAPI Backend (API + serves React frontend)
-  api:
-    type: web
+  - type: web
     name: finai-api
     env: docker
     dockerfilePath: Dockerfile
@@ -46,7 +43,6 @@ services:
         sync: false
       - key: TWILIO_AUTH_TOKEN
         sync: false
-      # Optional but recommended
       - key: ENVIRONMENT
         value: production
       - key: CORS_ORIGINS
@@ -54,17 +50,15 @@ services:
     regions: [oregon]
     plan: free
     healthCheckPath: /api/health
-    # Optional: auto-deploy on main branch
     autoDeploy: true
 
-  # Celery Worker (tasks + beat scheduler)
-  worker:
-    type: worker
+  # Celery Worker
+  - type: worker
     name: finai-worker
     env: docker
     dockerfilePath: Dockerfile
     dockerContext: .
-    startCommand: celery -A src.celery_app.tasks worker --loglevel=info --beat --scheduler django_celery_beat.schedulers:DatabaseScheduler
+    startCommand: celery -A src.celery_app.tasks worker --loglevel=info --beat
     envVars:
       - key: DATABASE_URL
         fromDatabase:
