@@ -2,11 +2,11 @@ import { useState, useEffect, useRef, useCallback } from 'react'
 import {
   ArrowUpDown, TrendingUp, TrendingDown, ChevronDown,
   Wifi, WifiOff, BarChart2, Activity, Link2, RefreshCw,
-  Clock, CheckCircle2, X, Target, AlertTriangle,
+  Clock, CheckCircle2, X, Target, AlertTriangle, ZoomIn, ZoomOut,
 } from 'lucide-react'
 import {
   AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip,
-  ResponsiveContainer, BarChart, Bar, Cell,
+  ResponsiveContainer, ComposedChart, Bar, Line, Cell,
 } from 'recharts'
 import toast from 'react-hot-toast'
 import { useAuthStore } from '../store/authStore'

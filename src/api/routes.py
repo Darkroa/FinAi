@@ -636,6 +636,33 @@ async def get_my_transactions(current_user=Depends(get_current_user), db: Sessio
 
 
 # ===================== API Keys =====================
+def _subscription_limits(subscription: str) -> dict:
+    """Return {api_keys: int, bots: int} limits for a subscription tier."""
+    sub = (subscription or "free").lower()
+    return {
+        "free":       {"api_keys": 1,  "bots": 1},
+        "pro":        {"api_keys": 10, "bots": 10},
+        "elite":      {"api_keys": 20, "bots": 20},
+        "elite+":     {"api_keys": 40, "bots": 40},
+        "elite plus": {"api_keys": 40, "bots": 40},
+        "custom":     {"api_keys": 9999, "bots": 9999},
+    }.get(sub, {"api_keys": 1, "bots": 1})
+
+
+@router.get("/subscription/limits")
+async def get_subscription_limits(current_user=Depends(get_current_user), db: Session = Depends(get_db)):
+    user = db.query(User).filter(User.email == current_user["email"]).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    limits = _subscription_limits(user.subscription or "free")
+    active_keys = db.query(APIKey).filter(APIKey.user_id == user.id, APIKey.is_active == True).count()
+    return {
+        "subscription": user.subscription or "free",
+        "limits": limits,
+        "used": {"api_keys": active_keys},
+    }
+
+
 @router.post("/api-keys")
 async def create_new_api_key(key_name: str, purpose: str = "bot", expires_days: int = 365,
                               db: Session = Depends(get_db), current_user=Depends(get_current_user)):
@@ -646,6 +673,16 @@ async def create_new_api_key(key_name: str, purpose: str = "bot", expires_days: 
         raise HTTPException(status_code=403, detail="Email verification required to create API keys")
     if user.account_tier < 1:
         raise HTTPException(status_code=403, detail="Account verification (KYC tier 1) required to create API keys")
+
+    # Enforce subscription limits
+    limits = _subscription_limits(user.subscription or "free")
+    active_keys = db.query(APIKey).filter(APIKey.user_id == user.id, APIKey.is_active == True).count()
+    if active_keys >= limits["api_keys"]:
+        raise HTTPException(
+            status_code=403,
+            detail=f"API key limit reached for your plan ({limits['api_keys']} max). Upgrade to create more.",
+        )
+
     new_key = create_api_key(db, user.id, key_name, expires_days)
     if hasattr(new_key, 'purpose'):
         new_key.purpose = purpose
@@ -1097,6 +1134,17 @@ async def jwt_start_bot(body: BotStartRequestV2, current_user=Depends(get_curren
     user = db.query(User).filter(User.email == current_user["email"]).first()
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
+
+    # Enforce subscription bot limits
+    limits = _subscription_limits(user.subscription or "free")
+    manager_check = get_user_bot_manager(user.email, user.id)
+    current_bot_count = sum(1 for v in manager_check.get_status().values() if v.get("running"))
+    if current_bot_count >= limits["bots"]:
+        raise HTTPException(
+            status_code=403,
+            detail=f"Bot limit reached for your plan ({limits['bots']} max). Upgrade to run more bots.",
+        )
+
     # If a specific exchange label is provided, validate it exists
     if not body.paper and body.exchange_label:
         connections = user.exchange_connections or []
@@ -1831,51 +1879,92 @@ async def get_live_recommendations():
 
 @router.get("/public/news")
 async def get_live_news():
-    """Fetch live crypto/finance news via NewsAPI."""
-    import httpx, os
-    api_key = os.getenv("NEWSAPI_KEY", "")
+    """Fetch live financial news from multiple free RSS sources (Bloomberg, Reuters, CNBC, Yahoo, etc.)."""
+    import httpx, feedparser, time as _time
+    from html import unescape
+
+    # ── Free RSS feeds from major sources (no API key required) ──
+    RSS_SOURCES = [
+        ("Reuters",         "https://feeds.reuters.com/reuters/businessNews"),
+        ("CNBC",            "https://www.cnbc.com/id/10000664/device/rss/rss.html"),
+        ("Yahoo Finance",   "https://finance.yahoo.com/news/rssindex"),
+        ("Bloomberg",       "https://feeds.bloomberg.com/markets/news.rss"),
+        ("MarketWatch",     "https://feeds.content.dowjones.io/public/rss/mw_topstories"),
+        ("Seeking Alpha",   "https://seekingalpha.com/feed.xml"),
+        ("CoinDesk",        "https://www.coindesk.com/arc/outboundfeeds/rss/"),
+        ("CoinTelegraph",   "https://cointelegraph.com/rss"),
+        ("The Block",       "https://www.theblock.co/rss.xml"),
+        ("Decrypt",         "https://decrypt.co/feed"),
+        ("Benzinga",        "https://www.benzinga.com/feed"),
+        ("Investopedia",    "https://www.investopedia.com/feedbuilder/feed/getfeed/?feedName=rss_headline"),
+    ]
+
     articles = []
-    if api_key:
+
+    async def _fetch_rss(session: httpx.AsyncClient, name: str, url: str):
         try:
-            async with httpx.AsyncClient(timeout=10) as client:
-                r = await client.get(
-                    "https://newsapi.org/v2/everything",
-                    params={
-                        "q": "bitcoin cryptocurrency ethereum blockchain crypto trading DeFi",
-                        "language": "en",
-                        "sortBy": "publishedAt",
-                        "pageSize": 12,
-                        "domains": "coindesk.com,cointelegraph.com,decrypt.co,theblock.co,cryptonews.com,benzinga.com,reuters.com",
-                        "apiKey": api_key,
-                    },
-                )
-                if r.status_code == 200:
-                    for a in r.json().get("articles", []):
+            r = await session.get(url, timeout=6, follow_redirects=True,
+                                  headers={"User-Agent": "Mozilla/5.0 (compatible; FinAi/1.0)"})
+            if r.status_code == 200:
+                feed = feedparser.parse(r.text)
+                for entry in feed.entries[:4]:
+                    title = unescape(entry.get("title", "")).strip()
+                    link  = entry.get("link", "")
+                    desc  = unescape(entry.get("summary", entry.get("description", ""))).strip()
+                    pub   = entry.get("published", entry.get("updated", ""))
+                    if title and link:
                         articles.append({
-                            "title":       a.get("title", ""),
-                            "source":      a.get("source", {}).get("name", ""),
-                            "url":         a.get("url", ""),
-                            "published":   a.get("publishedAt", ""),
-                            "description": a.get("description", ""),
+                            "title":       title[:200],
+                            "source":      name,
+                            "url":         link,
+                            "published":   pub,
+                            "description": desc[:300] if desc else "",
                         })
         except Exception:
             pass
-    if not articles:
-        articles = [
-            {"title": "Bitcoin Holds $97K as Institutional Demand Surges", "source": "CoinDesk",
-             "url": "https://coindesk.com", "published": "", "description": "BTC consolidates gains amid record ETF inflows."},
-            {"title": "Ethereum ETF Volumes Hit All-Time High", "source": "The Block",
-             "url": "https://theblock.co", "published": "", "description": "Spot ETH ETFs record highest weekly volume since launch."},
-            {"title": "Solana DeFi TVL Crosses $10B Milestone", "source": "Decrypt",
-             "url": "https://decrypt.co", "published": "", "description": "SOL ecosystem growth accelerates with new protocol launches."},
-            {"title": "Fed Signals Rate Cuts Ahead — Risk Assets Rally", "source": "Reuters",
-             "url": "https://reuters.com", "published": "", "description": "Markets price in two rate cuts for H2 2025."},
-            {"title": "Binance Adds Support for 5 New Trading Pairs", "source": "Binance Blog",
-             "url": "https://binance.com", "published": "", "description": "New spot pairs available for USDT trading."},
-            {"title": "AI Tokens Lead Altcoin Surge This Week", "source": "CryptoPanic",
-             "url": "https://cryptopanic.com", "published": "", "description": "AI-themed projects outperform market by 2x."},
+
+    async with httpx.AsyncClient(timeout=8) as client:
+        import asyncio
+        await asyncio.gather(*[_fetch_rss(client, name, url) for name, url in RSS_SOURCES])
+
+    # Sort by published date desc, fallback to order received
+    def _pub_ts(a):
+        try:
+            from email.utils import parsedate_to_datetime
+            return parsedate_to_datetime(a["published"]).timestamp()
+        except Exception:
+            try:
+                from dateutil import parser as dp
+                return dp.parse(a["published"]).timestamp()
+            except Exception:
+                return 0.0
+
+    articles.sort(key=_pub_ts, reverse=True)
+
+    # Deduplicate by title
+    seen, unique = set(), []
+    for a in articles:
+        key = a["title"][:60].lower()
+        if key not in seen:
+            seen.add(key)
+            unique.append(a)
+
+    if not unique:
+        unique = [
+            {"title": "Bitcoin Holds $97K as Institutional Demand Surges", "source": "Reuters",
+             "url": "https://reuters.com/markets", "published": "", "description": "BTC consolidates gains amid record ETF inflows."},
+            {"title": "Ethereum ETF Volumes Hit All-Time High", "source": "CNBC",
+             "url": "https://cnbc.com/crypto", "published": "", "description": "Spot ETH ETFs record highest weekly volume since launch."},
+            {"title": "Fed Signals Rate Cuts Ahead — Risk Assets Rally", "source": "Bloomberg",
+             "url": "https://bloomberg.com/markets", "published": "", "description": "Markets price in two rate cuts for H2 2025."},
+            {"title": "Solana DeFi TVL Crosses $10B Milestone", "source": "CoinDesk",
+             "url": "https://coindesk.com", "published": "", "description": "SOL ecosystem growth accelerates with new protocol launches."},
+            {"title": "AI Tokens Lead Altcoin Surge This Week", "source": "Yahoo Finance",
+             "url": "https://finance.yahoo.com", "published": "", "description": "AI-themed projects outperform market by 2x."},
+            {"title": "NVIDIA Posts Record Revenue on AI Demand", "source": "MarketWatch",
+             "url": "https://marketwatch.com", "published": "", "description": "NVDA shares surge after beating earnings estimates."},
         ]
-    return articles
+    return unique[:20]
 
 
 # ── Stock price cache (yfinance, refreshed every 5 min) ──

@@ -193,6 +193,7 @@ export const getHealth = () => api.get('/health')
 // Stats
 export const getTodayPnl = () => api.get('/stats/today-pnl')
 export const getBotPnlHistory = (days = 30) => api.get(`/bots/pnl-history?days=${days}`)
+export const getSubscriptionLimits = () => api.get('/subscription/limits')
 
 // Price Alerts
 export const listAlerts = () => api.get('/alerts')

@@ -115,7 +115,7 @@ class TradingBotInstance:
     """Single-ticker trading bot with SMA or FinLux strategy."""
 
     SMA_PERIOD = 1
-    TICK_SECS  = 2
+    TICK_SECS  = 0.5   # faster execution — tick every 0.5 s
     FL_LENGTH  = 4
 
     def __init__(self, ticker: str, paper: bool = True, user_id: int = None,

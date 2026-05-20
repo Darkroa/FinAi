@@ -2,6 +2,7 @@ import { useEffect, useState, useCallback, useRef } from 'react'
 import {
   getBotStatus, startBot, stopBot, closeBotPosition,
   getBotTrades, updateBotParams, getBotPnlHistory, listApiKeys,
+  getSubscriptionLimits,
 } from '../lib/api'
 import { useAuthStore } from '../store/authStore'
 import toast from 'react-hot-toast'
@@ -9,6 +10,7 @@ import {
   Bot, Play, Square, RefreshCw, TrendingUp, Activity, Zap, Brain,
   Settings, Save, ChevronDown, BarChart2, Lock, KeyRound, ArrowRight,
   TrendingDown, DollarSign, Cpu, Plus, X, Target, ArrowUpDown,
+  ChevronUp, Crown,
 } from 'lucide-react'
 import {
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip,
@@ -51,6 +53,12 @@ interface BotStatus {
   running: boolean
   bots?: Record<string, BotDetail>
   capital?: number
+}
+
+interface SubLimits {
+  subscription: string
+  limits: { api_keys: number; bots: number }
+  used: { api_keys: number }
 }
 
 interface PnlPoint { date: string; pnl: number; cumulative: number }
@@ -143,19 +151,27 @@ export default function BotsPage() {
   const [showTickerDD, setShowTickerDD] = useState(false)
   const [showRouteDD,  setShowRouteDD]  = useState(false)
   const [hasApiKey,    setHasApiKey]    = useState<boolean | null>(null)
+  const [subLimits,    setSubLimits]    = useState<SubLimits | null>(null)
   const [prevPrices,   setPrevPrices]   = useState<Record<string, number>>({})
   const [priceFlash,   setPriceFlash]   = useState<Record<string, 'up' | 'down'>>({})
+  const [collapsedBots,setCollapsedBots]= useState<Record<string, boolean>>({})
   const flashTimers                     = useRef<Record<string, ReturnType<typeof setTimeout>>>({})
 
   const [params, setParams] = useState({ ...EMPTY_PARAMS })
 
   useEffect(() => {
-    listApiKeys()
-      .then(res => {
-        const keys = Array.isArray(res.data) ? res.data : []
-        setHasApiKey(keys.some((k: { is_active: boolean }) => k.is_active))
+    Promise.allSettled([listApiKeys(), getSubscriptionLimits()])
+      .then(([keysRes, limitsRes]) => {
+        if (keysRes.status === 'fulfilled') {
+          const keys = Array.isArray(keysRes.value.data) ? keysRes.value.data : []
+          setHasApiKey(keys.some((k: { is_active: boolean }) => k.is_active))
+        } else {
+          setHasApiKey(false)
+        }
+        if (limitsRes.status === 'fulfilled') {
+          setSubLimits(limitsRes.value.data)
+        }
       })
-      .catch(() => setHasApiKey(false))
   }, [])
 
   useEffect(() => {
@@ -222,6 +238,17 @@ export default function BotsPage() {
       toast.error(`Insufficient balance. Need $${params.initial_capital.toLocaleString()} USDT.`)
       return
     }
+
+    // Subscription limit check (client-side preview)
+    if (subLimits) {
+      const runningCount = activeBots.filter(b => b.running).length
+      if (runningCount >= subLimits.limits.bots) {
+        toast.error(`Bot limit reached for your ${subLimits.subscription.toUpperCase()} plan (${subLimits.limits.bots} max). Upgrade to run more bots.`)
+        navigate('/app/pricing')
+        return
+      }
+    }
+
     setActionLoading('start')
     try {
       const res = await startBot({
@@ -291,6 +318,9 @@ export default function BotsPage() {
   const winRate       = pnlTrades.length > 0 ? ((winningTrades / pnlTrades.length) * 100).toFixed(1) : '—'
   const totalUnrealized = activeBots.reduce((s, b) => s + (b.unrealized_pnl ?? 0), 0)
   const totalPortfolio  = activeBots.reduce((s, b) => s + (b.portfolio_value ?? 0), 0)
+  const runningBotCount = activeBots.filter(b => b.running).length
+  const botLimit        = subLimits?.limits?.bots ?? 999
+  const atBotLimit      = runningBotCount >= botLimit
 
   const routeLabel = params.route === '__balance__'
     ? 'Platform Balance'
@@ -336,11 +366,16 @@ export default function BotsPage() {
 
       {/* ── Header ── */}
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-3 flex-wrap">
           <h1 className="text-xl font-bold text-[#eaecef]">AI Trading Bots</h1>
           <span className={`text-xs px-2.5 py-1 rounded-full font-medium ${status.running ? 'bg-[#0ecb81]/10 text-[#0ecb81] border border-[#0ecb81]/20 animate-pulse' : 'bg-[#2b3139] text-[#848e9c]'}`}>
             {status.running ? `● ${activeBots.length} Live` : 'Offline'}
           </span>
+          {subLimits && (
+            <span className={`text-xs px-2.5 py-1 rounded-full font-medium border ${atBotLimit ? 'bg-[#f6465d]/10 text-[#f6465d] border-[#f6465d]/30' : 'bg-[#2b3139] text-[#848e9c] border-[#2b3139]'}`}>
+              {runningBotCount}/{botLimit === 9999 ? '∞' : botLimit} bots · {subLimits.subscription.toUpperCase()}
+            </span>
+          )}
         </div>
         <div className="flex items-center gap-2">
           {status.running && (
@@ -349,10 +384,17 @@ export default function BotsPage() {
               <Square size={11} /> Stop All
             </button>
           )}
-          <button onClick={() => setShowAddBot(v => !v)}
-            className="flex items-center gap-1.5 text-xs bg-[#f0b90b] hover:bg-[#d9a60b] text-black font-semibold px-3 py-1.5 rounded-lg transition">
-            <Plus size={12} /> Add Bot
-          </button>
+          {atBotLimit ? (
+            <button onClick={() => navigate('/app/pricing')}
+              className="flex items-center gap-1.5 text-xs bg-[#f0b90b]/10 hover:bg-[#f0b90b]/20 border border-[#f0b90b]/30 text-[#f0b90b] px-3 py-1.5 rounded-lg transition">
+              <Crown size={11} /> Upgrade for More Bots
+            </button>
+          ) : (
+            <button onClick={() => setShowAddBot(v => !v)}
+              className="flex items-center gap-1.5 text-xs bg-[#f0b90b] hover:bg-[#d9a60b] text-black font-semibold px-3 py-1.5 rounded-lg transition">
+              <Plus size={12} /> Add Bot
+            </button>
+          )}
           <button onClick={fetchData} disabled={loading}
             className="flex items-center gap-1.5 text-xs text-[#848e9c] hover:text-[#eaecef] transition">
             <RefreshCw size={12} className={loading ? 'animate-spin' : ''} /> Refresh
@@ -610,18 +652,20 @@ export default function BotsPage() {
       {activeBots.length > 0 && (
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
           {activeBots.map(bot => {
-            const flash = priceFlash[bot.bot_id]
+            const flash      = priceFlash[bot.bot_id]
+            const collapsed  = !!collapsedBots[bot.bot_id]
+            const toggleCollapse = () => setCollapsedBots(c => ({ ...c, [bot.bot_id]: !c[bot.bot_id] }))
             return (
-              <div key={bot.bot_id} className={`bg-[#161a1e] border rounded-2xl p-4 space-y-3 ${bot.running ? 'border-[#0ecb81]/20' : 'border-[#2b3139]'}`}>
-                {/* Bot header */}
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2.5">
-                    <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${bot.running ? 'bg-[#0ecb81]/10' : 'bg-[#2b3139]'}`}>
+              <div key={bot.bot_id} className={`bg-[#161a1e] border rounded-2xl overflow-hidden ${bot.running ? 'border-[#0ecb81]/20' : 'border-[#2b3139]'}`}>
+                {/* ── Bot header (always visible) ── */}
+                <div className="flex items-center justify-between px-4 py-3">
+                  <div className="flex items-center gap-2.5 min-w-0">
+                    <div className={`w-8 h-8 flex-shrink-0 rounded-lg flex items-center justify-center ${bot.running ? 'bg-[#0ecb81]/10' : 'bg-[#2b3139]'}`}>
                       <Bot size={16} className={bot.running ? 'text-[#0ecb81]' : 'text-[#848e9c]'} />
                     </div>
-                    <div>
-                      <p className="text-sm font-semibold text-[#eaecef]">{bot.bot_name}</p>
-                      <div className="flex items-center gap-1.5 mt-0.5">
+                    <div className="min-w-0">
+                      <p className="text-sm font-semibold text-[#eaecef] truncate">{bot.bot_name}</p>
+                      <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
                         <span className="text-[10px] font-mono text-[#f0b90b]">{bot.ticker}</span>
                         <span className="text-[10px] text-[#848e9c]">·</span>
                         <span className="text-[10px] uppercase font-semibold text-[#848e9c]">{bot.strategy}</span>
@@ -631,12 +675,17 @@ export default function BotsPage() {
                       </div>
                     </div>
                   </div>
-                  <div className="flex items-center gap-1.5">
-                    {bot.position > 0 && (
+                  <div className="flex items-center gap-1.5 flex-shrink-0 ml-2">
+                    {/* Collapse toggle */}
+                    <button onClick={toggleCollapse}
+                      className="text-[10px] px-2 py-1 bg-[#2b3139] text-[#848e9c] rounded-lg hover:text-[#eaecef] transition flex items-center gap-0.5">
+                      {collapsed ? <ChevronDown size={10} /> : <ChevronUp size={10} />}
+                    </button>
+                    {bot.position > 0 && !collapsed && (
                       <button onClick={() => handleClosePosition(bot.bot_id)}
                         disabled={actionLoading === `close_${bot.bot_id}`}
                         className="text-[10px] px-2 py-1 bg-[#f0b90b]/10 border border-[#f0b90b]/30 text-[#f0b90b] rounded-lg hover:bg-[#f0b90b]/20 transition disabled:opacity-60">
-                        {actionLoading === `close_${bot.bot_id}` ? '…' : 'Close Pos'}
+                        {actionLoading === `close_${bot.bot_id}` ? '…' : 'Close'}
                       </button>
                     )}
                     <button onClick={() => handleStop(bot.bot_id)}
@@ -647,91 +696,117 @@ export default function BotsPage() {
                   </div>
                 </div>
 
-                {/* Price + signal row */}
-                <div className="flex items-center justify-between bg-[#0b0e11] rounded-xl px-3 py-2.5">
-                  <div>
-                    <p className="text-[10px] text-[#848e9c] mb-0.5">Live Price</p>
-                    <p className={`text-lg font-bold font-mono transition-colors duration-300 ${flash === 'up' ? 'text-[#0ecb81]' : flash === 'down' ? 'text-[#f6465d]' : 'text-[#eaecef]'}`}>
-                      ${bot.current_price < 1 ? bot.current_price.toFixed(5) : fmt(bot.current_price)}
-                    </p>
-                  </div>
-                  <div className="text-right">
-                    <span className={`text-xs font-bold px-2 py-1 rounded-lg ${bot.signal === 'BULLISH' ? 'bg-[#0ecb81]/10 text-[#0ecb81]' : bot.signal === 'BEARISH' ? 'bg-[#f6465d]/10 text-[#f6465d]' : 'bg-[#2b3139] text-[#848e9c]'}`}>
-                      {bot.signal}
-                    </span>
-                    <p className="text-[10px] text-[#848e9c] mt-1">TP: +{bot.take_profit_pct}% · SL: -3%</p>
-                  </div>
-                </div>
-
-                {/* Price chart */}
-                <div className="bg-[#0b0e11] rounded-xl px-2 py-2">
-                  <div className="flex items-center justify-between mb-1 px-1">
-                    <p className="text-[10px] text-[#848e9c]">Price Chart</p>
-                    {bot.price_chart.length > 1 && (
-                      <p className="text-[10px] text-[#4a5568]">{bot.price_chart.length} ticks · ● entry  ● exit</p>
-                    )}
-                  </div>
-                  <BotPriceChart bot={bot} />
-                </div>
-
-                {/* Stats row */}
-                <div className="grid grid-cols-4 gap-2">
-                  {[
-                    { l: 'Balance',   v: `$${fmt(bot.balance)}`,   c: 'text-[#eaecef]' },
-                    { l: 'Realized',  v: `${bot.realized_pnl >= 0 ? '+' : ''}$${fmt(bot.realized_pnl)}`, c: bot.realized_pnl >= 0 ? 'text-[#0ecb81]' : 'text-[#f6465d]' },
-                    { l: 'Unrealized',v: bot.position > 0 ? `${bot.unrealized_pnl >= 0 ? '+' : ''}$${fmt(bot.unrealized_pnl)}` : '—', c: bot.unrealized_pnl >= 0 ? 'text-[#0ecb81]' : 'text-[#f6465d]' },
-                    { l: 'Win Rate',  v: `${bot.win_rate.toFixed(1)}%`, c: bot.win_rate >= 50 ? 'text-[#0ecb81]' : 'text-[#f6465d]' },
-                  ].map(s => (
-                    <div key={s.l} className="bg-[#0b0e11] rounded-lg p-2 text-center">
-                      <p className="text-[9px] text-[#4a5568] uppercase tracking-wide mb-1">{s.l}</p>
-                      <p className={`text-xs font-bold font-mono ${s.c}`}>{s.v}</p>
-                    </div>
-                  ))}
-                </div>
-
-                {/* Open position */}
-                {bot.position > 0 && (
-                  <div className="bg-[#f0b90b]/5 border border-[#f0b90b]/20 rounded-xl px-3 py-2.5 space-y-1">
-                    <p className="text-[10px] text-[#f0b90b] font-semibold uppercase tracking-wide flex items-center gap-1">
-                      <Target size={9} /> Open Position
-                    </p>
-                    <div className="flex justify-between text-xs">
-                      <span className="text-[#848e9c]">Entry</span>
-                      <span className="font-mono text-[#eaecef]">${fmt(bot.entry_price)}</span>
-                    </div>
-                    <div className="flex justify-between text-xs">
-                      <span className="text-[#848e9c]">Qty</span>
-                      <span className="font-mono text-[#f0b90b]">{bot.position.toFixed(6)} {bot.ticker.replace('-USD','')}</span>
-                    </div>
-                    <div className="flex justify-between text-xs">
-                      <span className="text-[#848e9c]">Unrealized P&L</span>
-                      <span className={`font-mono font-semibold ${bot.unrealized_pnl >= 0 ? 'text-[#0ecb81]' : 'text-[#f6465d]'}`}>
-                        {bot.unrealized_pnl >= 0 ? '+' : ''}${fmt(bot.unrealized_pnl)}
+                {/* Collapsed summary row */}
+                {collapsed && (
+                  <div className="flex items-center gap-4 px-4 pb-3 text-xs">
+                    <div>
+                      <span className="text-[#848e9c]">Price </span>
+                      <span className={`font-mono font-semibold ${flash === 'up' ? 'text-[#0ecb81]' : flash === 'down' ? 'text-[#f6465d]' : 'text-[#eaecef]'}`}>
+                        ${bot.current_price < 1 ? bot.current_price.toFixed(5) : fmt(bot.current_price)}
                       </span>
                     </div>
+                    <div>
+                      <span className="text-[#848e9c]">P&L </span>
+                      <span className={`font-mono font-semibold ${bot.realized_pnl >= 0 ? 'text-[#0ecb81]' : 'text-[#f6465d]'}`}>
+                        {bot.realized_pnl >= 0 ? '+' : ''}${fmt(bot.realized_pnl)}
+                      </span>
+                    </div>
+                    <span className={`text-[10px] font-bold px-2 py-0.5 rounded ${bot.signal === 'BULLISH' ? 'bg-[#0ecb81]/10 text-[#0ecb81]' : bot.signal === 'BEARISH' ? 'bg-[#f6465d]/10 text-[#f6465d]' : 'bg-[#2b3139] text-[#848e9c]'}`}>
+                      {bot.signal}
+                    </span>
                   </div>
                 )}
 
-                {/* Recent trades mini */}
-                {bot.recent_trades.length > 0 && (
-                  <div className="space-y-1">
-                    <p className="text-[10px] text-[#848e9c] uppercase tracking-wide">Recent Trades</p>
-                    {bot.recent_trades.slice(0, 3).map((t, i) => (
-                      <div key={i} className="flex items-center justify-between text-[10px] py-0.5">
-                        <div className="flex items-center gap-1.5">
-                          <span className={`px-1.5 py-0.5 rounded font-bold ${t.action === 'BUY' ? 'bg-[#0ecb81]/10 text-[#0ecb81]' : 'bg-[#f6465d]/10 text-[#f6465d]'}`}>{t.action}</span>
-                          <span className="text-[#848e9c] font-mono">${t.price.toFixed(2)}</span>
+                {/* ── Expanded content ── */}
+                {!collapsed && (
+                  <div className="px-4 pb-4 space-y-3">
+                    {/* Price + signal row */}
+                    <div className="flex items-center justify-between bg-[#0b0e11] rounded-xl px-3 py-2.5">
+                      <div>
+                        <p className="text-[10px] text-[#848e9c] mb-0.5">Live Price</p>
+                        <p className={`text-lg font-bold font-mono transition-colors duration-300 ${flash === 'up' ? 'text-[#0ecb81]' : flash === 'down' ? 'text-[#f6465d]' : 'text-[#eaecef]'}`}>
+                          ${bot.current_price < 1 ? bot.current_price.toFixed(5) : fmt(bot.current_price)}
+                        </p>
+                      </div>
+                      <div className="text-right">
+                        <span className={`text-xs font-bold px-2 py-1 rounded-lg ${bot.signal === 'BULLISH' ? 'bg-[#0ecb81]/10 text-[#0ecb81]' : bot.signal === 'BEARISH' ? 'bg-[#f6465d]/10 text-[#f6465d]' : 'bg-[#2b3139] text-[#848e9c]'}`}>
+                          {bot.signal}
+                        </span>
+                        <p className="text-[10px] text-[#848e9c] mt-1">TP: +{bot.take_profit_pct}% · SL: -3%</p>
+                      </div>
+                    </div>
+
+                    {/* Price chart */}
+                    <div className="bg-[#0b0e11] rounded-xl px-2 py-2">
+                      <div className="flex items-center justify-between mb-1 px-1">
+                        <p className="text-[10px] text-[#848e9c]">Price Chart</p>
+                        {bot.price_chart.length > 1 && (
+                          <p className="text-[10px] text-[#4a5568]">{bot.price_chart.length} ticks · ● entry  ● exit</p>
+                        )}
+                      </div>
+                      <BotPriceChart bot={bot} />
+                    </div>
+
+                    {/* Stats row */}
+                    <div className="grid grid-cols-4 gap-2">
+                      {[
+                        { l: 'Balance',   v: `$${fmt(bot.balance)}`,   c: 'text-[#eaecef]' },
+                        { l: 'Realized',  v: `${bot.realized_pnl >= 0 ? '+' : ''}$${fmt(bot.realized_pnl)}`, c: bot.realized_pnl >= 0 ? 'text-[#0ecb81]' : 'text-[#f6465d]' },
+                        { l: 'Unrealized',v: bot.position > 0 ? `${bot.unrealized_pnl >= 0 ? '+' : ''}$${fmt(bot.unrealized_pnl)}` : '—', c: bot.unrealized_pnl >= 0 ? 'text-[#0ecb81]' : 'text-[#f6465d]' },
+                        { l: 'Win Rate',  v: `${bot.win_rate.toFixed(1)}%`, c: bot.win_rate >= 50 ? 'text-[#0ecb81]' : 'text-[#f6465d]' },
+                      ].map(s => (
+                        <div key={s.l} className="bg-[#0b0e11] rounded-lg p-2 text-center">
+                          <p className="text-[9px] text-[#4a5568] uppercase tracking-wide mb-1">{s.l}</p>
+                          <p className={`text-xs font-bold font-mono ${s.c}`}>{s.v}</p>
                         </div>
-                        <div className="flex items-center gap-2">
-                          {t.pnl !== null && (
-                            <span className={`font-mono font-semibold ${t.pnl >= 0 ? 'text-[#0ecb81]' : 'text-[#f6465d]'}`}>
-                              {t.pnl >= 0 ? '+' : ''}${t.pnl.toFixed(2)}
-                            </span>
-                          )}
-                          <span className="text-[#4a5568]">{new Date(t.time).toLocaleTimeString()}</span>
+                      ))}
+                    </div>
+
+                    {/* Open position */}
+                    {bot.position > 0 && (
+                      <div className="bg-[#f0b90b]/5 border border-[#f0b90b]/20 rounded-xl px-3 py-2.5 space-y-1">
+                        <p className="text-[10px] text-[#f0b90b] font-semibold uppercase tracking-wide flex items-center gap-1">
+                          <Target size={9} /> Open Position
+                        </p>
+                        <div className="flex justify-between text-xs">
+                          <span className="text-[#848e9c]">Entry</span>
+                          <span className="font-mono text-[#eaecef]">${fmt(bot.entry_price)}</span>
+                        </div>
+                        <div className="flex justify-between text-xs">
+                          <span className="text-[#848e9c]">Qty</span>
+                          <span className="font-mono text-[#f0b90b]">{bot.position.toFixed(6)} {bot.ticker.replace('-USD','')}</span>
+                        </div>
+                        <div className="flex justify-between text-xs">
+                          <span className="text-[#848e9c]">Unrealized P&L</span>
+                          <span className={`font-mono font-semibold ${bot.unrealized_pnl >= 0 ? 'text-[#0ecb81]' : 'text-[#f6465d]'}`}>
+                            {bot.unrealized_pnl >= 0 ? '+' : ''}${fmt(bot.unrealized_pnl)}
+                          </span>
                         </div>
                       </div>
-                    ))}
+                    )}
+
+                    {/* Recent trades mini */}
+                    {bot.recent_trades.length > 0 && (
+                      <div className="space-y-1">
+                        <p className="text-[10px] text-[#848e9c] uppercase tracking-wide">Recent Trades</p>
+                        {bot.recent_trades.slice(0, 3).map((t, i) => (
+                          <div key={i} className="flex items-center justify-between text-[10px] py-0.5">
+                            <div className="flex items-center gap-1.5">
+                              <span className={`px-1.5 py-0.5 rounded font-bold ${t.action === 'BUY' ? 'bg-[#0ecb81]/10 text-[#0ecb81]' : 'bg-[#f6465d]/10 text-[#f6465d]'}`}>{t.action}</span>
+                              <span className="text-[#848e9c] font-mono">${t.price.toFixed(2)}</span>
+                            </div>
+                            <div className="flex items-center gap-2">
+                              {t.pnl !== null && (
+                                <span className={`font-mono font-semibold ${t.pnl >= 0 ? 'text-[#0ecb81]' : 'text-[#f6465d]'}`}>
+                                  {t.pnl >= 0 ? '+' : ''}${t.pnl.toFixed(2)}
+                                </span>
+                              )}
+                              <span className="text-[#4a5568]">{new Date(t.time).toLocaleTimeString()}</span>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
                   </div>
                 )}
               </div>
