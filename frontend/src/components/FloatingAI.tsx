@@ -110,8 +110,8 @@ export default function FloatingAI() {
         ref={btnRef}
         onMouseDown={onDragStart}
         onClick={() => { if (!hasDragged.current) setOpen(v => !v) }}
-        className={`z-50 w-14 h-14 rounded-full shadow-2xl flex items-center justify-center transition-all duration-300 cursor-grab active:cursor-grabbing select-none ${open ? 'bg-[#2b3139]' : 'bg-[#f0b90b] hover:bg-[#d4a30a]'}`}
-        style={btnStyle}
+        className={`w-14 h-14 rounded-full shadow-2xl flex items-center justify-center transition-all duration-300 cursor-grab active:cursor-grabbing select-none ${open ? 'bg-[#2b3139]' : 'bg-[#f0b90b] hover:bg-[#d4a30a]'}`}
+        style={{ ...btnStyle, zIndex: 9999 }}
         title="Drag to move · Click to open"
       >
         {open
@@ -131,8 +131,8 @@ export default function FloatingAI() {
       {/* Panel */}
       {open && (
         <div
-          className="z-50 w-80 sm:w-96 bg-[#161a1e] border border-[#2b3139] rounded-2xl shadow-2xl overflow-hidden flex flex-col"
-          style={{ ...panelStyle, maxHeight: '70vh', minHeight: 400 }}
+          className="w-80 sm:w-96 bg-[#161a1e] border border-[#2b3139] rounded-2xl shadow-2xl overflow-hidden flex flex-col"
+          style={{ ...panelStyle, maxHeight: '70vh', minHeight: 400, zIndex: 9998 }}
         >
           {/* Header */}
           <div className="flex items-center justify-between px-4 py-3 border-b border-[#2b3139] bg-[#1e2329]">

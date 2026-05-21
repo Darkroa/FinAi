@@ -5,7 +5,7 @@ import {
   submitKYC, getMe, createApiKey, listApiKeys, revokeApiKey,
   connectExchange, disconnectExchange,
   changePassword, setTransferPin, requestDeleteAccount, saveWebhookSettings,
-  sendWhatsAppCode, verifyWhatsApp, getTelegramChatId, generateTelegramCode
+  generateWhatsAppCode, disconnectWhatsApp, getTelegramChatId, generateTelegramCode
 } from '../lib/api'
 import toast from 'react-hot-toast'
 import {
@@ -410,11 +410,8 @@ function FinApiTab({ user, setUser }: { user: ReturnType<typeof useAuthStore>['u
 
   const waVerified = prefs.whatsapp_verified === true
   const waPhone    = (prefs.whatsapp_number as string) || ''
-  const [waInput, setWaInput]               = useState('')
-  const [waCode, setWaCode]                 = useState('')
-  const [waSending, setWaSending]           = useState(false)
-  const [waVerifying, setWaVerifying]       = useState(false)
-  const [waCodeSent, setWaCodeSent]         = useState(false)
+  const [waGenCode, setWaGenCode]           = useState<string | null>(null)
+  const [waGenerating, setWaGenerating]     = useState(false)
 
   const selectedExch = EXCHANGES.find(e => e.id === selExchange)
   const connections  = (user?.exchange_connections as { exchange: string; label?: string; api_key_masked?: string }[]) || []
@@ -524,39 +521,23 @@ function FinApiTab({ user, setUser }: { user: ReturnType<typeof useAuthStore>['u
     } catch { toast.error('Failed to disconnect') }
   }
 
-  const handleSendWaCode = async () => {
-    if (!waInput.trim()) return toast.error('Enter your WhatsApp number (e.g. +1234567890)')
-    setWaSending(true)
+  const handleGenerateWaCode = async () => {
+    setWaGenerating(true)
     try {
-      await sendWhatsAppCode(waInput.trim())
-      setWaCodeSent(true)
-      toast.success('Code sent to WhatsApp!')
+      const res = await generateWhatsAppCode()
+      setWaGenCode(res.data.code)
+      toast.success('Code generated — send it to our WhatsApp number!')
     } catch (err: unknown) {
-      toast.error((err as { response?: { data?: { detail?: string } } }).response?.data?.detail || 'Failed to send code')
-    } finally { setWaSending(false) }
-  }
-
-  const handleVerifyWa = async () => {
-    if (!waCode.trim()) return toast.error('Enter the verification code')
-    setWaVerifying(true)
-    try {
-      await verifyWhatsApp(waCode.trim())
-      const res = await getMe()
-      setUser(res.data)
-      setWaCodeSent(false)
-      setWaInput('')
-      setWaCode('')
-      toast.success('WhatsApp verified!')
-    } catch (err: unknown) {
-      toast.error((err as { response?: { data?: { detail?: string } } }).response?.data?.detail || 'Invalid code')
-    } finally { setWaVerifying(false) }
+      toast.error((err as { response?: { data?: { detail?: string } } }).response?.data?.detail || 'Failed to generate code')
+    } finally { setWaGenerating(false) }
   }
 
   const handleDisconnectWa = async () => {
     try {
-      await saveWebhookSettings({ whatsapp_number: '' })
+      await disconnectWhatsApp()
       const res = await getMe()
       setUser(res.data)
+      setWaGenCode(null)
       toast.success('WhatsApp disconnected')
     } catch { toast.error('Failed to disconnect') }
   }
@@ -804,7 +785,7 @@ function FinApiTab({ user, setUser }: { user: ReturnType<typeof useAuthStore>['u
               </div>
               {waVerified && (
                 <span className="flex items-center gap-1 text-[10px] text-[#0ecb81] bg-[#0ecb81]/10 border border-[#0ecb81]/20 px-2 py-0.5 rounded-full">
-                  <CheckCircle size={9} /> Verified
+                  <CheckCircle size={9} /> Connected
                 </span>
               )}
             </div>
@@ -814,7 +795,7 @@ function FinApiTab({ user, setUser }: { user: ReturnType<typeof useAuthStore>['u
                 <div className="flex items-center gap-2 bg-[#0ecb81]/8 border border-[#0ecb81]/15 rounded-lg px-3 py-2.5">
                   <CheckCircle size={13} className="text-[#0ecb81] flex-shrink-0" />
                   <div>
-                    <p className="text-xs font-medium text-[#eaecef]">{waPhone}</p>
+                    <p className="text-xs font-medium text-[#eaecef]">{waPhone || 'WhatsApp connected'}</p>
                     <p className="text-[10px] text-[#848e9c]">Connected · Alerts enabled</p>
                   </div>
                 </div>
@@ -826,39 +807,41 @@ function FinApiTab({ user, setUser }: { user: ReturnType<typeof useAuthStore>['u
             ) : (
               <div className="space-y-3">
                 <p className="text-[10px] text-[#848e9c]">
-                  First join the Twilio sandbox by sending <span className="text-[#f0b90b] font-mono">join &lt;sandbox-code&gt;</span> to{' '}
-                  <span className="text-[#25D366]">+1 415 523 8886</span>, then verify your number below.
+                  Connect WhatsApp to receive trade alerts and signals. Click below to generate a one-time code, then send it to our WhatsApp number.
                 </p>
-                {!waCodeSent ? (
-                  <div className="space-y-2">
-                    <Field label="Your WhatsApp Number">
-                      <input value={waInput} onChange={e => setWaInput(e.target.value)}
-                        placeholder="+1 234 567 8900" className={inp} />
-                    </Field>
-                    <button onClick={handleSendWaCode} disabled={waSending || !waInput.trim()}
-                      className="w-full bg-[#25D366]/20 hover:bg-[#25D366]/30 disabled:opacity-50 border border-[#25D366]/30 text-[#25D366] font-semibold py-2.5 rounded-lg text-xs transition">
-                      {waSending ? 'Sending…' : '📲 Send Verification Code'}
-                    </button>
-                  </div>
+
+                {!waGenCode ? (
+                  <button onClick={handleGenerateWaCode} disabled={waGenerating}
+                    className="w-full bg-[#25D366]/20 hover:bg-[#25D366]/30 disabled:opacity-50 border border-[#25D366]/30 text-[#25D366] font-semibold py-2.5 rounded-lg text-xs transition flex items-center justify-center gap-2">
+                    {waGenerating
+                      ? <><RefreshCw size={12} className="animate-spin" /> Generating…</>
+                      : <><Send size={12}/> Generate WhatsApp Code</>}
+                  </button>
                 ) : (
-                  <div className="space-y-2">
-                    <div className="text-[10px] text-[#0ecb81] bg-[#0ecb81]/8 border border-[#0ecb81]/15 rounded-lg px-3 py-2">
-                      Code sent to <span className="font-mono">{waInput}</span> — check WhatsApp
+                  <div className="space-y-3">
+                    <div className="bg-[#25D366]/8 border border-[#25D366]/20 rounded-xl p-3 space-y-2">
+                      <p className="text-[10px] text-[#848e9c] font-semibold uppercase tracking-wider">Your code</p>
+                      <div className="flex items-center gap-3">
+                        <code className="text-xl font-mono font-bold text-[#25D366] tracking-widest">{waGenCode}</code>
+                        <button onClick={() => { navigator.clipboard.writeText(waGenCode); toast.success('Code copied!') }}
+                          className="text-[#848e9c] hover:text-[#25D366] transition">
+                          <Copy size={13} />
+                        </button>
+                      </div>
                     </div>
-                    <Field label="Enter 6-digit Code">
-                      <input value={waCode} onChange={e => setWaCode(e.target.value)}
-                        placeholder="123456" maxLength={6} className={inp} />
-                    </Field>
-                    <div className="flex gap-2">
-                      <button onClick={handleVerifyWa} disabled={waVerifying || !waCode.trim()}
-                        className="flex-1 bg-[#f0b90b] hover:bg-[#d4a30a] disabled:opacity-60 text-black font-semibold py-2.5 rounded-lg text-xs transition">
-                        {waVerifying ? 'Verifying…' : 'Verify Code'}
-                      </button>
-                      <button onClick={() => { setWaCodeSent(false); setWaCode('') }}
-                        className="px-3 border border-[#2b3139] text-[#848e9c] hover:text-[#eaecef] rounded-lg text-xs transition">
-                        Back
-                      </button>
+                    <div className="bg-[#0b0e11] border border-[#2b3139] rounded-xl p-3 space-y-1.5">
+                      <p className="text-[10px] text-[#848e9c] font-semibold">How to connect:</p>
+                      <ol className="text-[10px] text-[#848e9c] space-y-1 list-decimal list-inside">
+                        <li>Open WhatsApp on your phone</li>
+                        <li>Message <span className="text-[#25D366] font-mono font-semibold">+1 415 523 8886</span></li>
+                        <li>Send the message: <span className="text-[#f0b90b] font-mono font-semibold">{waGenCode}</span></li>
+                        <li>Wait for confirmation — your account links automatically</li>
+                      </ol>
                     </div>
+                    <button onClick={handleGenerateWaCode} disabled={waGenerating}
+                      className="w-full border border-[#2b3139] text-[#848e9c] hover:text-[#eaecef] py-2 rounded-lg text-xs transition">
+                      {waGenerating ? 'Generating…' : 'Generate a new code'}
+                    </button>
                   </div>
                 )}
               </div>

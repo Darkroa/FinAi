@@ -66,6 +66,9 @@ class User(Base):
 
     # Subscription
     subscription = Column(String(50), default="free")   # free / pro / elite / elite+ / custom
+    subscription_expires_at = Column(DateTime, nullable=True)
+    subscription_period = Column(String(20), default="monthly")  # monthly / 6month / yearly
+    subscription_auto_renew = Column(Boolean, default=True)
 
     # Notification channel bindings
     telegram_chat_id = Column(String(100), nullable=True)
@@ -274,6 +277,25 @@ class SupportMessage(Base):
 
     ticket = relationship("SupportTicket", back_populates="messages")
     sender = relationship("User", foreign_keys=[sender_id])
+
+
+class SubscriptionRequest(Base):
+    __tablename__ = "subscription_requests"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    plan = Column(String(50), nullable=False)
+    period = Column(String(20), default="monthly")
+    amount_usdt = Column(Float, nullable=False)
+    payment_method = Column(String(50), default="wallet")
+    status = Column(String(20), default="pending")
+    auto_renew = Column(Boolean, default=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    processed_at = Column(DateTime, nullable=True)
+    processed_by = Column(Integer, nullable=True)
+    note = Column(Text, nullable=True)
+
+    user = relationship("User")
 
 
 class PriceAlert(Base):

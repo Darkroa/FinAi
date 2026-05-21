@@ -92,6 +92,13 @@ export const adminUpdateTicketStatus = (id: number, status: string) =>
   api.post(`/admin/support-tickets/${id}/status?new_status=${status}`)
 export const adminHealthCheck = () => api.get('/admin/health')
 
+// Admin — Subscription requests
+export const adminGetSubscriptions = () => api.get('/admin/subscriptions')
+export const adminApproveSubscription = (sub_id: number) =>
+  api.post('/admin/approve-subscription', { sub_id })
+export const adminRejectSubscription = (sub_id: number, note?: string) =>
+  api.post('/admin/reject-subscription', { sub_id, note })
+
 // Notifications
 export const getUserNotifications = () => api.get('/notifications')
 export const markNotificationRead = (id: number) => api.post(`/notifications/${id}/read`)
@@ -173,7 +180,13 @@ export const saveWebhookSettings = (data: {
   whatsapp_number?: string
 }) => api.post('/users/save-webhook', data)
 
-// WhatsApp phone verification
+// WhatsApp — generate code (user sends code to +14155238886 on WhatsApp)
+export const generateWhatsAppCode = () =>
+  api.post('/users/whatsapp-generate-code')
+export const disconnectWhatsApp = () =>
+  api.post('/users/disconnect-whatsapp')
+
+// WhatsApp phone verification (legacy, kept for compat)
 export const sendWhatsAppCode = (phone: string) =>
   api.post('/users/send-whatsapp-code', { phone })
 export const verifyWhatsApp = (code: string) =>
@@ -206,6 +219,15 @@ export const toggleAlert = (id: number) => api.post(`/alerts/${id}/toggle`)
 
 // Telegram — generate link code for @FinAitradebot
 export const generateTelegramCode = () => api.post('/users/telegram-generate-code')
+
+// Subscription request
+export const requestSubscription = (data: {
+  plan: string
+  period: string
+  amount_usdt: number
+  payment_method: string
+  auto_renew: boolean
+}) => api.post('/subscribe', data)
 
 // Trade execute with SL/TP/leverage
 export const executeTradeAdvanced = (data: {

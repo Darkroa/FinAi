@@ -1,6 +1,7 @@
 from fastapi import (
     APIRouter, BackgroundTasks, Query, Depends,
-    HTTPException, Header, Request, status, UploadFile, File
+    HTTPException, Header, Request, status, UploadFile, File,
+    WebSocket, WebSocketDisconnect
 )
 from datetime import datetime, timedelta
 import random, string, base64, io, os
@@ -20,7 +21,8 @@ from src.users.bot_manager import get_user_bot_manager
 from src.auth.dependencies import get_current_user, require_admin
 from src.database.models import (
     User, APIKey, Transaction, UserMoney, Event,
-    Notification, WalletConfig, SupportTicket, SupportMessage, TradeLog, PriceAlert
+    Notification, WalletConfig, SupportTicket, SupportMessage, TradeLog, PriceAlert,
+    SubscriptionRequest
 )
 
 # ===================== Pydantic Schemas =====================
@@ -57,6 +59,7 @@ class WithdrawRequest(BaseModel):
     wallet_address: Optional[str] = None
     bank_ref: Optional[str] = None
     note: Optional[str] = None
+    transfer_pin: Optional[str] = None
 
 class P2PRequest(BaseModel):
     recipient_email: str
@@ -576,11 +579,18 @@ async def request_deposit(data: DepositRequest, current_user=Depends(get_current
 
 @router.post("/wallet/withdraw")
 async def request_withdrawal(data: WithdrawRequest, current_user=Depends(get_current_user), db: Session = Depends(get_db)):
+    import bcrypt as _bcrypt
     user = db.query(User).filter(User.email == current_user["email"]).first()
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
     if user.balance_usdt < data.amount_usdt:
         raise HTTPException(status_code=400, detail="Insufficient balance")
+    # Verify transfer PIN if user has one set
+    if user.transfer_pin:
+        if not data.transfer_pin:
+            raise HTTPException(status_code=400, detail="Transfer PIN is required")
+        if not _bcrypt.checkpw(data.transfer_pin.encode(), user.transfer_pin.encode()):
+            raise HTTPException(status_code=400, detail="Invalid transfer PIN")
     # Hold balance pending admin approval
     user.balance_usdt -= data.amount_usdt
     tx = Transaction(
@@ -1206,29 +1216,51 @@ async def jwt_close_bot_position(body: BotClosePositionRequest, current_user=Dep
 
 @router.get("/trade/open-positions")
 async def get_open_positions(current_user=Depends(get_current_user), db: Session = Depends(get_db)):
-    """Return all open BUY positions (manual trades with no closing SELL)."""
+    """Return all open BUY positions (manual + paper trades with no closing SELL)."""
     user = db.query(User).filter(User.email == current_user["email"]).first()
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
+    # Get ALL buy trades (paper + real) that don't have a realized pnl yet
     open_buys = (
         db.query(TradeLog)
         .filter(
             TradeLog.user_id == user.id,
             TradeLog.action == "BUY",
             TradeLog.pnl == None,
-            TradeLog.paper == False,
         )
         .order_by(TradeLog.created_at.desc())
         .limit(50)
         .all()
     )
+    # Net out against SELL trades to find truly open positions
+    all_sells = (
+        db.query(TradeLog)
+        .filter(
+            TradeLog.user_id == user.id,
+            TradeLog.action == "SELL",
+        )
+        .all()
+    )
+    sold_tickers: dict = {}
+    for s in all_sells:
+        sold_tickers[s.ticker] = sold_tickers.get(s.ticker, 0.0) + (s.qty or 0.0)
+    remaining_buys = []
+    for b in open_buys:
+        sold_qty = sold_tickers.get(b.ticker, 0.0)
+        rem = (b.qty or 0.0) - sold_qty
+        if rem > 0:
+            sold_tickers[b.ticker] = 0.0
+            remaining_buys.append((b, rem))
+        elif sold_qty > 0:
+            sold_tickers[b.ticker] = sold_qty - (b.qty or 0.0)
+    open_buys_filtered = remaining_buys if remaining_buys else [(b, b.qty or 0.0) for b in open_buys]
     from src.trading.trade_bot import _fetch_live_price
     result = []
-    for t in open_buys:
+    for t, effective_qty in open_buys_filtered:
         try:
             ticker = t.ticker
             current_price = _fetch_live_price(ticker)
-            unrealized_pnl = (current_price - (t.price or 0)) * (t.qty or 0)
+            unrealized_pnl = (current_price - (t.price or 0)) * effective_qty
         except Exception:
             current_price = t.price or 0
             unrealized_pnl = 0.0
@@ -1237,8 +1269,9 @@ async def get_open_positions(current_user=Depends(get_current_user), db: Session
             "ticker":         t.ticker,
             "action":         t.action,
             "price":          t.price,
-            "qty":            t.qty,
+            "qty":            effective_qty,
             "exchange":       t.exchange,
+            "paper":          t.paper,
             "created_at":     t.created_at.isoformat() if t.created_at else None,
             "current_price":  round(current_price, 4),
             "unrealized_pnl": round(unrealized_pnl, 2),
@@ -2307,3 +2340,151 @@ async def ai_chat(body: AIChatRequest, current_user=Depends(get_current_user)):
     except Exception as e:
         logger.error(f"AI chat error: {e}")
         return {"reply": f"I'm having trouble connecting to my AI engine right now. Please make sure the GROK_API_KEY or OPENAI_API_KEY is configured. Error: {str(e)[:120]}"}
+
+
+# ===================== Subscriptions (User) =====================
+
+class SubscriptionRequestBody(BaseModel):
+    plan: str
+    period: str
+    amount_usdt: float
+    payment_method: str
+    auto_renew: bool = True
+
+@router.post("/subscribe")
+async def request_subscription(body: SubscriptionRequestBody, current_user=Depends(get_current_user), db: Session = Depends(get_db)):
+    from src.database.models import SubscriptionRequest
+    user = db.query(User).filter(User.email == current_user["email"]).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    pending = db.query(SubscriptionRequest).filter(
+        SubscriptionRequest.user_id == user.id,
+        SubscriptionRequest.status == "pending",
+    ).first()
+    if pending:
+        raise HTTPException(status_code=400, detail="You already have a pending subscription request.")
+    req = SubscriptionRequest(
+        user_id=user.id,
+        plan=body.plan,
+        period=body.period,
+        amount_usdt=body.amount_usdt,
+        payment_method=body.payment_method,
+        auto_renew=body.auto_renew,
+    )
+    db.add(req)
+    db.commit()
+    db.refresh(req)
+    return {"status": "pending", "id": req.id, "message": "Subscription request submitted, awaiting admin approval."}
+
+
+# ===================== Admin — Subscriptions =====================
+
+@router.get("/admin/subscriptions")
+async def admin_list_subscriptions(current_user=Depends(get_current_user), db: Session = Depends(get_db)):
+    from src.database.models import SubscriptionRequest
+    user = db.query(User).filter(User.email == current_user["email"]).first()
+    if not user or not user.is_admin:
+        raise HTTPException(status_code=403, detail="Admin only")
+    subs = db.query(SubscriptionRequest).order_by(SubscriptionRequest.created_at.desc()).limit(200).all()
+    result = []
+    for s in subs:
+        u = db.query(User).filter(User.id == s.user_id).first()
+        result.append({
+            "id":             s.id,
+            "user_id":        s.user_id,
+            "user_email":     u.email if u else "—",
+            "user_name":      f"{u.first_name or ''} {u.last_name or ''}".strip() if u else "—",
+            "plan":           s.plan,
+            "period":         s.period,
+            "amount_usdt":    s.amount_usdt,
+            "payment_method": s.payment_method,
+            "status":         s.status,
+            "auto_renew":     s.auto_renew,
+            "note":           s.note,
+            "created_at":     s.created_at.isoformat() if s.created_at else None,
+            "processed_at":   s.processed_at.isoformat() if s.processed_at else None,
+        })
+    return {"subscriptions": result}
+
+
+class SubActionBody(BaseModel):
+    sub_id: int
+    note: Optional[str] = None
+
+@router.post("/admin/approve-subscription")
+async def admin_approve_subscription(body: SubActionBody, current_user=Depends(get_current_user), db: Session = Depends(get_db)):
+    from src.database.models import SubscriptionRequest
+    from datetime import datetime, timedelta
+    admin = db.query(User).filter(User.email == current_user["email"]).first()
+    if not admin or not admin.is_admin:
+        raise HTTPException(status_code=403, detail="Admin only")
+    req = db.query(SubscriptionRequest).filter(SubscriptionRequest.id == body.sub_id).first()
+    if not req:
+        raise HTTPException(status_code=404, detail="Subscription request not found")
+    period_days = {"monthly": 30, "6month": 180, "yearly": 365}.get(req.period, 30)
+    expires = datetime.utcnow() + timedelta(days=period_days)
+    req.status = "approved"
+    req.processed_at = datetime.utcnow()
+    req.processed_by = admin.id
+    req.note = body.note
+    user = db.query(User).filter(User.id == req.user_id).first()
+    if user:
+        user.subscription_expires_at = expires
+        user.subscription_period = req.period
+        if hasattr(user, 'subscription_auto_renew'):
+            user.subscription_auto_renew = req.auto_renew
+    db.commit()
+    return {"status": "approved", "expires_at": expires.isoformat()}
+
+
+@router.post("/admin/reject-subscription")
+async def admin_reject_subscription(body: SubActionBody, current_user=Depends(get_current_user), db: Session = Depends(get_db)):
+    from src.database.models import SubscriptionRequest
+    from datetime import datetime
+    admin = db.query(User).filter(User.email == current_user["email"]).first()
+    if not admin or not admin.is_admin:
+        raise HTTPException(status_code=403, detail="Admin only")
+    req = db.query(SubscriptionRequest).filter(SubscriptionRequest.id == body.sub_id).first()
+    if not req:
+        raise HTTPException(status_code=404, detail="Subscription request not found")
+    req.status = "rejected"
+    req.processed_at = datetime.utcnow()
+    req.processed_by = admin.id
+    req.note = body.note
+    db.commit()
+    return {"status": "rejected"}
+
+
+# ===================== WhatsApp — Generate Code & Disconnect =====================
+
+@router.post("/users/whatsapp-generate-code")
+async def whatsapp_generate_code(current_user=Depends(get_current_user), db: Session = Depends(get_db)):
+    """Generate a pairing code for the user to send to the FinAi WhatsApp bot."""
+    import random, string
+    from datetime import datetime, timedelta
+    user = db.query(User).filter(User.email == current_user["email"]).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    code = "WA-" + "".join(random.choices(string.ascii_uppercase + string.digits, k=6))
+    prefs: dict = user.notification_prefs or {}
+    prefs["whatsapp_pending_code"] = code
+    prefs["whatsapp_code_expires"] = (datetime.utcnow() + timedelta(minutes=30)).isoformat()
+    prefs["whatsapp_verified"] = False
+    user.notification_prefs = prefs
+    db.commit()
+    return {"code": code, "message": "Send this code to +1 415 523 8886 on WhatsApp to connect."}
+
+
+@router.post("/users/disconnect-whatsapp")
+async def disconnect_whatsapp(current_user=Depends(get_current_user), db: Session = Depends(get_db)):
+    user = db.query(User).filter(User.email == current_user["email"]).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    prefs: dict = user.notification_prefs or {}
+    prefs.pop("whatsapp_verified", None)
+    prefs.pop("whatsapp_number", None)
+    prefs.pop("whatsapp_pending_code", None)
+    prefs.pop("whatsapp_code_expires", None)
+    user.notification_prefs = prefs
+    db.commit()
+    return {"status": "disconnected"}

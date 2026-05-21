@@ -230,15 +230,53 @@ export default function TradePage() {
     setHistLoad(true)
     try {
       const [tradesRes, posRes] = await Promise.allSettled([
-        getBotTrades(50),
+        getBotTrades(100),
         getOpenPositions(),
       ])
-      if (tradesRes.status === 'fulfilled') {
-        setHistory(tradesRes.value.data?.trades ?? [])
+      const trades: TradeRecord[] = tradesRes.status === 'fulfilled'
+        ? (tradesRes.value.data?.trades ?? [])
+        : []
+      setHistory(trades)
+
+      // Use API positions if available; otherwise compute from trade history
+      let positions: OpenPosition[] = posRes.status === 'fulfilled'
+        ? (posRes.value.data?.positions ?? [])
+        : []
+
+      if (positions.length === 0 && trades.length > 0) {
+        // Client-side position computation (mirrors DashboardPage logic)
+        const posMap: Record<string, { qty: number; totalCost: number; trade: TradeRecord }> = {}
+        for (const t of [...trades].reverse()) {
+          const sym = t.ticker ?? ''
+          if (!sym) continue
+          if (!posMap[sym]) posMap[sym] = { qty: 0, totalCost: 0, trade: t }
+          if (t.action?.toUpperCase() === 'BUY') {
+            posMap[sym].totalCost += (t.price ?? 0) * (t.qty ?? 0)
+            posMap[sym].qty += t.qty ?? 0
+          } else {
+            posMap[sym].qty -= t.qty ?? 0
+            if (posMap[sym].qty < 0) posMap[sym].qty = 0
+          }
+        }
+        positions = Object.entries(posMap)
+          .filter(([, p]) => p.qty > 0.000001)
+          .map(([sym, p]) => {
+            const avgPrice    = p.totalCost / p.qty
+            const fallbackKey = sym.replace('-', '/')
+            const currentPrice = FALLBACKS[fallbackKey]?.price ?? avgPrice
+            return {
+              id:             p.trade.id,
+              ticker:         sym,
+              price:          avgPrice,
+              qty:            p.qty,
+              exchange:       p.trade.exchange,
+              created_at:     p.trade.created_at,
+              current_price:  currentPrice,
+              unrealized_pnl: (currentPrice - avgPrice) * p.qty,
+            } as OpenPosition
+          })
       }
-      if (posRes.status === 'fulfilled') {
-        setOpenPos(posRes.value.data?.positions ?? [])
-      }
+      setOpenPos(positions)
     } catch { /* silent */ } finally { setHistLoad(false) }
   }, [])
 

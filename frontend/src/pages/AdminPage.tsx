@@ -3,16 +3,17 @@ import {
   adminGetUsers, adminGetTransactions, adminApproveTransaction, adminRejectTransaction,
   adminPushNotification, adminGetNotifications, adminGetWalletConfig, adminUpdateWalletConfig,
   adminGetApiKeyUsers, adminGetSupportTickets, adminGetTicket, adminReplyTicket,
-  adminUpdateTicketStatus, adminHealthCheck, adminUpdateUser
+  adminUpdateTicketStatus, adminHealthCheck, adminUpdateUser,
+  adminGetSubscriptions, adminApproveSubscription, adminRejectSubscription
 } from '../lib/api'
 import toast from 'react-hot-toast'
 import {
   Users, Receipt, ShieldCheck, CheckCircle, XCircle, Bell, Send, Globe, User,
   Server, Key, MessageSquare, Activity, Settings, Wallet, Save, RefreshCw,
-  Lock, Unlock, Ban, Star, Edit3
+  Lock, Unlock, Ban, Star, Edit3, CreditCard
 } from 'lucide-react'
 
-type Tab = 'users' | 'transactions' | 'notifications' | 'wallet-config' | 'api-users' | 'support' | 'health'
+type Tab = 'users' | 'transactions' | 'notifications' | 'wallet-config' | 'api-users' | 'support' | 'health' | 'subscriptions'
 
 export default function AdminPage() {
   const [tab, setTab] = useState<Tab>('users')
@@ -26,6 +27,7 @@ export default function AdminPage() {
   const [healthData, setHealthData] = useState<any>(null)
   const [loading, setLoading] = useState(true)
   const [healthLoading, setHealthLoading] = useState(false)
+  const [subscriptions, setSubscriptions] = useState<any[]>([])
 
   // Notification form
   const [notifTitle, setNotifTitle] = useState('')
@@ -70,7 +72,27 @@ export default function AdminPage() {
       const res = await adminGetSupportTickets().catch(() => null)
       if (res) setTickets(Array.isArray(res.data) ? res.data : [])
     }
+    if (t === 'subscriptions') {
+      const res = await adminGetSubscriptions().catch(() => null)
+      if (res) setSubscriptions(Array.isArray(res.data) ? res.data : [])
+    }
     if (t === 'health') runHealthCheck()
+  }
+
+  const approveSubscription = async (id: number) => {
+    try {
+      await adminApproveSubscription(id)
+      toast.success('Subscription approved')
+      setSubscriptions(ss => ss.map(s => s.id === id ? { ...s, status: 'approved' } : s))
+    } catch { toast.error('Failed to approve') }
+  }
+
+  const rejectSubscription = async (id: number) => {
+    try {
+      await adminRejectSubscription(id)
+      toast.success('Subscription rejected')
+      setSubscriptions(ss => ss.map(s => s.id === id ? { ...s, status: 'rejected' } : s))
+    } catch { toast.error('Failed to reject') }
   }
 
   const runHealthCheck = async () => {
@@ -156,6 +178,7 @@ export default function AdminPage() {
   const tabs = [
     { id: 'users', label: 'Users', icon: Users },
     { id: 'transactions', label: 'Transactions', icon: Receipt },
+    { id: 'subscriptions', label: 'Subscriptions', icon: CreditCard },
     { id: 'wallet-config', label: 'Wallet Config', icon: Wallet },
     { id: 'api-users', label: 'API Users', icon: Key },
     { id: 'notifications', label: 'Notifications', icon: Bell },
@@ -370,36 +393,81 @@ export default function AdminPage() {
 
       {/* WALLET CONFIG */}
       {tab === 'wallet-config' && (
-        <div className="bg-[#161a1e] border border-[#2b3139] rounded-xl p-5">
-          <h2 className="text-sm font-semibold text-[#eaecef] mb-4 flex items-center gap-2"><Wallet size={14} className="text-[#f0b90b]" /> Wallet Addresses & Bank Details</h2>
-          <div className="space-y-3">
-            {[
-              { key: 'btc_address', label: 'Bitcoin (BTC) Address' },
-              { key: 'eth_address', label: 'Ethereum (ETH) Address' },
-              { key: 'usdt_trc20', label: 'USDT TRC-20 Address' },
-              { key: 'bank_name', label: 'Bank Name' },
-              { key: 'bank_account', label: 'Bank Account Number' },
-              { key: 'bank_routing', label: 'Routing / IBAN Number' },
-              { key: 'bank_swift', label: 'SWIFT / BIC Code' },
-              { key: 'bank_name_beneficiary', label: 'Beneficiary Name' },
-            ].map(field => {
-              const existing = walletConfig.find((c: any) => c.key === field.key)
-              const val = cfgEdits[field.key] !== undefined ? cfgEdits[field.key] : (existing?.value || '')
-              return (
-                <div key={field.key} className="flex flex-col sm:flex-row sm:items-center gap-2">
-                  <label className="text-xs text-[#848e9c] w-48 flex-shrink-0">{field.label}</label>
-                  <div className="flex gap-2 flex-1">
+        <div className="space-y-4">
+          {/* Crypto addresses */}
+          <div className="bg-[#161a1e] border border-[#2b3139] rounded-xl p-5">
+            <h2 className="text-sm font-semibold text-[#eaecef] mb-4 flex items-center gap-2">
+              <span className="text-[#f7931a]">₿</span> Crypto Deposit Addresses
+            </h2>
+            <div className="space-y-3">
+              {[
+                { key: 'btc_address',  label: 'Bitcoin (BTC) Address' },
+                { key: 'eth_address',  label: 'Ethereum (ETH) Address' },
+                { key: 'usdt_trc20',   label: 'USDT TRC-20 Address' },
+              ].map(field => {
+                const existing = walletConfig.find((c: any) => c.key === field.key)
+                const val = cfgEdits[field.key] !== undefined ? cfgEdits[field.key] : (existing?.value || '')
+                return (
+                  <div key={field.key} className="flex flex-col sm:flex-row sm:items-center gap-2">
+                    <label className="text-xs text-[#848e9c] w-48 flex-shrink-0">{field.label}</label>
                     <input value={val} onChange={e => setCfgEdits(p => ({ ...p, [field.key]: e.target.value }))}
                       placeholder={`Enter ${field.label.toLowerCase()}`}
                       className="flex-1 bg-[#0b0e11] border border-[#2b3139] rounded-xl px-3 py-2 text-sm text-[#eaecef] placeholder-[#4a5568] focus:outline-none focus:border-[#f0b90b] transition font-mono" />
-                    <button onClick={() => saveWalletConfig(field.key)} title="Save"
-                      className="p-2 bg-[#f0b90b]/10 hover:bg-[#f0b90b]/20 text-[#f0b90b] rounded-xl transition flex-shrink-0">
-                      <Save size={13} />
-                    </button>
                   </div>
-                </div>
-              )
-            })}
+                )
+              })}
+            </div>
+            <button
+              onClick={async () => {
+                const cryptoKeys = ['btc_address', 'eth_address', 'usdt_trc20']
+                let saved = 0
+                for (const key of cryptoKeys) {
+                  if (cfgEdits[key] !== undefined) { await saveWalletConfig(key); saved++ }
+                }
+                if (saved === 0) toast('No changes to save')
+              }}
+              className="mt-4 flex items-center gap-2 px-4 py-2.5 bg-[#f7931a]/10 hover:bg-[#f7931a]/20 border border-[#f7931a]/30 text-[#f7931a] rounded-xl text-xs font-semibold transition">
+              <Save size={12} /> Save All Crypto Addresses
+            </button>
+          </div>
+
+          {/* Bank details */}
+          <div className="bg-[#161a1e] border border-[#2b3139] rounded-xl p-5">
+            <h2 className="text-sm font-semibold text-[#eaecef] mb-4 flex items-center gap-2">
+              <span className="text-[#848e9c]">🏦</span> Bank Transfer Details
+            </h2>
+            <div className="space-y-3">
+              {[
+                { key: 'bank_name',             label: 'Bank Name' },
+                { key: 'bank_account',          label: 'Account Number / IBAN' },
+                { key: 'bank_routing',          label: 'Routing / Sort Code' },
+                { key: 'bank_swift',            label: 'SWIFT / BIC Code' },
+                { key: 'bank_name_beneficiary', label: 'Beneficiary Name' },
+              ].map(field => {
+                const existing = walletConfig.find((c: any) => c.key === field.key)
+                const val = cfgEdits[field.key] !== undefined ? cfgEdits[field.key] : (existing?.value || '')
+                return (
+                  <div key={field.key} className="flex flex-col sm:flex-row sm:items-center gap-2">
+                    <label className="text-xs text-[#848e9c] w-48 flex-shrink-0">{field.label}</label>
+                    <input value={val} onChange={e => setCfgEdits(p => ({ ...p, [field.key]: e.target.value }))}
+                      placeholder={`Enter ${field.label.toLowerCase()}`}
+                      className="flex-1 bg-[#0b0e11] border border-[#2b3139] rounded-xl px-3 py-2 text-sm text-[#eaecef] placeholder-[#4a5568] focus:outline-none focus:border-[#f0b90b] transition font-mono" />
+                  </div>
+                )
+              })}
+            </div>
+            <button
+              onClick={async () => {
+                const bankKeys = ['bank_name', 'bank_account', 'bank_routing', 'bank_swift', 'bank_name_beneficiary']
+                let saved = 0
+                for (const key of bankKeys) {
+                  if (cfgEdits[key] !== undefined) { await saveWalletConfig(key); saved++ }
+                }
+                if (saved === 0) toast('No changes to save')
+              }}
+              className="mt-4 flex items-center gap-2 px-4 py-2.5 bg-[#0ecb81]/10 hover:bg-[#0ecb81]/20 border border-[#0ecb81]/30 text-[#0ecb81] rounded-xl text-xs font-semibold transition">
+              <Save size={12} /> Save All Bank Details
+            </button>
           </div>
         </div>
       )}
@@ -535,6 +603,78 @@ export default function AdminPage() {
                 </div>
               </div>
             )}
+          </div>
+        </div>
+      )}
+
+      {/* SUBSCRIPTIONS */}
+      {tab === 'subscriptions' && (
+        <div className="bg-[#161a1e] border border-[#2b3139] rounded-xl overflow-hidden">
+          <div className="px-4 py-3 border-b border-[#2b3139] flex items-center justify-between">
+            <h2 className="text-sm font-semibold text-[#eaecef] flex items-center gap-2">
+              <CreditCard size={14} className="text-[#f0b90b]" /> Subscription Requests
+            </h2>
+            <button onClick={() => adminGetSubscriptions().then(r => setSubscriptions(Array.isArray(r.data) ? r.data : []))}
+              className="text-xs text-[#848e9c] hover:text-[#eaecef] flex items-center gap-1 transition">
+              <RefreshCw size={11} /> Refresh
+            </button>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm min-w-[700px]">
+              <thead>
+                <tr className="text-[#848e9c] text-xs border-b border-[#2b3139] bg-[#0b0e11]">
+                  <th className="text-left px-4 py-3 font-medium">#</th>
+                  <th className="text-left px-4 py-3 font-medium">User</th>
+                  <th className="text-left px-4 py-3 font-medium">Plan</th>
+                  <th className="text-left px-4 py-3 font-medium">Period</th>
+                  <th className="text-right px-4 py-3 font-medium">Amount</th>
+                  <th className="text-left px-4 py-3 font-medium">Method</th>
+                  <th className="text-right px-4 py-3 font-medium">Date</th>
+                  <th className="text-right px-4 py-3 font-medium">Status</th>
+                  <th className="text-right px-4 py-3 font-medium">Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {subscriptions.length === 0 ? (
+                  <tr><td colSpan={9} className="px-4 py-10 text-center text-[#848e9c]">No subscription requests yet</td></tr>
+                ) : subscriptions.map((s: any) => (
+                  <tr key={s.id} className="border-b border-[#2b3139]/50 hover:bg-[#1e2329] transition">
+                    <td className="px-4 py-3 font-mono text-xs text-[#848e9c]">#{s.id}</td>
+                    <td className="px-4 py-3 text-xs text-[#eaecef] truncate max-w-[150px]">{s.user_email || `User #${s.user_id}`}</td>
+                    <td className="px-4 py-3">
+                      <span className="text-xs font-semibold text-[#f0b90b] capitalize">{s.plan}</span>
+                    </td>
+                    <td className="px-4 py-3 text-xs text-[#848e9c] capitalize">{s.period || 'monthly'}</td>
+                    <td className="px-4 py-3 text-right font-mono text-xs text-[#eaecef]">${(s.amount_usdt || 0).toFixed(2)}</td>
+                    <td className="px-4 py-3 text-xs text-[#848e9c] capitalize">{(s.payment_method || 'wallet').replace('_', ' ')}</td>
+                    <td className="px-4 py-3 text-right text-xs text-[#848e9c] whitespace-nowrap">
+                      {s.created_at ? new Date(s.created_at).toLocaleDateString() : '—'}
+                    </td>
+                    <td className="px-4 py-3 text-right">
+                      <span className={`text-[10px] px-2 py-0.5 rounded-full font-medium ${
+                        s.status === 'approved' ? 'bg-[#0ecb81]/10 text-[#0ecb81]' :
+                        s.status === 'rejected' ? 'bg-[#f6465d]/10 text-[#f6465d]' :
+                        'bg-[#f0b90b]/10 text-[#f0b90b]'
+                      }`}>{s.status || 'pending'}</span>
+                    </td>
+                    <td className="px-4 py-3 text-right">
+                      {s.status === 'pending' && (
+                        <div className="flex justify-end gap-1">
+                          <button onClick={() => approveSubscription(s.id)}
+                            className="p-1.5 rounded-lg text-[#0ecb81] hover:bg-[#0ecb81]/10 transition" title="Approve">
+                            <CheckCircle size={14} />
+                          </button>
+                          <button onClick={() => rejectSubscription(s.id)}
+                            className="p-1.5 rounded-lg text-[#f6465d] hover:bg-[#f6465d]/10 transition" title="Reject">
+                            <XCircle size={14} />
+                          </button>
+                        </div>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
         </div>
       )}

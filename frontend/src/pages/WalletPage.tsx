@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { useAuthStore } from '../store/authStore'
 import {
   getWalletConfig, requestDeposit, requestWithdrawal,
@@ -8,10 +8,12 @@ import toast from 'react-hot-toast'
 import QRCode from 'react-qr-code'
 import {
   ArrowDownLeft, ArrowUpRight, Send, Copy, RefreshCw,
-  Clock, CheckCircle, XCircle, Server, ShoppingBag, ChevronRight
+  Clock, CheckCircle, XCircle, Server, ShoppingBag, ChevronRight,
+  ChevronLeft, AlertTriangle, Lock, Bitcoin
 } from 'lucide-react'
 
 type WalletTab = 'deposit' | 'withdraw' | 'send' | 'vps' | 'asset'
+type DepStep = 1 | 2 | 3
 
 interface WalletCfg { [key: string]: { value: string; label: string } }
 interface Tx {
@@ -20,10 +22,10 @@ interface Tx {
 }
 
 const METHODS = [
-  { key: 'crypto_btc',  label: 'Bitcoin (BTC)',   cfgKey: 'btc_address',    icon: '₿' },
-  { key: 'crypto_eth',  label: 'Ethereum (ETH)',   cfgKey: 'eth_address',    icon: 'Ξ' },
-  { key: 'crypto_usdt', label: 'USDT (TRC-20)',    cfgKey: 'usdt_trc20',     icon: '₮' },
-  { key: 'bank',        label: 'Bank Transfer',    cfgKey: 'bank_account',   icon: '🏦' },
+  { key: 'crypto_btc',  label: 'Bitcoin (BTC)',   cfgKey: 'btc_address',  icon: '₿', color: 'text-[#f7931a]', bg: 'bg-[#f7931a]/10', border: 'border-[#f7931a]/20' },
+  { key: 'crypto_eth',  label: 'Ethereum (ETH)',   cfgKey: 'eth_address',  icon: 'Ξ', color: 'text-[#627eea]', bg: 'bg-[#627eea]/10', border: 'border-[#627eea]/20' },
+  { key: 'crypto_usdt', label: 'USDT (TRC-20)',    cfgKey: 'usdt_trc20',   icon: '₮', color: 'text-[#26a17b]', bg: 'bg-[#26a17b]/10', border: 'border-[#26a17b]/20' },
+  { key: 'bank',        label: 'Bank Transfer',    cfgKey: 'bank_account', icon: '🏦', color: 'text-[#848e9c]', bg: 'bg-[#848e9c]/10', border: 'border-[#848e9c]/20' },
 ]
 
 const VPS_PLANS = [
@@ -61,19 +63,24 @@ export default function WalletPage() {
   const [loading, setLoading] = useState(true)
   const [submitting, setSubmitting] = useState(false)
 
-  // Deposit form
-  const [depMethod, setDepMethod] = useState('crypto_btc')
+  // ── Deposit multi-step state ──────────────────────────────────────
+  const [depStep, setDepStep] = useState<DepStep>(1)
   const [depAmount, setDepAmount] = useState('')
+  const [depBtcRate, setDepBtcRate] = useState<number | null>(null)
+  const [depRateLoading, setDepRateLoading] = useState(false)
+  const [depMethod, setDepMethod] = useState('')
   const [depTxHash, setDepTxHash] = useState('')
   const [depBankRef, setDepBankRef] = useState('')
 
-  // Withdraw form
+  // ── Withdraw state ────────────────────────────────────────────────
   const [wdMethod, setWdMethod] = useState('crypto_btc')
   const [wdAmount, setWdAmount] = useState('')
   const [wdAddress, setWdAddress] = useState('')
   const [wdBankRef, setWdBankRef] = useState('')
+  const [wdPin, setWdPin] = useState('')
+  const [showPin, setShowPin] = useState(false)
 
-  // P2P
+  // ── P2P ──────────────────────────────────────────────────────────
   const [p2pEmail, setP2pEmail] = useState('')
   const [p2pAmount, setP2pAmount] = useState('')
   const [p2pNote, setP2pNote] = useState('')
@@ -93,20 +100,46 @@ export default function WalletPage() {
     try { const res = await getMe(); setUser(res.data) } catch {}
   }
 
-  const handleDeposit = async (e: React.FormEvent) => {
-    e.preventDefault()
+  const fetchBtcRate = useCallback(async () => {
+    setDepRateLoading(true)
+    try {
+      const res = await fetch('/api/public/prices')
+      if (res.ok) {
+        const data = await res.json()
+        const btcPrice = data['BTC/USDT']?.price || data.bitcoin?.usd
+        if (btcPrice) setDepBtcRate(btcPrice)
+        else setDepBtcRate(97000)
+      } else {
+        setDepBtcRate(97000)
+      }
+    } catch {
+      setDepBtcRate(97000)
+    } finally {
+      setDepRateLoading(false)
+    }
+  }, [])
+
+  useEffect(() => {
+    if (tab === 'deposit' && depStep === 1) {
+      fetchBtcRate()
+    }
+  }, [tab, depStep, fetchBtcRate])
+
+  const handleDepositSubmit = async () => {
     if (!depAmount || parseFloat(depAmount) <= 0) return toast.error('Enter a valid amount')
+    if (!depMethod) return toast.error('Select a payment method')
+    const method = METHODS.find(m => m.key === depMethod)
     setSubmitting(true)
     try {
-      const method = METHODS.find(m => m.key === depMethod)
       await requestDeposit({
-        method: depMethod, asset: method?.label?.split(' ')[0] || 'USDT',
+        method: depMethod,
+        asset: method?.label?.split(' ')[0] || 'USDT',
         amount_usdt: parseFloat(depAmount),
         tx_hash: depTxHash || undefined,
         bank_ref: depBankRef || undefined,
       })
       toast.success('Deposit request submitted — awaiting admin approval')
-      setDepAmount(''); setDepTxHash(''); setDepBankRef('')
+      setDepStep(1); setDepAmount(''); setDepMethod(''); setDepTxHash(''); setDepBankRef('')
       const txRes = await getMyTransactions()
       setTxs(Array.isArray(txRes.data) ? txRes.data : [])
     } catch (err: unknown) {
@@ -117,21 +150,24 @@ export default function WalletPage() {
   const handleWithdraw = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!wdAmount || parseFloat(wdAmount) <= 0) return toast.error('Enter a valid amount')
+    if (!wdPin.trim()) return toast.error('Enter your transfer PIN')
     setSubmitting(true)
     try {
       await requestWithdrawal({
-        method: wdMethod, asset: METHODS.find(m => m.key === wdMethod)?.label?.split(' ')[0] || 'USDT',
+        method: wdMethod,
+        asset: METHODS.find(m => m.key === wdMethod)?.label?.split(' ')[0] || 'USDT',
         amount_usdt: parseFloat(wdAmount),
         wallet_address: wdAddress || undefined,
         bank_ref: wdBankRef || undefined,
+        transfer_pin: wdPin,
       })
       toast.success('Withdrawal request submitted')
-      setWdAmount(''); setWdAddress(''); setWdBankRef('')
+      setWdAmount(''); setWdAddress(''); setWdBankRef(''); setWdPin('')
       await refreshBalance()
       const txRes = await getMyTransactions()
       setTxs(Array.isArray(txRes.data) ? txRes.data : [])
     } catch (err: unknown) {
-      toast.error((err as { response?: { data?: { detail?: string } } }).response?.data?.detail || 'Insufficient balance')
+      toast.error((err as { response?: { data?: { detail?: string } } }).response?.data?.detail || 'Insufficient balance or invalid PIN')
     } finally { setSubmitting(false) }
   }
 
@@ -152,26 +188,28 @@ export default function WalletPage() {
   }
 
   const inp = 'w-full bg-[#0b0e11] border border-[#2b3139] rounded-xl px-3 py-2.5 text-sm text-[#eaecef] placeholder-[#4a5568] focus:outline-none focus:border-[#f0b90b] transition'
-
-  const depCfgKey = METHODS.find(m => m.key === depMethod)?.cfgKey
-  const depAddress = depCfgKey ? cfg[depCfgKey]?.value : undefined
   const isCrypto = (method: string) => method !== 'bank'
 
+  const depMethodObj = METHODS.find(m => m.key === depMethod)
+  const depCfgKey = depMethodObj?.cfgKey
+  const depAddress = depCfgKey ? cfg[depCfgKey]?.value : undefined
+  const depConfigured = depMethod === 'bank'
+    ? !!cfg['bank_account']?.value
+    : !!depAddress
+
   const tabs = [
-    { key: 'deposit',  label: 'Deposit',  icon: ArrowDownLeft },
-    { key: 'withdraw', label: 'Withdraw', icon: ArrowUpRight },
-    { key: 'send',     label: 'Send P2P', icon: Send },
-    { key: 'vps',      label: 'Rent VPS', icon: Server },
-    { key: 'asset',    label: 'Buy Asset',icon: ShoppingBag },
+    { key: 'deposit',  label: 'Deposit',   icon: ArrowDownLeft },
+    { key: 'withdraw', label: 'Withdraw',  icon: ArrowUpRight },
+    { key: 'send',     label: 'Send P2P',  icon: Send },
+    { key: 'vps',      label: 'Rent VPS',  icon: Server },
+    { key: 'asset',    label: 'Buy Asset', icon: ShoppingBag },
   ] as const
 
   return (
     <div className="space-y-4 sm:space-y-5">
       {/* Balance hero card */}
       <div className="relative bg-gradient-to-br from-[#1e2329] via-[#181d22] to-[#161a1e] border border-[#2b3139] rounded-2xl p-5 overflow-hidden">
-        <div className="absolute inset-0 pointer-events-none" style={{
-          backgroundImage: 'radial-gradient(ellipse at top right, rgba(14,203,129,0.07) 0%, transparent 60%)',
-        }} />
+        <div className="absolute inset-0 pointer-events-none" style={{ backgroundImage: 'radial-gradient(ellipse at top right, rgba(14,203,129,0.07) 0%, transparent 60%)' }} />
         <div className="relative flex flex-wrap items-center justify-between gap-4">
           <div>
             <p className="text-xs text-[#848e9c] font-medium mb-1">Available Balance</p>
@@ -181,7 +219,7 @@ export default function WalletPage() {
             <p className="text-xs text-[#848e9c] mt-1">USDT · Updated just now</p>
           </div>
           <div className="flex gap-2">
-            <button onClick={() => setTab('deposit')} className="flex items-center gap-1.5 bg-[#0ecb81] hover:bg-[#0ab56f] text-black font-semibold text-xs px-4 py-2.5 rounded-xl transition">
+            <button onClick={() => { setTab('deposit'); setDepStep(1) }} className="flex items-center gap-1.5 bg-[#0ecb81] hover:bg-[#0ab56f] text-black font-semibold text-xs px-4 py-2.5 rounded-xl transition">
               <ArrowDownLeft size={13} /> Deposit
             </button>
             <button onClick={() => setTab('withdraw')} className="flex items-center gap-1.5 bg-[#0b0e11] hover:bg-[#2b3139] text-[#848e9c] hover:text-[#eaecef] font-semibold text-xs px-4 py-2.5 rounded-xl border border-[#2b3139] transition">
@@ -194,7 +232,7 @@ export default function WalletPage() {
       {/* Action tabs */}
       <div className="grid grid-cols-5 gap-1 bg-[#161a1e] border border-[#2b3139] rounded-xl p-1">
         {tabs.map(({ key, label, icon: Icon }) => (
-          <button key={key} onClick={() => setTab(key as WalletTab)}
+          <button key={key} onClick={() => { setTab(key as WalletTab); if (key === 'deposit') setDepStep(1) }}
             className={`flex flex-col sm:flex-row items-center justify-center gap-1 sm:gap-1.5 px-2 py-2.5 rounded-lg text-[10px] sm:text-xs font-medium transition ${tab === key ? 'bg-[#f0b90b] text-black' : 'text-[#848e9c] hover:text-[#eaecef]'}`}>
             <Icon size={13} /><span className="leading-tight text-center">{label}</span>
           </button>
@@ -205,124 +243,284 @@ export default function WalletPage() {
         {/* Left: form */}
         <div className="bg-[#161a1e] border border-[#2b3139] rounded-xl p-5">
 
-          {/* DEPOSIT */}
+          {/* ── DEPOSIT (multi-step wizard) ── */}
           {tab === 'deposit' && (
-            <form onSubmit={handleDeposit} className="space-y-4">
-              <h2 className="text-sm font-semibold text-[#eaecef]">Deposit Funds</h2>
-
-              <div>
-                <label className="text-xs text-[#848e9c] mb-1.5 block">Payment Method</label>
-                <select
-                  value={depMethod}
-                  onChange={e => setDepMethod(e.target.value)}
-                  className="w-full bg-[#0b0e11] border border-[#2b3139] rounded-xl px-3 py-2.5 text-xs text-[#eaecef] focus:outline-none focus:border-[#f0b90b] transition">
-                  {METHODS.map(m => (
-                    <option key={m.key} value={m.key}>{m.icon} {m.label}</option>
-                  ))}
-                </select>
+            <div className="space-y-5">
+              {/* Step indicator */}
+              <div className="flex items-center gap-2">
+                {[1, 2, 3].map(s => (
+                  <div key={s} className="flex items-center gap-2">
+                    <div className={`w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-bold transition-all ${depStep >= s ? 'bg-[#f0b90b] text-black' : 'bg-[#2b3139] text-[#848e9c]'}`}>{s}</div>
+                    {s < 3 && <div className={`flex-1 h-0.5 w-8 rounded ${depStep > s ? 'bg-[#f0b90b]' : 'bg-[#2b3139]'}`} />}
+                  </div>
+                ))}
+                <span className="text-xs text-[#848e9c] ml-1">
+                  {depStep === 1 ? 'Amount' : depStep === 2 ? 'Method' : 'Send & Confirm'}
+                </span>
               </div>
 
-              {depAddress && isCrypto(depMethod) && (
-                <div className="bg-[#0b0e11] rounded-xl p-4 border border-[#2b3139] space-y-3">
-                  <div className="flex justify-center">
-                    <div className="p-2 bg-white rounded-lg">
-                      <QRCode value={depAddress} size={120} />
+              {/* Step 1: Enter amount */}
+              {depStep === 1 && (
+                <div className="space-y-4">
+                  <h2 className="text-sm font-semibold text-[#eaecef]">How much do you want to deposit?</h2>
+                  <div>
+                    <label className="text-xs text-[#848e9c] mb-1.5 block">Amount (USDT) *</label>
+                    <div className="relative">
+                      <input
+                        type="number" min="0" step="0.01"
+                        value={depAmount}
+                        onChange={e => setDepAmount(e.target.value)}
+                        placeholder="0.00"
+                        className={inp}
+                        autoFocus
+                      />
+                      <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-[#848e9c] font-semibold">USDT</span>
                     </div>
                   </div>
-                  <p className="text-[10px] font-mono text-[#848e9c] break-all text-center">{depAddress}</p>
-                  <button type="button"
-                    onClick={() => { navigator.clipboard.writeText(depAddress); toast.success('Address copied!') }}
-                    className="w-full flex items-center justify-center gap-2 py-2 rounded-lg border border-[#2b3139] text-xs text-[#848e9c] hover:text-[#eaecef] transition">
-                    <Copy size={11} /> Copy Address
+
+                  {/* Live rate conversions */}
+                  {depAmount && parseFloat(depAmount) > 0 && (
+                    <div className="bg-[#0b0e11] border border-[#2b3139] rounded-xl p-3 space-y-1.5">
+                      <p className="text-[10px] text-[#848e9c] font-semibold uppercase tracking-wider mb-2">Approximate conversions</p>
+                      {depRateLoading ? (
+                        <p className="text-xs text-[#4a5568]">Fetching rates…</p>
+                      ) : depBtcRate ? (
+                        <>
+                          <div className="flex items-center justify-between">
+                            <span className="text-xs text-[#848e9c] flex items-center gap-1.5"><Bitcoin size={11} className="text-[#f7931a]" /> Bitcoin (BTC)</span>
+                            <span className="text-xs font-mono text-[#eaecef]">≈ {(parseFloat(depAmount) / depBtcRate).toFixed(8)} BTC</span>
+                          </div>
+                          <div className="flex items-center justify-between">
+                            <span className="text-xs text-[#848e9c]">Ξ Ethereum (ETH)</span>
+                            <span className="text-xs font-mono text-[#eaecef]">≈ {(parseFloat(depAmount) / (depBtcRate / 30)).toFixed(6)} ETH</span>
+                          </div>
+                          <div className="flex items-center justify-between">
+                            <span className="text-xs text-[#848e9c]">₮ USDT (TRC-20)</span>
+                            <span className="text-xs font-mono text-[#eaecef]">= {parseFloat(depAmount).toFixed(2)} USDT</span>
+                          </div>
+                          <p className="text-[9px] text-[#4a5568] pt-1">Rates are indicative. Final amount depends on market price at time of transaction.</p>
+                        </>
+                      ) : null}
+                    </div>
+                  )}
+
+                  <button
+                    onClick={() => {
+                      if (!depAmount || parseFloat(depAmount) <= 0) return toast.error('Enter a valid amount')
+                      setDepStep(2)
+                    }}
+                    className="w-full bg-[#f0b90b] hover:bg-[#d4a30a] text-black font-bold py-3 rounded-xl text-sm transition flex items-center justify-center gap-2">
+                    Next: Choose Payment Method <ChevronRight size={14} />
                   </button>
                 </div>
               )}
 
-              {!depAddress && isCrypto(depMethod) && (
-                <div className="bg-[#f0b90b]/5 border border-[#f0b90b]/20 rounded-xl px-4 py-3 text-xs text-[#848e9c]">
-                  Admin has not configured this deposit address yet.
+              {/* Step 2: Select method */}
+              {depStep === 2 && (
+                <div className="space-y-4">
+                  <div className="flex items-center gap-2">
+                    <button onClick={() => setDepStep(1)} className="p-1.5 text-[#848e9c] hover:text-[#eaecef] rounded-lg hover:bg-[#2b3139] transition">
+                      <ChevronLeft size={14} />
+                    </button>
+                    <h2 className="text-sm font-semibold text-[#eaecef]">Select payment method</h2>
+                  </div>
+                  <p className="text-xs text-[#848e9c]">Depositing <span className="text-[#f0b90b] font-mono font-semibold">${parseFloat(depAmount).toFixed(2)} USDT</span></p>
+
+                  <div className="grid grid-cols-2 gap-2">
+                    {METHODS.map(m => {
+                      const configured = m.key === 'bank' ? !!cfg['bank_account']?.value : !!cfg[m.cfgKey]?.value
+                      return (
+                        <button
+                          key={m.key}
+                          onClick={() => { setDepMethod(m.key); setDepStep(3) }}
+                          className={`relative flex flex-col items-center gap-2 p-4 rounded-xl border transition-all ${depMethod === m.key ? `${m.border} ${m.bg}` : 'border-[#2b3139] hover:border-[#3c4451]'}`}
+                        >
+                          {!configured && (
+                            <span className="absolute top-1.5 right-1.5 text-[8px] bg-[#848e9c]/20 text-[#848e9c] px-1 py-0.5 rounded font-medium">Unconfigured</span>
+                          )}
+                          <span className={`text-2xl ${m.color}`}>{m.icon}</span>
+                          <span className="text-xs font-medium text-[#eaecef] text-center leading-tight">{m.label}</span>
+                        </button>
+                      )
+                    })}
+                  </div>
                 </div>
               )}
 
-              {depMethod === 'bank' && (
-                <div className="bg-[#0b0e11] rounded-xl p-4 border border-[#2b3139] space-y-1 text-xs text-[#848e9c]">
-                  {['bank_name', 'bank_account', 'bank_routing', 'bank_swift'].map(k => cfg[k] && (
-                    <div key={k} className="flex justify-between">
-                      <span className="capitalize">{cfg[k].label || k.replace(/_/g, ' ')}</span>
-                      <span className="font-mono text-[#eaecef]">{cfg[k].value}</span>
+              {/* Step 3: QR / bank + submit */}
+              {depStep === 3 && (
+                <div className="space-y-4">
+                  <div className="flex items-center gap-2">
+                    <button onClick={() => setDepStep(2)} className="p-1.5 text-[#848e9c] hover:text-[#eaecef] rounded-lg hover:bg-[#2b3139] transition">
+                      <ChevronLeft size={14} />
+                    </button>
+                    <div>
+                      <h2 className="text-sm font-semibold text-[#eaecef]">Send your payment</h2>
+                      <p className="text-xs text-[#848e9c]">{depMethodObj?.label} · ${parseFloat(depAmount).toFixed(2)} USDT</p>
                     </div>
-                  ))}
-                  {!cfg['bank_account'] && <p>Bank details not yet configured by admin.</p>}
-                </div>
-              )}
+                  </div>
 
-              <div>
-                <label className="text-xs text-[#848e9c] mb-1.5 block">Amount (USDT equivalent) *</label>
-                <input type="number" min="0" step="0.01" value={depAmount} onChange={e => setDepAmount(e.target.value)}
-                  required placeholder="0.00" className={inp} />
-              </div>
-              {isCrypto(depMethod) && (
-                <div>
-                  <label className="text-xs text-[#848e9c] mb-1.5 block">TX Hash (optional)</label>
-                  <input value={depTxHash} onChange={e => setDepTxHash(e.target.value)} placeholder="0x..." className={inp} />
+                  {!depConfigured ? (
+                    <div className="bg-[#f6465d]/5 border border-[#f6465d]/20 rounded-xl p-4 flex items-start gap-3">
+                      <AlertTriangle size={16} className="text-[#f6465d] flex-shrink-0 mt-0.5" />
+                      <div>
+                        <p className="text-xs font-semibold text-[#f6465d]">Payment method not configured</p>
+                        <p className="text-[11px] text-[#848e9c] mt-1">This deposit method has not been configured by the admin yet. Please choose a different method or contact support.</p>
+                        <button onClick={() => setDepStep(2)} className="mt-2 text-xs text-[#f0b90b] hover:underline">← Choose another method</button>
+                      </div>
+                    </div>
+                  ) : (
+                    <>
+                      {/* Caution notice */}
+                      <div className="bg-[#f0b90b]/5 border border-[#f0b90b]/20 rounded-xl p-3 space-y-1">
+                        <p className="text-xs font-semibold text-[#f0b90b] flex items-center gap-1.5"><AlertTriangle size={11} /> Important</p>
+                        <ul className="text-[10px] text-[#848e9c] space-y-0.5 list-disc list-inside">
+                          <li>Only send the exact currency shown below</li>
+                          <li>Minimum deposit: $10 USDT equivalent</li>
+                          <li>Processing takes 1–3 network confirmations</li>
+                          <li>Always double-check the address before sending</li>
+                        </ul>
+                      </div>
+
+                      {/* Crypto QR + address */}
+                      {isCrypto(depMethod) && depAddress && (
+                        <div className="bg-[#0b0e11] border border-[#2b3139] rounded-xl p-4 space-y-3">
+                          <p className="text-xs text-[#848e9c] text-center">Scan QR or copy address</p>
+                          <div className="flex justify-center">
+                            <div className="p-3 bg-white rounded-xl">
+                              <QRCode value={depAddress} size={130} />
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-2 bg-[#161a1e] border border-[#2b3139] rounded-lg px-3 py-2.5">
+                            <code className="text-[10px] font-mono text-[#eaecef] flex-1 break-all">{depAddress}</code>
+                            <button type="button" onClick={() => { navigator.clipboard.writeText(depAddress); toast.success('Address copied!') }}
+                              className="text-[#848e9c] hover:text-[#f0b90b] transition flex-shrink-0">
+                              <Copy size={13} />
+                            </button>
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Bank details */}
+                      {depMethod === 'bank' && (
+                        <div className="bg-[#0b0e11] border border-[#2b3139] rounded-xl p-4 space-y-2">
+                          {['bank_name', 'bank_account', 'bank_routing', 'bank_swift', 'bank_name_beneficiary'].map(k => cfg[k]?.value && (
+                            <div key={k} className="flex items-center justify-between gap-2">
+                              <span className="text-[10px] text-[#848e9c] capitalize">{cfg[k].label || k.replace(/_/g, ' ')}</span>
+                              <div className="flex items-center gap-1">
+                                <span className="text-xs font-mono text-[#eaecef]">{cfg[k].value}</span>
+                                <button onClick={() => { navigator.clipboard.writeText(cfg[k].value); toast.success('Copied!') }}
+                                  className="text-[#4a5568] hover:text-[#848e9c] transition"><Copy size={10} /></button>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+
+                      {/* TX hash / bank ref */}
+                      {isCrypto(depMethod) && (
+                        <div>
+                          <label className="text-xs text-[#848e9c] mb-1.5 block">Transaction Hash (optional but speeds up approval)</label>
+                          <input value={depTxHash} onChange={e => setDepTxHash(e.target.value)} placeholder="0x..." className={inp} />
+                        </div>
+                      )}
+                      {depMethod === 'bank' && (
+                        <div>
+                          <label className="text-xs text-[#848e9c] mb-1.5 block">Bank Reference / Transfer ID *</label>
+                          <input value={depBankRef} onChange={e => setDepBankRef(e.target.value)} placeholder="Transfer reference" className={inp} />
+                        </div>
+                      )}
+
+                      <button
+                        onClick={handleDepositSubmit}
+                        disabled={submitting || (depMethod === 'bank' && !depBankRef.trim())}
+                        className="w-full bg-[#0ecb81] hover:bg-[#0ab56f] disabled:opacity-60 text-black font-bold py-3 rounded-xl text-sm transition flex items-center justify-center gap-2">
+                        {submitting ? 'Submitting…' : "I've Sent the Payment — Submit Request"}
+                        {!submitting && <CheckCircle size={14} />}
+                      </button>
+                    </>
+                  )}
                 </div>
               )}
-              {!isCrypto(depMethod) && (
-                <div>
-                  <label className="text-xs text-[#848e9c] mb-1.5 block">Bank Reference</label>
-                  <input value={depBankRef} onChange={e => setDepBankRef(e.target.value)} placeholder="Transfer reference" className={inp} />
-                </div>
-              )}
-              <button type="submit" disabled={submitting}
-                className="w-full bg-[#0ecb81] hover:bg-[#0ab56f] disabled:opacity-60 text-black font-semibold py-3 rounded-xl text-sm transition">
-                {submitting ? 'Submitting...' : 'Submit Deposit Request'}
-              </button>
-            </form>
+            </div>
           )}
 
-          {/* WITHDRAW */}
+          {/* ── WITHDRAW ── */}
           {tab === 'withdraw' && (
             <form onSubmit={handleWithdraw} className="space-y-4">
               <h2 className="text-sm font-semibold text-[#eaecef]">Withdraw Funds</h2>
-              <p className="text-xs text-[#848e9c]">Balance: <span className="text-[#eaecef] font-mono">${(user?.balance_usdt ?? 0).toFixed(2)}</span></p>
+              <p className="text-xs text-[#848e9c]">Balance: <span className="text-[#eaecef] font-mono font-semibold">${(user?.balance_usdt ?? 0).toFixed(2)} USDT</span></p>
 
               <div>
                 <label className="text-xs text-[#848e9c] mb-1.5 block">Withdrawal Method</label>
-                <select
-                  value={wdMethod}
-                  onChange={e => setWdMethod(e.target.value)}
-                  className="w-full bg-[#0b0e11] border border-[#2b3139] rounded-xl px-3 py-2.5 text-xs text-[#eaecef] focus:outline-none focus:border-[#f0b90b] transition">
+                <div className="grid grid-cols-2 gap-2">
                   {METHODS.map(m => (
-                    <option key={m.key} value={m.key}>{m.icon} {m.label}</option>
+                    <button key={m.key} type="button"
+                      onClick={() => setWdMethod(m.key)}
+                      className={`flex items-center gap-2 px-3 py-2.5 rounded-xl border transition text-xs font-medium ${wdMethod === m.key ? `${m.border} ${m.bg} ${m.color}` : 'border-[#2b3139] text-[#848e9c] hover:border-[#3c4451]'}`}>
+                      <span>{m.icon}</span><span>{m.label}</span>
+                    </button>
                   ))}
-                </select>
+                </div>
               </div>
 
-              <div>
-                <label className="text-xs text-[#848e9c] mb-1.5 block">Amount (USDT) *</label>
-                <input type="number" min="0" step="0.01" value={wdAmount} onChange={e => setWdAmount(e.target.value)}
-                  required placeholder="0.00" className={inp} />
-              </div>
               {isCrypto(wdMethod) && (
                 <div>
-                  <label className="text-xs text-[#848e9c] mb-1.5 block">Destination Wallet *</label>
-                  <input value={wdAddress} onChange={e => setWdAddress(e.target.value)} required placeholder="Your wallet address" className={inp} />
+                  <label className="text-xs text-[#848e9c] mb-1.5 block">Destination Wallet Address *</label>
+                  <input value={wdAddress} onChange={e => setWdAddress(e.target.value)} required placeholder="Your crypto wallet address" className={inp} />
                 </div>
               )}
               {!isCrypto(wdMethod) && (
                 <div>
-                  <label className="text-xs text-[#848e9c] mb-1.5 block">Bank Account / Reference</label>
-                  <input value={wdBankRef} onChange={e => setWdBankRef(e.target.value)} placeholder="Your bank account / IBAN" className={inp} />
+                  <label className="text-xs text-[#848e9c] mb-1.5 block">Bank Account / IBAN *</label>
+                  <input value={wdBankRef} onChange={e => setWdBankRef(e.target.value)} required placeholder="Your bank account or IBAN" className={inp} />
                 </div>
               )}
-              <button type="submit" disabled={submitting}
-                className="w-full bg-[#f6465d] hover:bg-[#d93d51] disabled:opacity-60 text-white font-semibold py-3 rounded-xl text-sm transition">
-                {submitting ? 'Submitting...' : 'Request Withdrawal'}
+
+              <div>
+                <label className="text-xs text-[#848e9c] mb-1.5 block">Amount (USDT) *</label>
+                <div className="relative">
+                  <input type="number" min="0" step="0.01" value={wdAmount} onChange={e => setWdAmount(e.target.value)}
+                    required placeholder="0.00" className={inp} />
+                  <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-[#848e9c]">USDT</span>
+                </div>
+                {wdAmount && parseFloat(wdAmount) > (user?.balance_usdt ?? 0) && (
+                  <p className="text-[10px] text-[#f6465d] mt-1 flex items-center gap-1"><AlertTriangle size={9} /> Amount exceeds your balance</p>
+                )}
+              </div>
+
+              {/* Transfer PIN */}
+              <div>
+                <label className="text-xs text-[#848e9c] mb-1.5 block flex items-center gap-1"><Lock size={10} /> Transfer PIN *</label>
+                <div className="relative">
+                  <input
+                    type={showPin ? 'text' : 'password'}
+                    value={wdPin} onChange={e => setWdPin(e.target.value)}
+                    required placeholder="Your 4–6 digit PIN" maxLength={6}
+                    className={`${inp} tracking-widest`}
+                  />
+                  <button type="button" onClick={() => setShowPin(v => !v)}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-[#848e9c] hover:text-[#eaecef] text-xs">
+                    {showPin ? 'Hide' : 'Show'}
+                  </button>
+                </div>
+                <p className="text-[10px] text-[#4a5568] mt-1">Your transfer PIN is required for security. Set it in Profile → Security.</p>
+              </div>
+
+              <div className="bg-[#f6465d]/5 border border-[#f6465d]/20 rounded-xl px-3 py-2.5 text-[10px] text-[#848e9c]">
+                <AlertTriangle size={10} className="inline text-[#f6465d] mr-1" />
+                Withdrawals are reviewed by admin. Funds will be deducted immediately and returned if rejected.
+              </div>
+
+              <button type="submit" disabled={submitting || (!!wdAmount && parseFloat(wdAmount) > (user?.balance_usdt ?? 0))}
+                className="w-full bg-[#f6465d] hover:bg-[#d93d51] disabled:opacity-60 text-white font-bold py-3 rounded-xl text-sm transition flex items-center justify-center gap-2">
+                {submitting ? 'Submitting…' : 'Request Withdrawal'}
+                {!submitting && <ArrowUpRight size={14} />}
               </button>
             </form>
           )}
 
-          {/* P2P SEND */}
+          {/* ── P2P SEND ── */}
           {tab === 'send' && (
             <form onSubmit={handleP2P} className="space-y-4">
               <h2 className="text-sm font-semibold text-[#eaecef]">Send to User (P2P)</h2>
@@ -346,7 +544,7 @@ export default function WalletPage() {
             </form>
           )}
 
-          {/* RENT VPS */}
+          {/* ── RENT VPS ── */}
           {tab === 'vps' && (
             <div className="space-y-4">
               <h2 className="text-sm font-semibold text-[#eaecef]">Rent a VPS for your Bot</h2>
@@ -371,7 +569,7 @@ export default function WalletPage() {
             </div>
           )}
 
-          {/* BUY ASSET */}
+          {/* ── BUY ASSET ── */}
           {tab === 'asset' && (
             <div className="space-y-4">
               <h2 className="text-sm font-semibold text-[#eaecef]">Buy Crypto Assets</h2>
