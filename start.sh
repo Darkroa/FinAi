@@ -2,7 +2,10 @@
 # Kill any existing processes on used ports
 fuser -k 8000/tcp 2>/dev/null || true
 fuser -k 5000/tcp 2>/dev/null || true
-sleep 1
+# Also kill any lingering vite / uvicorn processes
+pkill -f "vite" 2>/dev/null || true
+pkill -f "uvicorn" 2>/dev/null || true
+sleep 2
 
 export PATH="/home/runner/workspace/.pythonlibs/bin:$PATH"
 
@@ -15,4 +18,4 @@ echo "Backend started (PID: $BACKEND_PID)"
 sleep 4
 
 # Start React frontend (Vite) on port 5000
-cd /home/runner/workspace/frontend && exec ./node_modules/.bin/vite 2>&1
+cd /home/runner/workspace/frontend && exec ./node_modules/.bin/vite --port 5000 2>&1
