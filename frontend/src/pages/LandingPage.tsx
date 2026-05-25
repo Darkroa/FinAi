@@ -1,7 +1,8 @@
 import { useNavigate } from 'react-router-dom'
 import {
   Zap, TrendingUp, Shield, BarChart2, Bot, Globe,
-  ArrowRight, Activity, Lock, Cpu, Check, Menu, X
+  ArrowRight, Activity, Lock, Cpu, Check, Menu, X,
+  Star, Crown, Infinity
 } from 'lucide-react'
 import { useState } from 'react'
 import { useTickerPrices } from '../hooks/useTickerPrices'
@@ -24,29 +25,74 @@ const stats = [
 
 const plans = [
   {
-    name: 'Free', price: 0, period: 'Free forever',
-    features: ['1 AI bot', '1 API key', 'Basic market data', 'Email alerts', 'Community support'],
-    cta: 'Get Started Free', highlight: false,
+    name: 'Free', price: 0, period: 'Forever free',
+    icon: Zap, color: '#848e9c', highlight: false,
+    features: [
+      '1 AI trading bot',
+      '0 EventBots',
+      '1 API key',
+      'Basic market data',
+      'Email alerts',
+      'Community support',
+      '$500/day withdrawal limit',
+    ],
+    cta: 'Get Started Free',
   },
   {
     name: 'Pro', price: 500, period: '/month',
-    features: ['10 AI bots', '5 API keys', 'Live market data', 'Telegram & WhatsApp', 'Priority support'],
-    cta: 'Go Pro', highlight: true,
+    icon: Star, color: '#f0b90b', highlight: true,
+    features: [
+      '10 AI trading bots',
+      '4 EventBots included',
+      '10 API keys',
+      'Live market data',
+      'Telegram & WhatsApp alerts',
+      'Priority support',
+      '$5,000/day withdrawal limit',
+    ],
+    cta: 'Go Pro',
   },
   {
     name: 'Elite', price: 1000, period: '/month',
-    features: ['20 AI bots', '20 API keys', 'VPS hosting included', 'Custom strategies', 'Dedicated support'],
-    cta: 'Go Elite', highlight: false,
+    icon: Crown, color: '#0ecb81', highlight: false,
+    features: [
+      '20 AI trading bots',
+      '8 EventBots included',
+      '20 API keys',
+      'VPS hosting included',
+      'Custom strategy builder',
+      'Dedicated support manager',
+      'Unlimited withdrawals',
+    ],
+    cta: 'Go Elite',
   },
   {
     name: 'Elite+', price: 2000, period: '/month',
-    features: ['40 AI bots', '40 API keys', 'All Elite features', 'White-label option', 'SLA guarantee'],
-    cta: 'Go Elite+', highlight: false,
+    icon: Crown, color: '#a855f7', highlight: false,
+    features: [
+      '40 AI trading bots',
+      '15 EventBots included',
+      '40 API keys',
+      'All Elite features',
+      'White-label option',
+      'SLA guarantee (99.9%)',
+      'Dedicated infrastructure',
+    ],
+    cta: 'Go Elite+',
   },
   {
     name: 'Custom', price: -1, period: 'Contact us',
-    features: ['Unlimited bots & keys', 'Custom infrastructure', 'On-premise option', 'Enterprise SLA', 'Dedicated team'],
-    cta: 'Contact Sales', highlight: false,
+    icon: Infinity, color: '#4a5568', highlight: false,
+    features: [
+      'Unlimited bots & API keys',
+      '50 EventBots included',
+      'Custom infrastructure',
+      'On-premise deployment',
+      'Enterprise SLA',
+      'Dedicated engineering team',
+      'Custom integrations',
+    ],
+    cta: 'Contact Sales',
   },
 ]
 
@@ -239,53 +285,86 @@ export default function LandingPage() {
 
           {/* Scrollable carousel */}
           <div className="flex gap-4 overflow-x-auto pb-4 snap-x snap-mandatory scrollbar-hide -mx-4 px-4 sm:mx-0 sm:px-0 sm:grid sm:grid-cols-5 sm:overflow-visible sm:pb-0">
-            {plans.map(p => (
-              <div key={p.name} className={[
-                'relative rounded-xl border flex flex-col overflow-hidden transition-all snap-start flex-shrink-0 w-[75vw] sm:w-auto',
-                p.highlight
-                  ? 'bg-[#1a1f26] border-[#f0b90b]/60 shadow-lg shadow-[#f0b90b]/8'
-                  : 'bg-[#0b0e11] border-[#2b3139] hover:border-[#3c4451]',
-              ].join(' ')}>
-                {p.highlight && (
-                  <div className="bg-[#f0b90b]/15 border-b border-[#f0b90b]/30 text-[#f0b90b] text-[10px] font-extrabold tracking-widest py-1.5 text-center uppercase">
-                    ★ Most Popular
+            {plans.map(p => {
+              const PlanIcon = p.icon
+              return (
+                <div key={p.name} className={[
+                  'relative rounded-xl border flex flex-col overflow-hidden transition-all snap-start flex-shrink-0 w-[75vw] sm:w-auto',
+                  p.highlight
+                    ? 'bg-[#1a1f26] border-[#f0b90b]/60 shadow-lg shadow-[#f0b90b]/8'
+                    : 'bg-[#0b0e11] border-[#2b3139] hover:border-[#3c4451]',
+                ].join(' ')}>
+                  {p.highlight && (
+                    <div className="bg-[#f0b90b]/15 border-b border-[#f0b90b]/30 text-[#f0b90b] text-[10px] font-extrabold tracking-widest py-1.5 text-center uppercase">
+                      ★ Most Popular
+                    </div>
+                  )}
+                  <div className="p-5 flex flex-col flex-1">
+                    {/* Plan icon + name */}
+                    <div className="flex items-center gap-2 mb-1">
+                      <div className="w-6 h-6 rounded-md flex items-center justify-center" style={{ background: `${p.color}18` }}>
+                        <PlanIcon size={12} style={{ color: p.color }} />
+                      </div>
+                      <h3 className="font-bold text-base" style={{ color: p.color }}>{p.name}</h3>
+                    </div>
+
+                    {/* Price */}
+                    <div className="flex items-end gap-1 mb-4 mt-1">
+                      {p.price === -1 ? (
+                        <span className="text-xl font-extrabold font-mono text-[#eaecef]">Custom</span>
+                      ) : p.price === 0 ? (
+                        <span className="text-2xl font-extrabold font-mono text-[#eaecef]">Free</span>
+                      ) : (
+                        <>
+                          <span className="text-2xl font-extrabold font-mono text-[#eaecef]">${p.price.toLocaleString()}</span>
+                          <span className="text-xs mb-1 text-[#848e9c]">{p.period}</span>
+                        </>
+                      )}
+                    </div>
+
+                    {/* Features */}
+                    <ul className="space-y-2 flex-1 mb-4">
+                      {p.features.map(f => {
+                        const isEventBot = f.toLowerCase().includes('eventbot')
+                        return (
+                          <li key={f} className="flex items-center gap-2 text-xs">
+                            {isEventBot
+                              ? <Bot size={10} className="text-[#f0b90b] flex-shrink-0" />
+                              : <Check size={10} className="text-[#0ecb81] flex-shrink-0" />
+                            }
+                            <span className={isEventBot ? 'text-[#f0b90b] font-medium' : 'text-[#848e9c]'}>{f}</span>
+                          </li>
+                        )
+                      })}
+                    </ul>
+
+                    <button
+                      onClick={() => p.price === -1 ? navigate('/login') : navigate('/subscribe')}
+                      className={[
+                        'w-full py-2.5 rounded-lg text-xs font-bold transition-all',
+                        p.highlight
+                          ? 'bg-[#f0b90b] hover:bg-[#d4a30a] text-black'
+                          : 'bg-[#f0b90b]/8 hover:bg-[#f0b90b]/15 text-[#f0b90b] border border-[#f0b90b]/20',
+                      ].join(' ')}>
+                      {p.cta}
+                    </button>
                   </div>
-                )}
-                <div className="p-5 flex flex-col flex-1">
-                  <h3 className={`font-bold text-base mb-1 ${p.highlight ? 'text-[#f0b90b]' : 'text-[#eaecef]'}`}>{p.name}</h3>
-                  <div className="flex items-end gap-1 mb-4">
-                    {p.price === -1 ? (
-                      <span className="text-xl font-extrabold font-mono text-[#eaecef]">Custom</span>
-                    ) : p.price === 0 ? (
-                      <span className="text-2xl font-extrabold font-mono text-[#eaecef]">Free</span>
-                    ) : (
-                      <>
-                        <span className="text-2xl font-extrabold font-mono text-[#eaecef]">${p.price.toLocaleString()}</span>
-                        <span className="text-xs mb-1 text-[#848e9c]">{p.period}</span>
-                      </>
-                    )}
-                  </div>
-                  <ul className="space-y-2 flex-1 mb-4">
-                    {p.features.map(f => (
-                      <li key={f} className="flex items-center gap-2 text-xs">
-                        <Check size={10} className="text-[#0ecb81] flex-shrink-0" />
-                        <span className="text-[#848e9c]">{f}</span>
-                      </li>
-                    ))}
-                  </ul>
-                  <button
-                    onClick={() => p.price === -1 ? navigate('/login') : navigate('/subscribe')}
-                    className={[
-                      'w-full py-2.5 rounded-lg text-xs font-bold transition-all',
-                      p.highlight
-                        ? 'bg-[#f0b90b] hover:bg-[#d4a30a] text-black'
-                        : 'bg-[#f0b90b]/8 hover:bg-[#f0b90b]/15 text-[#f0b90b] border border-[#f0b90b]/20',
-                    ].join(' ')}>
-                    {p.cta}
-                  </button>
                 </div>
-              </div>
-            ))}
+              )
+            })}
+          </div>
+
+          {/* EventBot callout */}
+          <div className="mt-6 flex items-start gap-3 bg-[#f0b90b]/6 border border-[#f0b90b]/20 rounded-xl p-4">
+            <div className="w-8 h-8 rounded-lg bg-[#f0b90b]/15 flex items-center justify-center flex-shrink-0 mt-0.5">
+              <Bot size={14} className="text-[#f0b90b]" />
+            </div>
+            <div>
+              <p className="text-sm font-semibold text-[#eaecef] mb-0.5">What is an EventBot?</p>
+              <p className="text-xs text-[#848e9c] leading-relaxed">
+                EventBots are AI-powered bots that monitor real-world financial events — earnings reports, Fed decisions, macro announcements — and execute trades automatically when they occur. Your plan determines how many concurrent EventBots you can deploy.
+              </p>
+            </div>
           </div>
         </div>
       </section>
