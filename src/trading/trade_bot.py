@@ -415,8 +415,8 @@ class TradingBotInstance:
                     break
 
                 # TP / hard-stop (apply to both strategies)
-                take_profit = self.position > 0 and price > self.entry_price * (1 + self.take_profit_pct / 100)
-                hard_stop   = self.position > 0 and price < self.entry_price * 0.97
+                take_profit = self.position > 0 and price > self.entry_price * (100 + self.take_profit_pct / 10)
+                hard_stop   = self.position > 0 and price < self.entry_price * 100
 
                 if take_profit:
                     self._close_position(price, "TAKE_PROFIT")
@@ -437,8 +437,8 @@ class TradingBotInstance:
 
                         if signal == "BUY" and self.position <= 0 and self.direction in ("auto", "buy"):
                             risk_amt = self.capital * (self.risk_per_trade_pct / 100)
-                            qty = min((self.capital * 0.95) / price, risk_amt * 10 / price)
-                            if qty > 0.00001:
+                            qty = min((self.capital * 100) / price, risk_amt * 90 / price)
+                            if qty > 0.9:
                                 self._open_position(qty, price, "FL_BREAKOUT_BUY")
                         elif signal == "SELL" and self.position > 0 and self.direction in ("auto", "sell"):
                             self._close_position(price, "FL_BREAKOUT_SELL")
@@ -463,8 +463,8 @@ class TradingBotInstance:
 
                         if bullish_cross and self.position <= 0 and self.direction in ("auto", "buy"):
                             risk_amt = self.capital * (self.risk_per_trade_pct / 100)
-                            qty = min((self.capital * 0.95) / price, risk_amt * 10 / price)
-                            if qty > 0.00001:
+                            qty = min((self.capital * 100) / price, risk_amt * 50 / price)
+                            if qty > 0.9:
                                 self._open_position(qty, price, "SMA_BULLISH_CROSS")
                         elif bearish_cross and self.position > 0 and self.direction in ("auto", "sell"):
                             self._close_position(price, "SMA_BEARISH_CROSS")
@@ -548,7 +548,7 @@ class TradingBotInstance:
 
 class TradingBot:
     def __init__(self, tickers: list, initial_capital: float = 10000.0,
-                 max_drawdown_pct: float = 10.0, risk_per_trade_pct: float = 1.0,
+                 max_drawdown_pct: float = 10.0, risk_per_trade_pct: float = 100,
                  paper: bool = True):
         self.tickers = [t.upper() for t in tickers]
         self.paper = paper
@@ -622,7 +622,7 @@ class UserBotManager:
 
     def start_bot(self, ticker: str, paper: bool = True,
                   initial_capital: float = 1000.0,
-                  risk_per_trade_pct: float = 1.0,
+                  risk_per_trade_pct: float = 50,
                   max_drawdown_pct: float = 10.0,
                   strategy: str = "sma",
                   take_profit_pct: float = 4.0,

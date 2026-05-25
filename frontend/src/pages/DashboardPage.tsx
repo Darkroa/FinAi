@@ -160,215 +160,233 @@ export default function DashboardPage() {
 
   return (
     <div className="space-y-4">
-      {/* Hero balance header */}
+    {/* Hero Balance Header */}
+    <div
+      className="relative rounded-2xl overflow-hidden"
+      style={{
+        background: 'linear-gradient(135deg, #1a1105 0%, #2a1f00 40%, #1e2329 100%)',
+        borderBottom: '1px solid #2b3139',
+      }}
+    >
       <div
-        className="relative rounded-2xl overflow-hidden"
+        className="absolute inset-0 pointer-events-none"
         style={{
-          background: 'linear-gradient(135deg, #1a1105 0%, #2a1f00 40%, #1e2329 100%)',
-          borderBottom: '1px solid #2b3139',
+          backgroundImage: 'radial-gradient(ellipse at top left, rgba(240,185,11,0.12) 0%, transparent 60%)',
         }}
-      >
-        <div
-          className="absolute inset-0 pointer-events-none"
-          style={{
-            backgroundImage: 'radial-gradient(ellipse at top left, rgba(240,185,11,0.12) 0%, transparent 60%)',
-          }}
-        />
+      />
 
-        <div className="relative p-5">
-          <div className="flex items-center justify-between mb-5">
-            <div>
-              <p className="text-xs text-[#848e9c] font-medium">{getGreeting()},</p>
-              <p className="text-base font-bold text-[#eaecef] leading-tight">{firstName}</p>
+      <div className="relative p-5">
+        {/* Header with greeting and eye icon */}
+        <div className="flex items-center justify-between mb-5">
+          <div>
+            <p className="text-xs text-[#848e9c] font-medium">{getGreeting()},</p>
+            <p className="text-base font-bold text-[#eaecef] leading-tight">{firstName}</p>
+          </div>
+
+          <button
+            onClick={() => setHideBalance((h) => !h)}
+            className="w-8 h-8 rounded-full bg-[#0b0e11]/60 flex items-center justify-center text-[#848e9c] hover:text-[#eaecef] transition border border-[#2b3139]/60"
+          >
+            {hideBalance ? <EyeOff size={13} /> : <Eye size={13} />}
+          </button>
+        </div>
+
+        {/* Balance Section */}
+        <div className="mb-2">
+          <p className="text-[8px] font-semibold uppercase tracking-widest text-[#848e9c] mb-2">
+            Total Balance
+          </p>
+          <p className="text-3xl font-extrabold font-mono text-[#eaecef] leading-none tracking-tight">
+            {hideBalance ? '••••••' : `$${balance.toLocaleString('en-US', { minimumFractionDigits: 2 })}`}
+          </p>
+        </div>
+
+        {/* BTC/ETH Toggle + Rate Info */}
+        <div className="flex items-center gap-3 mt-2 mb-5">
+          <div className="flex items-center gap-1 bg-[#0b0e11]/50 rounded-lg p-1">
+            {(['BTC', 'ETH'] as const).map((c) => (
+              <button
+                key={c}
+                onClick={() => setBtcToggle(c)}
+                className={`px-2.5 py-0.5 rounded text-[10px] font-bold transition-all ${
+                  btcToggle === c
+                    ? 'bg-[#f0b90b] text-black'
+                    : 'text-[#848e9c] hover:text-[#eaecef]'
+                }`}
+              >
+                {c}
+              </button>
+            ))}
+          </div>
+
+          {priceLoading ? (
+            <div className="h-3 w-24 bg-[#2b3139] rounded animate-pulse" />
+          ) : (
+            <div className="flex items-center gap-2">
+              <span className="text-xs text-[#848e9c] font-mono">
+                {hideBalance ? '••••••' : btcEquiv} {btcToggle}
+              </span>
+              <span className="text-[10px] text-[#848e9c]">·</span>
+              <span className="text-[10px] text-[#848e9c]">
+                Rate: 1 {btcToggle} = ${displayPrice.toLocaleString('en-US', { maximumFractionDigits: 0 })}
+              </span>
+              <button onClick={fetchData} className="text-[#848e9c] hover:text-[#f0b90b] transition">
+                <RefreshCw size={10} />
+              </button>
             </div>
-            <button
-              onClick={() => setHideBalance((h) => !h)}
-              className="w-8 h-8 rounded-full bg-[#0b0e11]/60 flex items-center justify-center text-[#848e9c] hover:text-[#eaecef] transition border border-[#2b3139]/60"
-            >
-              {hideBalance ? <EyeOff size={13} /> : <Eye size={13} />}
-            </button>
-          </div>
+          )}
+        </div>
 
-          <div className="mb-1">
-            <p className="text-[10px] font-semibold uppercase tracking-widest text-[#848e9c] mb-1">Total Balance</p>
-            <p className="text-4xl font-extrabold font-mono text-[#eaecef] leading-none tracking-tight">
-              {hideBalance ? '••••••' : `$${balance.toLocaleString('en-US', { minimumFractionDigits: 2 })}`}
-            </p>
-          </div>
-
-          <div className="flex items-center gap-3 mt-2 mb-5">
-            <div className="flex items-center gap-1 bg-[#0b0e11]/50 rounded-lg p-1">
-              {(['BTC', 'ETH'] as const).map((c) => (
-                <button
-                  key={c}
-                  onClick={() => setBtcToggle(c)}
-                  className={`px-2.5 py-0.5 rounded text-[10px] font-bold transition-all ${
-                    btcToggle === c
-                      ? 'bg-[#f0b90b] text-black'
-                      : 'text-[#848e9c] hover:text-[#eaecef]'
-                  }`}
-                >
-                  {c}
-                </button>
-              ))}
-            </div>
-
-            {priceLoading ? (
-              <div className="h-3 w-24 bg-[#2b3139] rounded animate-pulse" />
-            ) : (
-              <div className="flex items-center gap-2">
-                <span className="text-xs text-[#848e9c] font-mono">
-                  {hideBalance ? '••••••' : btcEquiv} {btcToggle}
-                </span>
-                <span className="text-[10px] text-[#848e9c]">·</span>
-                <span className="text-[10px] text-[#848e9c]">
-                  Rate: 1 {btcToggle} = ${displayPrice.toLocaleString('en-US', { maximumFractionDigits: 0 })}
-                </span>
-                <button onClick={fetchData} className="text-[#848e9c] hover:text-[#f0b90b] transition">
-                  <RefreshCw size={10} />
-                </button>
-              </div>
-            )}
-          </div>
-
+        {/* Action Buttons - Deposit, Withdraw, Send */}
+        <div className="grid grid-cols-3 gap-2 mt-5">
+          <button
+            onClick={() => navigate('/app/wallet?tab=deposit')}
+            className="bg-[#0ecb81]/10 hover:bg-[#0ecb81]/20 text-[#0ecb81] py-2.5 rounded-xl text-xs font-semibold transition"
+          >
+            Deposit
+          </button>
+          <button
+            onClick={() => navigate('/app/wallet?tab=withdraw')}
+            className="bg-[#f6465d]/10 hover:bg-[#f6465d]/20 text-[#f6465d] py-2.5 rounded-xl text-xs font-semibold transition"
+          >
+            Withdraw
+          </button>
+          <button
+            onClick={() => navigate('/app/wallet?tab=p2p')}
+            className="bg-[#f0b90b]/10 hover:bg-[#f0b90b]/20 text-[#f0b90b] py-2.5 rounded-xl text-xs font-semibold transition"
+          >
+            Send
+          </button>
+        </div>
+      </div>
+    </div>
       
-        </div>
-      </div>
-
-      {/* P&L Row */}
+      {/* Small P&L Cards */}
       <div className="grid grid-cols-2 gap-3">
-        <div className="flex items-center justify-between bg-[#161a1e] border border-[#2b3139] rounded-xl px-3 py-3">
-          <div className="flex items-center gap-1.5">
-            {todayPnl >= 0 ? (
-              <TrendingUp size={13} className="text-[#0ecb81]" />
-            ) : (
-              <TrendingDown size={13} className="text-[#f6465d]" />
-            )}
-            <span className="text-[10px] text-[#848e9c] leading-tight">Today<br />P&L</span>
+        
+        <div className="bg-[#161a1e] border border-[#2b3139] rounded-xl px-4 py-3">
+          <div className="flex items-center gap-1">
+            {todayPnl >= 0 ? <TrendingUp size={13} className="text-[#0ecb81]" /> : <TrendingDown size={13} className="text-[#f6465d]" />}
+            <span className="text-[10px] text-[#848e9c]">Today's P&L</span>
           </div>
-          <div className="text-right">
-            <p className={`text-sm font-bold font-mono ${todayPnl >= 0 ? 'text-[#0ecb81]' : 'text-[#f6465d]'}`}>
-              {todayPnl >= 0 ? '+' : ''}${Math.abs(todayPnl).toFixed(2)}
-            </p>
-            <p className={`text-[10px] font-medium ${todayPnl >= 0 ? 'text-[#0ecb81]' : 'text-[#f6465d]'}`}>
-              {todayPct >= 0 ? '+' : ''}{todayPct.toFixed(2)}%
-            </p>
-          </div>
+          <p className={`text-lg font-bold font-mono ${todayPnl >= 0 ? 'text-[#0ecb81]' : 'text-[#f6465d]'}`}>
+            {todayPnl >= 0 ? '+' : ''}${todayPnl.toFixed(2)}
+          </p>
         </div>
 
-        <div className="flex items-center justify-between bg-[#161a1e] border border-[#2b3139] rounded-xl px-3 py-3">
+        <div className="bg-[#161a1e] border border-[#2b3139] rounded-xl px-3 py-2">
           <div className="flex items-center gap-1.5">
-            <DollarSign size={13} className={unrealizedPnl >= 0 ? 'text-[#f0b90b]' : 'text-[#848e9c]'} />
-            <span className="text-[10px] text-[#848e9c] leading-tight">Unrealized<br />P&L</span>
+            <DollarSign size={2} className="text-[#f0b90b]" />
+            <span className="text-[8px] text-[#848e9c]">Unrealized P&L</span>
           </div>
-          <div className="text-right">
-            <p className={`text-sm font-bold font-mono ${unrealizedPnl >= 0 ? 'text-[#0ecb81]' : 'text-[#f6465d]'}`}>
-              {unrealizedPnl >= 0 ? '+' : ''}${Math.abs(unrealizedPnl).toFixed(2)}
-            </p>
-            <p className="text-[10px] text-[#848e9c]">{openPositions} open</p>
-          </div>
+          <p className={`text-lg font-bold font-mono ${unrealizedPnl >= 0 ? 'text-[#0ecb81]' : 'text-[#f6465d]'}`}>
+            {unrealizedPnl >= 0 ? '+' : ''}${unrealizedPnl.toFixed(2)}
+          </p>
+          <p className="text-[8px] text-[#848e9c]">{openPositions} open</p>
         </div>
       </div>
-
+      
+      {/* Open Positions - Separate Box */}
+      {openPositions > 0 && (
+        <div className="bg-[#161a1e] border border-[#f0b90b]/20 rounded-xl px-4 py-3">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <div className="w-6 h-6 rounded-full bg-[#f0b90b]/10 flex items-center justify-center">
+                <BarChart2 size={11} className="text-[#f0b90b]" />
+              </div>
+              <div>
+                <p className="text-xs font-semibold text-[#eaecef]">
+                  {openPositions} Open Position{openPositions !== 1 ? 's' : ''}
+                </p>
+                <p className="text-[10px] text-[#848e9c]">Unrealized P&L vs current market</p>
+              </div>
+            </div>
+            <div className="text-right">
+              <p
+                className={`text-sm font-bold font-mono ${
+                  unrealizedPnl >= 0 ? 'text-[#0ecb81]' : 'text-[#f6465d]'
+                }`}
+              >
+                {unrealizedPnl >= 0 ? '+' : ''}${Math.abs(unrealizedPnl).toFixed(2).replace(/\B(?=(\d{3})+(?!\d))/g, ",")}
+              </p>
+              <button
+                onClick={() => navigate('/app/trade')}
+                className="text-[10px] text-[#f0b90b] hover:text-[#eaecef] transition flex items-center gap-0.5 ml-auto"
+              >
+                View <ArrowRight size={8} />
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+     
       {/* Activity Center */}
       <div>
         <p className="text-xs font-bold text-[#eaecef] mb-3">Activity Center</p>
-        <div className="grid grid-cols-2 gap-3">
-          {/* Live Price Card */}
-          <div className="bg-[#161a1e] border border-[#2b3139] rounded-xl p-4">
-            <p className="text-[10px] font-semibold uppercase tracking-widest text-[#f0b90b] mb-2">LIVE PRICE</p>
-            <div className="flex items-center gap-2 mb-2">
-              <div className="w-7 h-7 rounded-full bg-[#f0b90b]/10 flex items-center justify-center flex-shrink-0">
-                <Bitcoin size={14} className="text-[#f0b90b]" />
-              </div>
-              <span className="text-xs font-semibold text-[#eaecef]">{btcToggle} Trading</span>
-            </div>
-            {priceLoading ? (
-              <div className="h-5 bg-[#2b3139] rounded animate-pulse mb-1" />
-            ) : (
-              <p className="text-lg font-bold font-mono text-[#eaecef] leading-tight">
-                ${displayPrice.toLocaleString('en-US', { maximumFractionDigits: 0 })}
-              </p>
-            )}
-            <p
-              className={`text-xs flex items-center gap-0.5 mt-0.5 font-semibold ${
-                displayChange >= 0 ? 'text-[#0ecb81]' : 'text-[#f6465d]'
-              }`}
-            >
-              {displayChange >= 0 ? <TrendingUp size={11} /> : <TrendingDown size={11} />}
-              {displayChange >= 0 ? '+' : ''}{displayChange.toFixed(2)}% 24h
-            </p>
-          </div>
+        <div className="grid grid-cols-3 gap-2">
+          <button onClick={() => navigate('/app/markets?tab=news')} className="bg-[#161a1e] border border-[#2b3139] rounded-xl p-6 flex flex-col items-center justify-center">
+            <Newspaper size={28} className="text-[#f0b90b] mb-2" />
+            <span className="text-sm font-semibold">News</span>
+          </button>
 
-          {/* Bot Status Card */}
-          <div className="bg-[#161a1e] border border-[#2b3139] rounded-xl p-4">
-            <p className="text-[10px] font-semibold uppercase tracking-widest text-[#f0b90b] mb-2">AI BOT</p>
-            <div className="flex items-center gap-2 mb-2">
-              <div
-                className={`w-7 h-7 rounded-full flex items-center justify-center flex-shrink-0 ${
-                  botRunning ? 'bg-[#0ecb81]/10' : 'bg-[#2b3139]'
-                }`}
-              >
-                <Bot size={14} className={botRunning ? 'text-[#0ecb81]' : 'text-[#848e9c]'} />
-              </div>
-              <span className="text-xs font-semibold text-[#eaecef]">FinAi Bot</span>
+          <button onClick={() => navigate('/app/bots')} className="bg-[#161a1e] border border-[#2b3139] rounded-xl p-6 flex flex-col items-center justify-center">
+            <div className={`w-14 h-14 rounded-full flex items-center justify-center mb-3 ${botRunning ? 'bg-[#0ecb81]/10' : 'bg-[#2b3139]'}`}>
+              <Bot size={28} className={botRunning ? 'text-[#0ecb81]' : 'text-[#848e9c]'} />
             </div>
-            <p className="text-lg font-bold text-[#eaecef] leading-tight">
-              {botRunning ? 'Live' : 'Offline'}
-            </p>
-            <p className={`text-xs font-semibold mt-0.5 ${botRunning ? 'text-[#0ecb81]' : 'text-[#848e9c]'}`}>
-              {botRunning ? 'Trading active' : 'Start in Bots'}
-            </p>
-          </div>
+            <span className="text-sm font-semibold">AI Bot</span>
+            <span className={`text-xs mt-1 ${botRunning ? 'text-[#0ecb81]' : 'text-[#848e9c]'}`}>{botRunning ? 'Live' : 'Offline'}</span>
+          </button>
+          
+          <button onClick={() => navigate('/app/trade')} className="bg-[#161a1e] border border-[#2b3139] rounded-xl p-6 flex flex-col items-center justify-center">
+            <Activity size={28} className="text-[#eaecef] mb-2" />
+            <span className="text-sm font-semibold">Trade</span>
+          </button>
         </div>
       </div>
+
 
       {/* Quick Actions */}
       <div>
         <p className="text-xs font-bold text-[#eaecef] mb-3">Quick Actions</p>
-        <div className="grid grid-cols-3 gap-2">
+        <div className="grid grid-cols-4 gap-2">
           {[
-            { label: 'Deposit', icon: ArrowDownLeft, path: '/app/wallet?tab=deposit', color: 'text-[#0ecb81]', bg: 'bg-[#0ecb81]/10' },
-            { label: 'Withdraw', icon: ArrowUpRight, path: '/app/wallet?tab=withdraw', color: 'text-[#f6465d]', bg: 'bg-[#f6465d]/10' },
-            { label: 'Send', icon: Send, path: '/app/wallet?tab=p2p', color: 'text-[#f0b90b]', bg: 'bg-[#f0b90b]/10' },
-            { label: 'P2P', icon: Users, path: '/app/wallet?tab=p2p', color: 'text-[#848e9c]', bg: 'bg-[#2b3139]' },
-            { label: 'Rent VPS', icon: Server, path: '/app/wallet?tab=vps', color: 'text-[#a78bfa]', bg: 'bg-[#a78bfa]/10' },
-            { label: 'Buy Asset', icon: Package, path: '/app/wallet?tab=asset', color: 'text-[#38bdf8]', bg: 'bg-[#38bdf8]/10' },
-          ].map(({ label, icon: Icon, path, color, bg }) => (
+            { label: 'Rent VPS', icon: Server, path: '/app/wallet?tab=vps' },
+            { label: 'Buy Asset', icon: Package, path: '/app/wallet?tab=asset' },
+            { label: 'Send', icon: Send, path: '/app/wallet?tab=p2p' },
+            { label: 'P2P', icon: Users, path: '/app/wallet?tab=p2p' },
+          ].map(({ label, icon: Icon, path }) => (
             <button
               key={label}
               onClick={() => navigate(path)}
-              className="flex flex-col items-center gap-2 bg-[#161a1e] border border-[#2b3139] rounded-xl py-3.5 hover:border-[#3c4451] hover:bg-[#1e2329] transition-all"
+              className="bg-[#161a1e] border border-[#2b3139] rounded-xl py-4 flex flex-col items-center justify-center gap-1 hover:bg-[#1e2329]"
             >
-              <div className={`w-8 h-8 rounded-full ${bg} flex items-center justify-center`}>
-                <Icon size={14} className={color} />
-              </div>
-              <span className="text-[10px] font-semibold text-[#848e9c]">{label}</span>
+              <Icon size={20} className="text-[#f0b90b]" />
+              <span className="text-[10px] text-[#848e9c] text-center">{label}</span>
             </button>
           ))}
         </div>
       </div>
-
-      {/* Secondary Nav */}
-      <div className="grid grid-cols-3 gap-2.5">
-        {[
-          { label: 'News', icon: Newspaper, path: '/app/markets?tab=news', color: 'text-[#f0b90b]', bg: 'bg-[#f0b90b]/10' },
-          { label: 'Bots', icon: Zap, path: '/app/bots', color: 'text-[#0ecb81]', bg: 'bg-[#0ecb81]/10' },
-          { label: 'Trade', icon: Activity, path: '/app/trade', color: 'text-[#848e9c]', bg: 'bg-[#2b3139]' },
-        ].map(({ label, icon: Icon, path, color, bg }) => (
-          <button
-            key={label}
-            onClick={() => navigate(path)}
-            className="flex flex-col items-center gap-2 bg-[#161a1e] border border-[#2b3139] rounded-xl py-4 hover:border-[#3c4451] hover:bg-[#1e2329] transition-all"
-          >
-            <div className={`w-9 h-9 rounded-full ${bg} flex items-center justify-center`}>
-              <Icon size={16} className={color} />
-            </div>
-            <span className="text-[11px] font-semibold text-[#848e9c]">{label}</span>
-          </button>
-        ))}
-      </div>
-
+      {/* ─── LIVE MARKET SNAPSHOT ─── */}
+      <section className="py-12 sm:py-16 bg-[#0d1014]">
+        <div className="max-w-5xl mx-auto px-4 sm:px-6">
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+            {tickerItems.slice(0, 4).map(t => (
+              <div key={t.symbol}
+                className="bg-[#161a1e] border border-[#2b3139] hover:border-[#f0b90b]/25 rounded-xl p-4 transition-all">
+                <div className="flex items-center justify-between mb-2">
+                  <p className="text-xs text-[#848e9c] font-medium">{t.symbol}</p>
+                  {t.live && <span className="w-1.5 h-1.5 rounded-full bg-[#0ecb81] animate-pulse" />}
+                </div>
+                <p className="text-base font-bold font-mono text-[#eaecef]">{t.price}</p>
+                <p className={`text-xs font-semibold mt-1 ${t.up ? 'text-[#0ecb81]' : 'text-[#f6465d]'}`}>
+                  {t.change} <span className="text-[#4a5568] font-normal">24h</span>
+                </p>
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+      
       {/* AI Events */}
       <div>
         <div className="flex items-center justify-between mb-3">
@@ -401,40 +419,6 @@ export default function DashboardPage() {
           )}
         </div>
       </div>
-
-      {/* Open Positions */}
-      {openPositions > 0 && (
-        <div className="bg-[#161a1e] border border-[#f0b90b]/20 rounded-xl px-4 py-3">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <div className="w-6 h-6 rounded-full bg-[#f0b90b]/10 flex items-center justify-center">
-                <BarChart2 size={11} className="text-[#f0b90b]" />
-              </div>
-              <div>
-                <p className="text-xs font-semibold text-[#eaecef]">
-                  {openPositions} Open Position{openPositions !== 1 ? 's' : ''}
-                </p>
-                <p className="text-[10px] text-[#848e9c]">Unrealized P&L vs current market</p>
-              </div>
-            </div>
-            <div className="text-right">
-              <p
-                className={`text-sm font-bold font-mono ${
-                  unrealizedPnl >= 0 ? 'text-[#0ecb81]' : 'text-[#f6465d]'
-                }`}
-              >
-                {unrealizedPnl >= 0 ? '+' : ''}${Math.abs(unrealizedPnl).toFixed(2)}
-              </p>
-              <button
-                onClick={() => navigate('/app/trade')}
-                className="text-[10px] text-[#f0b90b] hover:text-[#eaecef] transition flex items-center gap-0.5 ml-auto"
-              >
-                View <ArrowRight size={8} />
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 }

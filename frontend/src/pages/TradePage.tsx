@@ -737,6 +737,39 @@ export default function TradePage() {
               </button>
             </form>
           </div>
+          {/* Open Positions - Separate Box */}
+          {openPositions > 0 && (
+            <div className="bg-[#161a1e] border border-[#f0b90b]/20 rounded-xl px-4 py-3">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <div className="w-6 h-6 rounded-full bg-[#f0b90b]/10 flex items-center justify-center">
+                    <BarChart2 size={11} className="text-[#f0b90b]" />
+                  </div>
+                  <div>
+                    <p className="text-xs font-semibold text-[#eaecef]">
+                      {openPositions} Open Position{openPositions !== 1 ? 's' : ''}
+                    </p>
+                    <p className="text-[10px] text-[#848e9c]">Unrealized P&L vs current market</p>
+                  </div>
+                </div>
+                <div className="text-right">
+                  <p
+                    className={`text-sm font-bold font-mono ${
+                      unrealizedPnl >= 0 ? 'text-[#0ecb81]' : 'text-[#f6465d]'
+                    }`}
+                  >
+                    {unrealizedPnl >= 0 ? '+' : ''}${Math.abs(unrealizedPnl).toFixed(2).replace(/\B(?=(\d{3})+(?!\d))/g, ",")}
+                  </p>
+                  <button
+                    onClick={() => navigate('/app/trade')}
+                    className="text-[10px] text-[#f0b90b] hover:text-[#eaecef] transition flex items-center gap-0.5 ml-auto"
+                  >
+                    View <ArrowRight size={8} />
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
 
           {/* Order book */}
           <div className="bg-[#161a1e] border border-[#2b3139] rounded-xl p-4">

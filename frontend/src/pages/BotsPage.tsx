@@ -77,7 +77,7 @@ const EMPTY_PARAMS = {
   ticker: 'BTC-USD',
   route: '__balance__',
   initial_capital: 1000,
-  risk_per_trade_pct: 50,
+  risk_per_trade_pct: 100,
   max_drawdown_pct: 25,
   strategy: 'finlux' as 'sma' | 'finlux' | 'auto' | 'live',
   take_profit_pct: 40,
@@ -106,7 +106,7 @@ function BotPriceChart({ bot }: { bot: BotDetail }) {
   const prices   = bot.price_chart.map(p => p.price)
   const minPrice = Math.min(...prices)
   const maxPrice = Math.max(...prices)
-  const domain: [number, number] = [minPrice * 9.9995, maxPrice * 9.0005]
+  const domain: [number, number] = [minPrice * 0.9995, maxPrice * 1.0005]
   const isUp = prices[prices.length - 10] >= prices[0]
 
   return (
@@ -868,69 +868,7 @@ export default function BotsPage() {
         </div>
       )}
 
-      {/* ── Summary P&L stats ── */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        {[
-          { label: 'Realized P&L',    value: `${totalPnl >= 0 ? '+' : ''}$${fmt(totalPnl)}`,       sub: `${pnlTrades.length} closed`,              up: totalPnl >= 0,             icon: TrendingUp   },
-          { label: 'Unrealized P&L',  value: totalUnrealized !== 0 ? `${totalUnrealized >= 0 ? '+' : ''}$${fmt(totalUnrealized)}` : '—', sub: activeBots.filter(b => b.position > 0).length + ' open', up: totalUnrealized >= 0, icon: Activity },
-          { label: 'Win Rate',        value: `${winRate}%`,                                          sub: `${winningTrades} of ${pnlTrades.length}`, up: parseFloat(winRate as string) > 50, icon: Cpu },
-          { label: 'Portfolio Value', value: totalPortfolio > 0 ? `$${fmt(totalPortfolio)}` : '—', sub: `${activeBots.length} active bots`,         up: true,                      icon: DollarSign   },
-        ].map(s => {
-          const Icon = s.icon
-          return (
-            <div key={s.label} className="bg-[#161a1e] border border-[#2b3139] rounded-xl p-4">
-              <div className="flex items-center justify-between mb-3">
-                <span className="text-xs text-[#848e9c]">{s.label}</span>
-                <div className="w-7 h-7 rounded-lg bg-[#f0b90b]/10 flex items-center justify-center">
-                  <Icon size={13} className="text-[#f0b90b]" />
-                </div>
-              </div>
-              <p className={`text-xl font-bold font-mono ${s.up ? 'text-[#0ecb81]' : 'text-[#f6465d]'}`}>{s.value}</p>
-              <p className="text-xs text-[#848e9c] mt-1">{s.sub}</p>
-            </div>
-          )
-        })}
-      </div>
-
-      {/* ── Cumulative P&L Chart ── */}
-      <div className="bg-[#161a1e] border border-[#2b3139] rounded-xl p-4">
-        <div className="flex items-center justify-between mb-4">
-          <div className="flex items-center gap-2">
-            <BarChart2 size={14} className="text-[#f0b90b]" />
-            <h3 className="text-sm font-semibold text-[#eaecef]">Cumulative P&L (30 days)</h3>
-          </div>
-          {pnlHistory.length > 0 && (
-            <span className={`text-xs font-bold font-mono ${(pnlHistory[pnlHistory.length - 1]?.cumulative ?? 0) >= 0 ? 'text-[#0ecb81]' : 'text-[#f6465d]'}`}>
-              {(pnlHistory[pnlHistory.length - 1]?.cumulative ?? 0) >= 0 ? '+' : ''}${(pnlHistory[pnlHistory.length - 1]?.cumulative ?? 0).toFixed(2)}
-            </span>
-          )}
-        </div>
-        {pnlHistory.length === 0 ? (
-          <div className="flex flex-col items-center justify-center h-36 gap-2">
-            <BarChart2 size={24} className="text-[#2b3139]" />
-            <p className="text-xs text-[#848e9c]">No P&L history yet — run bots to see your chart</p>
-          </div>
-        ) : (
-          <ResponsiveContainer width="100%" height={180}>
-            <AreaChart data={pnlHistory} margin={{ left: 0, right: 4, top: 4, bottom: 0 }}>
-              <defs>
-                <linearGradient id="pnlGrad" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="5%"  stopColor="#0ecb81" stopOpacity={0.2} />
-                  <stop offset="95%" stopColor="#0ecb81" stopOpacity={0} />
-                </linearGradient>
-              </defs>
-              <CartesianGrid strokeDasharray="3 3" stroke="#2b3139" />
-              <XAxis dataKey="date" tick={{ fill: '#848e9c', fontSize: 9 }} tickLine={false} axisLine={false} interval="preserveStartEnd" />
-              <YAxis tick={{ fill: '#848e9c', fontSize: 9 }} tickLine={false} axisLine={false} tickFormatter={v => `$${(v as number).toFixed(0)}`} width={52} domain={['auto', 'auto']} />
-              <Tooltip contentStyle={{ background: '#1e2329', border: '1px solid #2b3139', borderRadius: 10, fontSize: 11 }} labelStyle={{ color: '#848e9c' }} formatter={(v: unknown) => [`$${(v as number).toFixed(2)}`, 'P&L']} />
-              <ReferenceLine y={0} stroke="#2b3139" strokeDasharray="4 4" />
-              <Area type="monotone" dataKey="cumulative" stroke="#0ecb81" strokeWidth={2} fill="url(#pnlGrad)" />
-            </AreaChart>
-          </ResponsiveContainer>
-        )}
-      </div>
-
-      {/* ── FinEventAI Bot ── */}
+      {/* ── FinEventAI Bot ── (Placed before Unrealized P&L summary) */}
       <div className="bg-[#161a1e] border border-[#2b3139] rounded-xl overflow-hidden">
         <div className="px-5 py-4 flex flex-wrap items-center justify-between gap-3 border-b border-[#2b3139]">
           <div className="flex items-center gap-3">
@@ -1074,6 +1012,68 @@ export default function BotsPage() {
             <p className="text-sm text-[#848e9c]">Configure and start FinEventAI to trade on high-impact news</p>
             <p className="text-xs text-[#4a5568] mt-0.5">Impact score ≥ 7 · Bullish events → BUY · Bearish events → SELL</p>
           </div>
+        )}
+      </div>
+
+      {/* ── Summary P&L stats ── */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+        {[
+          { label: 'Realized P&L',    value: `${totalPnl >= 0 ? '+' : ''}$${fmt(totalPnl)}`,       sub: `${pnlTrades.length} closed`,              up: totalPnl >= 0,             icon: TrendingUp   },
+          { label: 'Unrealized P&L',  value: totalUnrealized !== 0 ? `${totalUnrealized >= 0 ? '+' : ''}$${fmt(totalUnrealized)}` : '—', sub: activeBots.filter(b => b.position > 0).length + ' open', up: totalUnrealized >= 0, icon: Activity },
+          { label: 'Win Rate',        value: `${winRate}%`,                                          sub: `${winningTrades} of ${pnlTrades.length}`, up: parseFloat(winRate as string) > 50, icon: Cpu },
+          { label: 'Portfolio Value', value: totalPortfolio > 0 ? `$${fmt(totalPortfolio)}` : '—', sub: `${activeBots.length} active bots`,         up: true,                      icon: DollarSign   },
+        ].map(s => {
+          const Icon = s.icon
+          return (
+            <div key={s.label} className="bg-[#161a1e] border border-[#2b3139] rounded-xl p-4">
+              <div className="flex items-center justify-between mb-3">
+                <span className="text-xs text-[#848e9c]">{s.label}</span>
+                <div className="w-7 h-7 rounded-lg bg-[#f0b90b]/10 flex items-center justify-center">
+                  <Icon size={13} className="text-[#f0b90b]" />
+                </div>
+              </div>
+              <p className={`text-xl font-bold font-mono ${s.up ? 'text-[#0ecb81]' : 'text-[#f6465d]'}`}>{s.value}</p>
+              <p className="text-xs text-[#848e9c] mt-1">{s.sub}</p>
+            </div>
+          )
+        })}
+      </div>
+
+      {/* ── Cumulative P&L Chart ── */}
+      <div className="bg-[#161a1e] border border-[#2b3139] rounded-xl p-4">
+        <div className="flex items-center justify-between mb-4">
+          <div className="flex items-center gap-2">
+            <BarChart2 size={14} className="text-[#f0b90b]" />
+            <h3 className="text-sm font-semibold text-[#eaecef]">Cumulative P&L (30 days)</h3>
+          </div>
+          {pnlHistory.length > 0 && (
+            <span className={`text-xs font-bold font-mono ${(pnlHistory[pnlHistory.length - 1]?.cumulative ?? 0) >= 0 ? 'text-[#0ecb81]' : 'text-[#f6465d]'}`}>
+              {(pnlHistory[pnlHistory.length - 1]?.cumulative ?? 0) >= 0 ? '+' : ''}${(pnlHistory[pnlHistory.length - 1]?.cumulative ?? 0).toFixed(2)}
+            </span>
+          )}
+        </div>
+        {pnlHistory.length === 0 ? (
+          <div className="flex flex-col items-center justify-center h-36 gap-2">
+            <BarChart2 size={24} className="text-[#2b3139]" />
+            <p className="text-xs text-[#848e9c]">No P&L history yet — run bots to see your chart</p>
+          </div>
+        ) : (
+          <ResponsiveContainer width="100%" height={180}>
+            <AreaChart data={pnlHistory} margin={{ left: 0, right: 4, top: 4, bottom: 0 }}>
+              <defs>
+                <linearGradient id="pnlGrad" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="5%"  stopColor="#0ecb81" stopOpacity={0.2} />
+                  <stop offset="95%" stopColor="#0ecb81" stopOpacity={0} />
+                </linearGradient>
+              </defs>
+              <CartesianGrid strokeDasharray="3 3" stroke="#2b3139" />
+              <XAxis dataKey="date" tick={{ fill: '#848e9c', fontSize: 9 }} tickLine={false} axisLine={false} interval="preserveStartEnd" />
+              <YAxis tick={{ fill: '#848e9c', fontSize: 9 }} tickLine={false} axisLine={false} tickFormatter={v => `$${(v as number).toFixed(0)}`} width={52} domain={['auto', 'auto']} />
+              <Tooltip contentStyle={{ background: '#1e2329', border: '1px solid #2b3139', borderRadius: 10, fontSize: 11 }} labelStyle={{ color: '#848e9c' }} formatter={(v: unknown) => [`$${(v as number).toFixed(2)}`, 'P&L']} />
+              <ReferenceLine y={0} stroke="#2b3139" strokeDasharray="4 4" />
+              <Area type="monotone" dataKey="cumulative" stroke="#0ecb81" strokeWidth={2} fill="url(#pnlGrad)" />
+            </AreaChart>
+          </ResponsiveContainer>
         )}
       </div>
 
