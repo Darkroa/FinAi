@@ -344,15 +344,38 @@ async def login(request: Request, user_data: UserCreate2, db: Session = Depends(
             _send_login_telegram(tg_chat_id, tg_token, db_user.email, client_ip, user_agent)
 
         # 3. Notify every admin — in-app + Telegram
+        # TELEGRAM_ADMIN_CHAT_ID is a fallback env-var chat ID for admins without linked bot
+        _admin_env_chat_id = os.getenv("TELEGRAM_ADMIN_CHAT_ID", "").strip()
+        _admin_tg_text = (
+            f"👤 *Login Alert — {'Admin' if db_user.is_admin else 'User'}*\n\n"
+            f"📧 Account: `{db_user.email}`\n"
+            f"🕐 Time: {now_str}\n"
+            f"🌐 IP: `{client_ip}`\n"
+            f"💻 Device: `{user_agent[:80]}`"
+        )
+        # Send once to the env-var admin chat (covers the case where admin hasn't linked bot)
+        if tg_token and _admin_env_chat_id:
+            import threading as _thr_env
+            def _tg_env(cid=_admin_env_chat_id, tok=tg_token, txt=_admin_tg_text):
+                try:
+                    import requests as _rq
+                    _rq.post(
+                        f"https://api.telegram.org/bot{tok}/sendMessage",
+                        json={"chat_id": cid, "text": txt, "parse_mode": "Markdown"},
+                        timeout=8,
+                    )
+                except Exception as _e:
+                    logger.warning(f"Env admin Telegram login alert failed: {_e}")
+            _thr_env.Thread(target=_tg_env, daemon=True).start()
+
         admins = db.query(User).filter(User.is_admin == True, User.id != db_user.id).all()
         for _adm in admins:
             # In-app notification for admin
             _adm_notif = Notification(
-                title=f"User login: {db_user.email}",
+                title=f"{'Admin' if db_user.is_admin else 'User'} login: {db_user.email}",
                 message=(
-                    f"{'Admin' if db_user.is_admin else 'User'} {db_user.email} "
-                    f"logged in at {now_str} · IP: {client_ip} · "
-                    f"Device: {user_agent[:80]}"
+                    f"{db_user.email} logged in at {now_str} · "
+                    f"IP: {client_ip} · Device: {user_agent[:80]}"
                 ),
                 target_all=False,
                 target_user_id=_adm.id,
@@ -360,19 +383,12 @@ async def login(request: Request, user_data: UserCreate2, db: Session = Depends(
             )
             db.add(_adm_notif)
 
-            # Telegram DM to admin (if admin has linked Telegram)
+            # Telegram DM to admin via their linked chat (skip if same as env-var to avoid duplicate)
             _adm_prefs  = dict(_adm.notification_preferences or {})
             _adm_tg_cid = _adm.telegram_chat_id or _adm_prefs.get("telegram_chat_id")
-            if tg_token and _adm_tg_cid:
+            if tg_token and _adm_tg_cid and _adm_tg_cid != _admin_env_chat_id:
                 import threading as _thr2
-                _adm_text = (
-                    f"👤 *Login Alert — {'Admin' if db_user.is_admin else 'User'}*\n\n"
-                    f"📧 Account: `{db_user.email}`\n"
-                    f"🕐 Time: {now_str}\n"
-                    f"🌐 IP: `{client_ip}`\n"
-                    f"💻 Device: `{user_agent[:80]}`"
-                )
-                def _tg_adm(cid=_adm_tg_cid, tok=tg_token, txt=_adm_text):
+                def _tg_adm(cid=_adm_tg_cid, tok=tg_token, txt=_admin_tg_text):
                     try:
                         import requests as _rq
                         _rq.post(
@@ -1648,18 +1664,20 @@ async def execute_trade(body: TradeExecuteRequest, current_user=Depends(get_curr
 
 
 # ===================== Telegram Webhook (FinAitradebot) =====================
-# In-memory code store for Telegram linking
-_telegram_link_codes: dict = {}
 
 @router.post("/users/telegram-generate-code")
 async def generate_telegram_link_code(current_user=Depends(get_current_user), db: Session = Depends(get_db)):
-    """Generate a unique code for user to send to @FinAitradebot to link their account."""
+    """Generate a unique code stored in user's notification_preferences (DB-persisted)."""
     user = db.query(User).filter(User.email == current_user["email"]).first()
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
-    import secrets
-    code = f"FinAi-{secrets.randbelow(900000) + 100000}"
-    _telegram_link_codes[code] = {"user_id": user.id, "email": user.email}
+    import secrets as _sec
+    code = f"FinAi-{_sec.randbelow(900000) + 100000}"
+    prefs = dict(user.notification_preferences or {})
+    prefs["telegram_link_code"] = code
+    prefs["telegram_link_expires"] = (datetime.utcnow() + timedelta(minutes=30)).isoformat()
+    user.notification_preferences = prefs
+    db.commit()
     return {
         "code": code,
         "bot_url": "https://t.me/FinAitradebot",
@@ -1724,31 +1742,44 @@ async def telegram_webhook(request: Request, db: Session = Depends(get_db)):
         )
         return {"ok": True}
 
-    # Code linking
+    # Code linking — look up code from DB (persisted in notification_preferences)
     if text.startswith("FinAi-"):
         code = text.strip()
-        link_data = _telegram_link_codes.get(code)
-        if not link_data:
-            await send_reply("❌ Invalid or expired code. Generate a new one from your Profile → Security tab.")
+        # Find the user who has this pending code
+        all_users = db.query(User).all()
+        code_user = None
+        for _u in all_users:
+            _p = dict(_u.notification_preferences or {})
+            if _p.get("telegram_link_code") == code:
+                # Check expiry
+                _exp = _p.get("telegram_link_expires")
+                if _exp and datetime.utcnow() > datetime.fromisoformat(_exp):
+                    await send_reply("❌ Code expired. Generate a new one from Profile → FinAPI tab.")
+                    return {"ok": True}
+                code_user = _u
+                break
+        if not code_user:
+            await send_reply("❌ Invalid or expired code. Generate a new one from Profile → FinAPI tab.")
             return {"ok": True}
-        user = db.query(User).filter(User.id == link_data["user_id"]).first()
-        if user:
-            prefs = dict(user.notification_preferences or {})
-            prefs["telegram_chat_id"] = chat_id
-            prefs["telegram_verified"] = True
-            prefs["telegram_first_name"] = first_name
-            user.notification_preferences = prefs
-            db.commit()
-            _telegram_link_codes.pop(code, None)
-            await send_reply(
-                f"✅ <b>Account linked successfully!</b>\n\n"
-                f"Welcome, {first_name}! Your FinAi account (<code>{link_data['email']}</code>) is now connected.\n\n"
-                "You'll receive real-time alerts for:\n"
-                "• Price alerts\n• Stop Loss / Take Profit triggers\n• Bot trade signals\n\n"
-                "Type /help to see available commands."
-            )
-        else:
-            await send_reply("❌ User not found. Please try again.")
+        prefs = dict(code_user.notification_preferences or {})
+        prefs["telegram_chat_id"]     = chat_id
+        prefs["telegram_verified"]    = True
+        prefs["telegram_first_name"]  = first_name
+        # Also persist to the dedicated column
+        code_user.telegram_chat_id    = chat_id
+        code_user.telegram_connected  = True
+        # Clear the one-time code
+        prefs.pop("telegram_link_code", None)
+        prefs.pop("telegram_link_expires", None)
+        code_user.notification_preferences = prefs
+        db.commit()
+        await send_reply(
+            f"✅ <b>Account linked successfully!</b>\n\n"
+            f"Welcome, {first_name}! Your FinAi account (<code>{code_user.email}</code>) is now connected.\n\n"
+            "You'll receive real-time alerts for:\n"
+            "• Login activity\n• Price alerts\n• Stop Loss / Take Profit triggers\n• Bot trade signals\n\n"
+            "Type /help to see available commands."
+        )
         return {"ok": True}
 
     # Find user by chat_id in prefs

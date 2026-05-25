@@ -92,7 +92,42 @@ async def startup_event():
         logger.warning(f"Admin seed skipped: {_seed_err}")
 
     scheduler.start()
-    
+
+    # ── Auto-register Telegram webhook ──────────────────────────────────
+    try:
+        import httpx as _hx, asyncio as _asyncio
+        _bot_token  = os.getenv("TELEGRAM_BOT_TOKEN", "")
+        _wh_secret  = os.getenv("TELEGRAM_WEBHOOK_SECRET", "")
+        _domain     = (
+            os.getenv("REPLIT_DEV_DOMAIN")
+            or os.getenv("REPLIT_DOMAINS", "").split(",")[0].strip()
+        )
+        if _bot_token and _domain:
+            _wh_url = f"https://{_domain}/api/telegram/webhook"
+            async def _register_webhook():
+                try:
+                    payload = {"url": _wh_url}
+                    if _wh_secret:
+                        payload["secret_token"] = _wh_secret
+                    async with _hx.AsyncClient(timeout=10) as _c:
+                        _r = await _c.post(
+                            f"https://api.telegram.org/bot{_bot_token}/setWebhook",
+                            json=payload,
+                        )
+                        _data = _r.json()
+                        if _data.get("ok"):
+                            logger.success(f"✅ Telegram webhook registered: {_wh_url}")
+                        else:
+                            logger.warning(f"⚠️  Telegram webhook registration failed: {_data}")
+                except Exception as _we:
+                    logger.warning(f"Telegram webhook registration skipped: {_we}")
+            _asyncio.create_task(_register_webhook())
+        else:
+            if not _bot_token:
+                logger.info("ℹ️  TELEGRAM_BOT_TOKEN not set — webhook skipped")
+    except Exception as _tg_err:
+        logger.warning(f"Telegram startup init skipped: {_tg_err}")
+
     logger.success("🚀 FinAi API started successfully")
     logger.info("📊 Docs available at: http://localhost:8000/docs")
     logger.info("📈 Metrics available at: http://localhost:8000/metrics")
