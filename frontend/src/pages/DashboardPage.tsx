@@ -164,7 +164,7 @@ export default function DashboardPage() {
     <div
       className="relative rounded-2xl overflow-hidden"
       style={{
-        background: 'linear-gradient(135deg, #1a1105 0%, #2a1f00 40%, #1e2329 100%)',
+        background: 'linear-gradient(135deg, 10%)',
         borderBottom: '1px solid #2b3139',
       }}
     >
