@@ -284,8 +284,32 @@ async def signup(user_data: UserCreate2, db: Session = Depends(get_db)):
     return {"id": user.id, "email": user.email}
 
 
+def _send_login_telegram(chat_id: str, bot_token: str, email: str, ip: str, ua: str):
+    """Fire-and-forget Telegram login alert."""
+    import threading, requests as _req
+    now = datetime.utcnow().strftime("%Y-%m-%d %H:%M UTC")
+    text = (
+        "🔐 *New Login Detected*\n\n"
+        f"📧 Account: `{email}`\n"
+        f"🕐 Time: {now}\n"
+        f"🌐 IP: `{ip}`\n"
+        f"💻 Device: `{ua[:80]}`\n\n"
+        "_If this wasn't you, change your password immediately._"
+    )
+    def _do():
+        try:
+            _req.post(
+                f"https://api.telegram.org/bot{bot_token}/sendMessage",
+                json={"chat_id": chat_id, "text": text, "parse_mode": "Markdown"},
+                timeout=8,
+            )
+        except Exception as _e:
+            logger.warning(f"Login Telegram alert failed: {_e}")
+    threading.Thread(target=_do, daemon=True).start()
+
+
 @router.post("/auth/login")
-async def login(user_data: UserCreate2, db: Session = Depends(get_db)):
+async def login(request: Request, user_data: UserCreate2, db: Session = Depends(get_db)):
     db_user = get_user_by_email(db, user_data.email)
     if not db_user:
         raise HTTPException(status_code=400, detail="Invalid credentials")
@@ -294,6 +318,34 @@ async def login(user_data: UserCreate2, db: Session = Depends(get_db)):
     if db_user.is_banned:
         raise HTTPException(status_code=403, detail="Account banned. Contact support.")
     token = create_access_token({"sub": db_user.email})
+
+    # ── Login notifications (non-blocking) ──────────────────────────────
+    try:
+        client_ip  = request.headers.get("X-Forwarded-For", request.client.host if request.client else "unknown").split(",")[0].strip()
+        user_agent = request.headers.get("User-Agent", "unknown")[:120]
+        now_str    = datetime.utcnow().strftime("%Y-%m-%d %H:%M UTC")
+
+        # 1. In-app notification (persisted to DB)
+        notif = Notification(
+            title=f"New login to your account",
+            message=f"A login was detected on {now_str} from IP {client_ip}. Device: {user_agent[:80]}. If this wasn't you, change your password.",
+            target_all=False,
+            target_user_id=db_user.id,
+            created_by=None,
+        )
+        db.add(notif)
+        db.commit()
+
+        # 2. Telegram DM (if user has linked Telegram)
+        prefs      = dict(db_user.notification_preferences or {})
+        tg_token   = os.getenv("TELEGRAM_BOT_TOKEN") or prefs.get("telegram_bot_token")
+        tg_chat_id = db_user.telegram_chat_id or prefs.get("telegram_chat_id")
+        if tg_token and tg_chat_id:
+            _send_login_telegram(tg_chat_id, tg_token, db_user.email, client_ip, user_agent)
+
+    except Exception as _notif_err:
+        logger.warning(f"Login notification skipped: {_notif_err}")
+
     return {"access_token": token, "token_type": "bearer"}
 
 
