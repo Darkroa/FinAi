@@ -1,4 +1,5 @@
-import { useState, useEffect, useRef, useCallback } from 'react'
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
+import { useNavigate } from 'react-router-dom'
 import {
   ArrowUpDown, TrendingUp, TrendingDown, ChevronDown,
   Wifi, WifiOff, BarChart2, Activity, Link2, RefreshCw,
@@ -193,6 +194,7 @@ interface OpenPosition {
 
 export default function TradePage() {
   const { user } = useAuthStore()
+  const navigate = useNavigate()
 
   const [side, setSide]           = useState<'buy' | 'sell'>('buy')
   const [orderType, setType]      = useState<'market' | 'limit'>('limit')
@@ -281,6 +283,12 @@ export default function TradePage() {
   }, [])
 
   useEffect(() => { fetchHistory() }, [fetchHistory])
+
+  // Derive unrealized P&L from open positions
+  const unrealizedPnl = useMemo(
+    () => openPositions.reduce((sum, p) => sum + (p.unrealized_pnl ?? 0), 0),
+    [openPositions]
+  )
 
   // Fast live price for TradePage (8s polling)
   const { price: livePrice, change: liveChange, live: isLive } = useTradeLivePrice(pair)
@@ -738,7 +746,7 @@ export default function TradePage() {
             </form>
           </div>
           {/* Open Positions - Separate Box */}
-          {openPositions > 0 && (
+          {openPositions.length > 0 && (
             <div className="bg-[#161a1e] border border-[#f0b90b]/20 rounded-xl px-4 py-3">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
@@ -747,7 +755,7 @@ export default function TradePage() {
                   </div>
                   <div>
                     <p className="text-xs font-semibold text-[#eaecef]">
-                      {openPositions} Open Position{openPositions !== 1 ? 's' : ''}
+                      {openPositions.length} Open Position{openPositions.length !== 1 ? 's' : ''}
                     </p>
                     <p className="text-[10px] text-[#848e9c]">Unrealized P&L vs current market</p>
                   </div>

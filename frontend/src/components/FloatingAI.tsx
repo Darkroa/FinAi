@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect, useCallback } from 'react'
 import { Zap, X, TrendingUp, TrendingDown, Activity, Send, Bot, GripVertical } from 'lucide-react'
 import { useLivePrices } from '../hooks/useLivePrices'
+import { useAuthStore } from '../store/authStore'
 
 interface Message { role: 'user' | 'ai'; text: string; time: string }
 
@@ -12,6 +13,7 @@ const AI_SIGNALS = [
 ]
 
 export default function FloatingAI() {
+  const { token } = useAuthStore()
   const [open, setOpen]     = useState(false)
   const [view, setView]     = useState<'signals' | 'chat'>('signals')
   const [input, setInput]   = useState('')
@@ -90,7 +92,6 @@ export default function FloatingAI() {
     setInput('')
     setTyping(true)
     try {
-      const token = localStorage.getItem('finai_token')
       const res = await fetch('/api/ai/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
