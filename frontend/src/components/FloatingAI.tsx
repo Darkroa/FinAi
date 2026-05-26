@@ -35,7 +35,6 @@ export default function FloatingAI() {
   const onDragStart = useCallback((e: React.MouseEvent) => {
     dragging.current   = true
     hasDragged.current = false
-    const rect         = btnRef.current?.getBoundingClientRect()
     startMouse.current = { x: e.clientX, y: e.clientY }
     startPos.current   = pos
       ? { x: pos.x, y: pos.y }

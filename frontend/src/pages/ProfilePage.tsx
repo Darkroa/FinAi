@@ -1,11 +1,11 @@
 import { useState, useRef, useEffect } from 'react'
-import { useAuthStore } from '../store/authStore'
+import { useAuthStore, type User as UserProfile } from '../store/authStore'
 import {
   updateProfile, uploadPhoto, sendVerifyEmail, verifyEmail,
   submitKYC, getMe, createApiKey, listApiKeys, revokeApiKey,
   connectExchange, disconnectExchange,
   changePassword, setTransferPin, requestDeleteAccount, saveWebhookSettings,
-  generateWhatsAppCode, disconnectWhatsApp, getTelegramChatId, generateTelegramCode,
+  generateWhatsAppCode, disconnectWhatsApp, generateTelegramCode,
   getReferralStats
 } from '../lib/api'
 import toast from 'react-hot-toast'
@@ -13,7 +13,7 @@ import {
   User, Camera, Shield, CheckCircle, Clock, XCircle,
   Mail, Lock, Key, Zap, Plus, Trash2, Eye, EyeOff,
   Copy, AlertCircle, Star, Send, MessageCircle, LogOut, ChevronDown,
-  Wifi, WifiOff, RefreshCw, Gift, Share2, Users as UsersIcon, TrendingUp
+  Wifi, RefreshCw, Gift, Share2, Users as UsersIcon, TrendingUp
 } from 'lucide-react'
 
 const TIERS = [
@@ -230,7 +230,7 @@ function ReferralTab() {
 }
 
 /* ─────────────────────────── PERSONAL TAB ─────────────────────────── */
-function PersonalTab({ user, setUser }: { user: ReturnType<typeof useAuthStore>['user']; setUser: (u: any) => void }) {
+function PersonalTab({ user, setUser }: { user: UserProfile | null; setUser: (u: any) => void }) {
   const tier = TIERS[user?.account_tier ?? 0]
   const kycBadge = () => {
     switch (user?.kyc_status) {
@@ -522,7 +522,7 @@ function PersonalTab({ user, setUser }: { user: ReturnType<typeof useAuthStore>[
 
 
 /* ─────────────────────────── FINAPI TAB ─────────────────────────── */
-function FinApiTab({ user, setUser }: { user: ReturnType<typeof useAuthStore>['user']; setUser: (u: any) => void }) {
+function FinApiTab({ user, setUser }: { user: UserProfile | null; setUser: (u: any) => void }) {
   const [apiKeys, setApiKeys]         = useState<ApiKey[]>([])
   const [keysLoaded, setKeysLoaded]   = useState(false)
   const [newKeyName, setNewKeyName]   = useState('')
@@ -537,14 +537,8 @@ function FinApiTab({ user, setUser }: { user: ReturnType<typeof useAuthStore>['u
   const [showSecret, setShowSecret]   = useState(false)
   const [connecting, setConnecting]   = useState(false)
 
-  const prefs = (user?.notification_preferences as Record<string, unknown>) || {}
-  const [tgToken, _setTgToken]   = useState((prefs.telegram_bot_token as string) || '')
-  const [tgChatId, setTgChatId] = useState((prefs.telegram_chat_id as string) || '')
-  const [savingWebhook, setSavingWebhook]   = useState(false)
-  const [findingChatId, setFindingChatId]   = useState(false)
-  const [foundChatId, setFoundChatId]       = useState<string | null>(null)
-
-  // New Telegram code flow
+  const prefs = (user?.notification_preferences as unknown as Record<string, unknown>) || {}
+  // Telegram code flow
   const tgVerified = prefs.telegram_verified === true
   const tgLinkedName = (prefs.telegram_first_name as string) || ''
   const tgLinkedChatId = (prefs.telegram_chat_id as string) || ''
@@ -614,33 +608,6 @@ function FinApiTab({ user, setUser }: { user: ReturnType<typeof useAuthStore>['u
       setUser(res.data)
       toast.success(`${exchange} disconnected`)
     } catch { toast.error('Failed to disconnect') }
-  }
-
-  const handleSaveWebhook = async () => {
-    setSavingWebhook(true)
-    try {
-      await saveWebhookSettings({ telegram_bot_token: tgToken, telegram_chat_id: tgChatId })
-      toast.success('Telegram settings saved')
-    } catch { toast.error('Failed to save settings') }
-    finally { setSavingWebhook(false) }
-  }
-
-  const handleFindChatId = async () => {
-    if (!tgToken.trim()) return toast.error('Enter your bot token first')
-    setFindingChatId(true)
-    try {
-      const res = await getTelegramChatId(tgToken.trim())
-      const { chat_id, first_name, username, message } = res.data
-      if (chat_id) {
-        setTgChatId(chat_id)
-        setFoundChatId(chat_id)
-        toast.success(`Found: ${first_name || username || chat_id}`)
-      } else {
-        toast.error(message || 'No messages found. Send /start to your bot first.')
-      }
-    } catch (err: unknown) {
-      toast.error((err as { response?: { data?: { detail?: string } } }).response?.data?.detail || 'Failed to fetch chat ID')
-    } finally { setFindingChatId(false) }
   }
 
   const handleGenerateTgCode = async () => {
@@ -998,7 +965,7 @@ function FinApiTab({ user, setUser }: { user: ReturnType<typeof useAuthStore>['u
 
 
 /* ─────────────────────────── SECURITY TAB ─────────────────────────── */
-function SecurityTab({ user }: { user: ReturnType<typeof useAuthStore>['user'] }) {
+function SecurityTab({ user }: { user: UserProfile | null }) {
   const [currentPw, setCurrentPw]   = useState('')
   const [newPw, setNewPw]           = useState('')
   const [confirmPw, setConfirmPw]   = useState('')
@@ -1010,13 +977,12 @@ function SecurityTab({ user }: { user: ReturnType<typeof useAuthStore>['user'] }
   const [deleting, setDeleting]     = useState(false)
   const [showDelConfirm, setShowDelConfirm] = useState(false)
 
-  const prefs = (user?.notification_preferences as Record<string, unknown>) || {}
+  const prefs = (user?.notification_preferences as unknown as Record<string, unknown>) || {}
   const waVerified = prefs.whatsapp_verified === true
   const waPhone = (prefs.whatsapp_number as string) || ''
   const tgVerified = prefs.telegram_verified === true
   const tgName = (prefs.telegram_first_name as string) || ''
   const emailVerified = user?.is_mail_verified === true
-  const accountTier = user?.account_tier ?? 0
 
   const handleChangePw = async (e: React.FormEvent) => {
     e.preventDefault()

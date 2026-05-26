@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import {
   ArrowUpDown, TrendingUp, TrendingDown, ChevronDown,
   Wifi, WifiOff, BarChart2, Activity, Link2, RefreshCw,
-  Clock, CheckCircle2, X, Target, AlertTriangle, ZoomIn, ZoomOut,
+  Clock, CheckCircle2, X, Target, AlertTriangle, ZoomIn, ZoomOut, ArrowRight,
 } from 'lucide-react'
 import {
   AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip,

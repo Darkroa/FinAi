@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { Bell, BellOff, CheckCheck, Trash2, Info, AlertTriangle, TrendingUp, Bot, Crown } from 'lucide-react'
+import { Bell, BellOff, CheckCheck, Info, AlertTriangle, TrendingUp, Bot, Crown } from 'lucide-react'
 import { getUserNotifications, markNotificationRead, markAllNotificationsRead } from '../lib/api'
 
 interface AppNotification {

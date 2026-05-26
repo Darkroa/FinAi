@@ -8,15 +8,12 @@ import {
   TrendingDown,
   Zap,
   Activity,
-  ArrowUpRight,
-  ArrowDownLeft,
   Bot,
   Newspaper,
   RefreshCw,
   Eye,
   EyeOff,
   ArrowRight,
-  Bitcoin,
   DollarSign,
   Send,
   Users,
@@ -56,7 +53,7 @@ export default function DashboardPage() {
   const [hideBalance, setHideBalance] = useState(false);
   const [btcToggle, setBtcToggle] = useState<'BTC' | 'ETH'>('BTC');
   const [todayPnl, setTodayPnl] = useState(0);
-  const [todayPct, setTodayPct] = useState(0);
+  const [, setTodayPct] = useState(0);
   const [trades, setTrades] = useState<TradeLog[]>([]);
   const [unrealizedPnl, setUnrealizedPnl] = useState(0);
   const [openPositions, setOpenPositions] = useState(0);
@@ -67,22 +64,13 @@ export default function DashboardPage() {
   const ethItem = tickerItems.find((t) => t.symbol === 'ETH/USDT');
 
   const parsePrice = (s: string) => parseFloat(s.replace(/[$,]/g, '')) || 0;
-  const parseChange = (s: string) => parseFloat(s.replace('%', '')) || 0;
-
   const btcPrice = btcItem ? parsePrice(btcItem.price) : 0;
   const ethPrice = ethItem ? parsePrice(ethItem.price) : 0;
-  const btcChange = btcItem ? parseChange(btcItem.change) : 0;
-  const ethChange = ethItem ? parseChange(ethItem.change) : 0;
-
   const priceLoading = !btcItem?.live;
 
   const displayPrice =
     (btcToggle === 'BTC' ? btcPrice : ethPrice) ||
     (btcToggle === 'BTC' ? 97000 : 3200);
-
-  const displayChange =
-    (btcToggle === 'BTC' ? btcChange : ethChange) ||
-    (btcToggle === 'BTC' ? 2.4 : 1.8);
 
   const btcEquiv = displayPrice > 0 ? (balance / displayPrice).toFixed(6) : '—';
 

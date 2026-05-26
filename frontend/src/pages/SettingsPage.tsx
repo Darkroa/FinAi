@@ -10,11 +10,6 @@ interface NotifPrefs {
   telegram: boolean;
 }
 
-// Extended user type for this page (safe approach)
-interface UserWithNotifs {
-  notification_preferences?: NotifPrefs;
-  // Add other user properties if needed
-}
 
 export default function SettingsPage() {
   const { user, setUser } = useAuthStore();

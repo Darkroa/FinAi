@@ -9,7 +9,7 @@ import { useAuthStore } from '../store/authStore'
 import toast from 'react-hot-toast'
 import {
   Bot, Play, Square, RefreshCw, TrendingUp, Activity, Zap, Brain,
-  Settings, Save, ChevronDown, BarChart2, Lock, KeyRound, ArrowRight,
+  Save, ChevronDown, BarChart2, Lock, KeyRound, ArrowRight,
   TrendingDown, DollarSign, Cpu, Plus, X, Target, ArrowUpDown,
   ChevronUp, Crown,
 } from 'lucide-react'
@@ -247,7 +247,7 @@ export default function BotsPage() {
       ])
       if (statusRes.status === 'fulfilled') {
         const d = statusRes.value.data
-        setStatus(prev => {
+        setStatus(_ => {
           const newBots = d.bots as Record<string, BotDetail> ?? {}
           // Detect price flashes
           const newPrices: Record<string, number> = {}
@@ -314,8 +314,6 @@ export default function BotsPage() {
         exchange_label:     usingBalance ? undefined : params.route,
         strategy:           params.strategy,
         take_profit_pct:    params.take_profit_pct,
-        stop_loss_pct:      params.stop_loss_pct,
-        leverage:           params.leverage,
         direction:          params.direction,
         bot_name:           params.bot_name || undefined,
       })

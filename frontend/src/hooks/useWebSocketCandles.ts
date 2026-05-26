@@ -15,30 +15,6 @@ interface UseWebSocketCandlesResult {
   lastPrice: number | null
 }
 
-const PAIR_BASE_PRICES: Record<string, number> = {
-  'BTC/USDT':   97000,
-  'ETH/USDT':   3200,
-  'BNB/USDT':   628,
-  'SOL/USDT':   155,
-  'XRP/USDT':   0.52,
-  'DOGE/USDT':  0.12,
-  'ADA/USDT':   0.45,
-  'AVAX/USDT':  38,
-  'LINK/USDT':  14,
-  'DOT/USDT':   7.2,
-  'UNI/USDT':   8.5,
-  'MATIC/USDT': 0.90,
-  'LTC/USDT':   85,
-  'XLM/USDT':   0.11,
-  'XAU/USD':    3200,
-  'XAG/USD':    32,
-  'OIL/WTI':    71,
-  'AAPL':       195,
-  'TSLA':       175,
-  'NVDA':       875,
-  'MSFT':       415,
-  'SPY':        526,
-}
 
 export function useWebSocketCandles(pair: string, tf: string): UseWebSocketCandlesResult {
   const [candles, setCandles] = useState<Candle[]>([])
