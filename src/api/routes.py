@@ -319,6 +319,19 @@ async def signup(user_data: UserCreate2, db: Session = Depends(get_db)):
                     message=f"${ref_bonus.amount_usdt:.2f} USDT added to your balance — {user.email} signed up using your referral code.",
                     target_all=False, target_user_id=referrer.id, created_by=None,
                 ))
+                # Notify the NEW user too
+                db.add(Notification(
+                    title="Welcome bonus applied! 🎁",
+                    message=f"You signed up with a referral code — your referrer received a ${ref_bonus.amount_usdt:.2f} USDT bonus. Keep trading to unlock more rewards!",
+                    target_all=False, target_user_id=user.id, created_by=None,
+                ))
+            else:
+                # No active bonus rule but still acknowledge the referral to the new user
+                db.add(Notification(
+                    title="Referral code accepted! 🎁",
+                    message=f"Thanks for using a referral code! Your referral has been recorded. Bonuses are credited automatically when promotions are active.",
+                    target_all=False, target_user_id=user.id, created_by=None,
+                ))
     db.commit()
     return {"id": user.id, "email": user.email, "referral_code": user.referral_code}
 
