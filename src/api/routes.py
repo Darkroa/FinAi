@@ -3139,3 +3139,90 @@ async def delete_bonus(bonus_id: int, db: Session = Depends(get_db)):
     db.delete(b)
     db.commit()
     return {"status": "deleted"}
+
+
+# ─────────────────────── ADMIN: REFERRAL MANAGEMENT ───────────────────────
+
+class _ReferralCodeUpdate(BaseModel):
+    referral_code: str
+
+@router.get("/admin/referrals", dependencies=[Depends(require_admin)])
+async def admin_list_referrals(db: Session = Depends(get_db)):
+    """List every user with their referral code, how many they referred, and a link."""
+    import os as _os
+    domain = _os.environ.get("REPLIT_DEV_DOMAIN", "")
+    users = db.query(User).filter(User.referral_code != None).order_by(User.id.asc()).all()
+    result = []
+    for u in users:
+        referred_count = db.query(User).filter(User.referred_by == u.referral_code).count()
+        result.append({
+            "id": u.id,
+            "email": u.email,
+            "username": u.username,
+            "referral_code": u.referral_code,
+            "referred_count": referred_count,
+            "referral_link": f"https://{domain}/login?ref={u.referral_code}" if domain else None,
+            "account_tier": u.account_tier,
+            "created_at": u.created_at.isoformat() if u.created_at else None,
+        })
+    return result
+
+
+@router.patch("/admin/referrals/{user_id}/code", dependencies=[Depends(require_admin)])
+async def admin_update_referral_code(user_id: int, body: _ReferralCodeUpdate, db: Session = Depends(get_db)):
+    """Assign a custom referral code to any user."""
+    new_code = body.referral_code.strip().upper()
+    if not new_code or len(new_code) < 4 or len(new_code) > 20:
+        raise HTTPException(status_code=400, detail="Code must be 4–20 characters")
+    import re as _re
+    if not _re.match(r'^[A-Z0-9]+$', new_code):
+        raise HTTPException(status_code=400, detail="Only uppercase letters and digits allowed")
+    conflict = db.query(User).filter(User.referral_code == new_code, User.id != user_id).first()
+    if conflict:
+        raise HTTPException(status_code=409, detail="That code is already taken by another user")
+    u = db.query(User).filter(User.id == user_id).first()
+    if not u:
+        raise HTTPException(status_code=404, detail="User not found")
+    old_code = u.referral_code
+    u.referral_code = new_code
+    # Rewrite referred_by for users who used the old code
+    if old_code:
+        db.query(User).filter(User.referred_by == old_code).update({"referred_by": new_code})
+    db.commit()
+    import os as _os
+    domain = _os.environ.get("REPLIT_DEV_DOMAIN", "")
+    referred_count = db.query(User).filter(User.referred_by == new_code).count()
+    return {
+        "id": u.id,
+        "email": u.email,
+        "referral_code": u.referral_code,
+        "referral_link": f"https://{domain}/login?ref={u.referral_code}" if domain else None,
+        "referred_count": referred_count,
+    }
+
+
+@router.delete("/admin/referrals/{user_id}/code", dependencies=[Depends(require_admin)])
+async def admin_reset_referral_code(user_id: int, db: Session = Depends(get_db)):
+    """Generate a fresh random referral code for a user (replaces their current one)."""
+    import secrets as _sec, string as _str
+    u = db.query(User).filter(User.id == user_id).first()
+    if not u:
+        raise HTTPException(status_code=404, detail="User not found")
+    old_code = u.referral_code
+    _alpha = _str.ascii_uppercase + _str.digits
+    for _ in range(20):
+        _code = ''.join(_sec.choice(_alpha) for _ in range(8))
+        if not db.query(User).filter(User.referral_code == _code).first():
+            break
+    u.referral_code = _code
+    if old_code:
+        db.query(User).filter(User.referred_by == old_code).update({"referred_by": _code})
+    db.commit()
+    import os as _os
+    domain = _os.environ.get("REPLIT_DEV_DOMAIN", "")
+    return {
+        "id": u.id,
+        "email": u.email,
+        "referral_code": u.referral_code,
+        "referral_link": f"https://{domain}/login?ref={u.referral_code}" if domain else None,
+    }

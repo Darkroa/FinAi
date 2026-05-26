@@ -5,17 +5,19 @@ import {
   adminGetApiKeyUsers, adminGetSupportTickets, adminGetTicket, adminReplyTicket,
   adminUpdateTicketStatus, adminHealthCheck, adminUpdateUser,
   adminGetSubscriptions, adminApproveSubscription, adminRejectSubscription,
-  getAdminBonuses, adminGrantBonus, toggleAdminBonus, deleteAdminBonus
+  getAdminBonuses, adminGrantBonus, toggleAdminBonus, deleteAdminBonus,
+  getAdminReferrals, adminUpdateReferralCode, adminResetReferralCode
 } from '../lib/api'
 import { AdminLiveVisitors } from '../components/AdminLiveVisitors'
 import toast from 'react-hot-toast'
 import {
   Users, Receipt, ShieldCheck, CheckCircle, XCircle, Bell, Send, Globe, User,
   Server, Key, MessageSquare, Activity, Settings, Wallet, Save, RefreshCw,
-  Lock, Unlock, Ban, Star, Edit3, CreditCard, Eye, Gift, Trash2, ToggleLeft, ToggleRight
+  Lock, Unlock, Ban, Star, Edit3, CreditCard, Eye, Gift, Trash2, ToggleLeft, ToggleRight,
+  Share2, Link, Copy, RotateCcw
 } from 'lucide-react'
 
-type Tab = 'users' | 'transactions' | 'notifications' | 'wallet-config' | 'api-users' | 'support' | 'health' | 'subscriptions' | 'visitors' | 'bonuses'
+type Tab = 'users' | 'transactions' | 'notifications' | 'wallet-config' | 'api-users' | 'support' | 'health' | 'subscriptions' | 'visitors' | 'bonuses' | 'referrals'
 
 export default function AdminPage() {
   const [tab, setTab] = useState<Tab>('users')
@@ -30,6 +32,13 @@ export default function AdminPage() {
   const [loading, setLoading] = useState(true)
   const [healthLoading, setHealthLoading] = useState(false)
   const [subscriptions, setSubscriptions] = useState<any[]>([])
+  const [referrals, setReferrals] = useState<any[]>([])
+  const [refSearch, setRefSearch] = useState('')
+  const [editingRef, setEditingRef] = useState<number | null>(null)
+  const [editingRefCode, setEditingRefCode] = useState('')
+  const [refLoading, setRefLoading] = useState(false)
+  const [copiedRefId, setCopiedRefId] = useState<number | null>(null)
+
   const [bonuses, setBonuses] = useState<any[]>([])
   const [bonusForm, setBonusForm] = useState({
     title: '', bonus_type: 'manual_grant', amount_usdt: 10,
@@ -92,6 +101,10 @@ export default function AdminPage() {
     if (t === 'bonuses') {
       const res = await getAdminBonuses().catch(() => null)
       if (res) setBonuses(Array.isArray(res.data) ? res.data : [])
+    }
+    if (t === 'referrals') {
+      const res = await getAdminReferrals().catch(() => null)
+      if (res) setReferrals(Array.isArray(res.data) ? res.data : [])
     }
   }
 
@@ -195,6 +208,7 @@ export default function AdminPage() {
     { id: 'users', label: 'Users', icon: Users },
     { id: 'transactions', label: 'Transactions', icon: Receipt },
     { id: 'subscriptions', label: 'Subscriptions', icon: CreditCard },
+    { id: 'referrals', label: 'Referrals', icon: Share2 },
     { id: 'bonuses', label: 'Bonuses', icon: Gift },
     { id: 'wallet-config', label: 'Wallet Config', icon: Wallet },
     { id: 'api-users', label: 'API Users', icon: Key },
@@ -696,6 +710,173 @@ export default function AdminPage() {
           </div>
         </div>
       )}
+
+      {/* REFERRALS */}
+      {tab === 'referrals' && (() => {
+        const filtered = referrals.filter(r =>
+          !refSearch ||
+          r.email?.toLowerCase().includes(refSearch.toLowerCase()) ||
+          r.referral_code?.toLowerCase().includes(refSearch.toLowerCase()) ||
+          r.username?.toLowerCase().includes(refSearch.toLowerCase())
+        )
+        const totalReferrals = referrals.reduce((s: number, r: any) => s + (r.referred_count || 0), 0)
+        const topReferrer = [...referrals].sort((a, b) => b.referred_count - a.referred_count)[0]
+        return (
+          <div className="space-y-5">
+            {/* Summary stats */}
+            <div className="grid grid-cols-3 gap-3">
+              {[
+                { label: 'Total Users with Codes', value: referrals.length, color: 'text-[#627eea]' },
+                { label: 'Total Referrals Made', value: totalReferrals, color: 'text-[#0ecb81]' },
+                { label: 'Top Referrer', value: topReferrer ? `${topReferrer.referral_code} (${topReferrer.referred_count})` : '—', color: 'text-[#f0b90b]' },
+              ].map(s => (
+                <div key={s.label} className="bg-[#161a1e] border border-[#2b3139] rounded-xl p-4">
+                  <p className="text-xs text-[#848e9c] mb-1">{s.label}</p>
+                  <p className={`text-sm font-bold font-mono ${s.color}`}>{s.value}</p>
+                </div>
+              ))}
+            </div>
+
+            {/* Table */}
+            <div className="bg-[#161a1e] border border-[#2b3139] rounded-xl overflow-hidden">
+              <div className="px-5 py-3 border-b border-[#2b3139] flex flex-wrap items-center gap-3">
+                <div className="flex items-center gap-2 flex-1 min-w-[200px]">
+                  <Share2 size={14} className="text-[#f0b90b]" />
+                  <h2 className="text-sm font-semibold text-[#eaecef]">All Referral Codes</h2>
+                </div>
+                <input
+                  value={refSearch}
+                  onChange={e => setRefSearch(e.target.value)}
+                  placeholder="Search email, code, username…"
+                  className="bg-[#0b0e11] border border-[#2b3139] rounded-lg px-3 py-1.5 text-xs text-[#eaecef] placeholder-[#4a5568] focus:outline-none focus:border-[#f0b90b] transition w-56"
+                />
+                <button
+                  onClick={async () => { const r = await getAdminReferrals().catch(() => null); if (r) setReferrals(Array.isArray(r.data) ? r.data : []) }}
+                  className="flex items-center gap-1 text-xs text-[#848e9c] hover:text-[#eaecef] transition">
+                  <RefreshCw size={11} /> Refresh
+                </button>
+              </div>
+              <div className="overflow-x-auto">
+                <table className="w-full text-xs min-w-[750px]">
+                  <thead>
+                    <tr className="text-[#848e9c] border-b border-[#2b3139] bg-[#0b0e11]">
+                      <th className="text-left px-4 py-3 font-medium">#</th>
+                      <th className="text-left px-4 py-3 font-medium">User</th>
+                      <th className="text-left px-4 py-3 font-medium">Tier</th>
+                      <th className="text-left px-4 py-3 font-medium">Referral Code</th>
+                      <th className="text-right px-4 py-3 font-medium">Referred</th>
+                      <th className="text-left px-4 py-3 font-medium">Link</th>
+                      <th className="text-right px-4 py-3 font-medium">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {filtered.length === 0 ? (
+                      <tr><td colSpan={7} className="px-4 py-10 text-center text-[#848e9c]">No referral codes found</td></tr>
+                    ) : filtered.map((r: any) => (
+                      <tr key={r.id} className="border-b border-[#2b3139]/50 hover:bg-[#1e2329] transition">
+                        <td className="px-4 py-3 font-mono text-[#848e9c]">#{r.id}</td>
+                        <td className="px-4 py-3">
+                          <p className="text-[#eaecef] truncate max-w-[160px]">{r.email}</p>
+                          {r.username && <p className="text-[10px] text-[#848e9c]">@{r.username}</p>}
+                        </td>
+                        <td className="px-4 py-3">
+                          <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${
+                            r.account_tier === 3 ? 'bg-[#a855f7]/10 text-[#a855f7]' :
+                            r.account_tier === 2 ? 'bg-[#0ecb81]/10 text-[#0ecb81]' :
+                            r.account_tier === 1 ? 'bg-[#f0b90b]/10 text-[#f0b90b]' :
+                            'bg-[#2b3139] text-[#848e9c]'
+                          }`}>T{r.account_tier}</span>
+                        </td>
+                        <td className="px-4 py-3">
+                          {editingRef === r.id ? (
+                            <div className="flex items-center gap-1.5">
+                              <input
+                                value={editingRefCode}
+                                onChange={e => setEditingRefCode(e.target.value.toUpperCase())}
+                                className="bg-[#0b0e11] border border-[#f0b90b] rounded px-2 py-1 text-xs font-mono text-[#f0b90b] w-28 focus:outline-none"
+                                maxLength={20}
+                                autoFocus
+                              />
+                              <button
+                                disabled={refLoading}
+                                onClick={async () => {
+                                  setRefLoading(true)
+                                  try {
+                                    const res = await adminUpdateReferralCode(r.id, editingRefCode)
+                                    setReferrals(rs => rs.map(x => x.id === r.id ? { ...x, referral_code: res.data.referral_code, referral_link: res.data.referral_link, referred_count: res.data.referred_count } : x))
+                                    toast.success('Code updated')
+                                    setEditingRef(null)
+                                  } catch (e: any) {
+                                    toast.error(e?.response?.data?.detail || 'Failed to update code')
+                                  } finally { setRefLoading(false) }
+                                }}
+                                className="text-[#0ecb81] hover:text-[#0ecb81]/80 p-1 rounded transition">
+                                <CheckCircle size={13} />
+                              </button>
+                              <button onClick={() => setEditingRef(null)}
+                                className="text-[#848e9c] hover:text-[#f6465d] p-1 rounded transition">
+                                <XCircle size={13} />
+                              </button>
+                            </div>
+                          ) : (
+                            <span className="font-mono font-bold text-[#f0b90b] tracking-wider">{r.referral_code}</span>
+                          )}
+                        </td>
+                        <td className="px-4 py-3 text-right">
+                          <span className={`font-mono font-bold ${r.referred_count > 0 ? 'text-[#0ecb81]' : 'text-[#848e9c]'}`}>
+                            {r.referred_count}
+                          </span>
+                        </td>
+                        <td className="px-4 py-3 max-w-[180px]">
+                          {r.referral_link ? (
+                            <div className="flex items-center gap-1.5 group">
+                              <span className="text-[#4a5568] truncate font-mono text-[10px] max-w-[130px]">{r.referral_link}</span>
+                              <button
+                                onClick={() => {
+                                  navigator.clipboard.writeText(r.referral_link)
+                                  setCopiedRefId(r.id)
+                                  setTimeout(() => setCopiedRefId(null), 2000)
+                                }}
+                                className="text-[#848e9c] hover:text-[#f0b90b] transition flex-shrink-0"
+                                title="Copy link">
+                                {copiedRefId === r.id ? <CheckCircle size={11} className="text-[#0ecb81]" /> : <Copy size={11} />}
+                              </button>
+                            </div>
+                          ) : <span className="text-[#4a5568]">—</span>}
+                        </td>
+                        <td className="px-4 py-3 text-right">
+                          <div className="flex justify-end gap-1">
+                            <button
+                              title="Edit code"
+                              onClick={() => { setEditingRef(r.id); setEditingRefCode(r.referral_code || '') }}
+                              className="p-1.5 rounded-lg text-[#848e9c] hover:text-[#f0b90b] hover:bg-[#f0b90b]/10 transition">
+                              <Edit3 size={12} />
+                            </button>
+                            <button
+                              title="Reset to random code"
+                              onClick={async () => {
+                                if (!confirm(`Reset referral code for ${r.email}? Their current code will be replaced.`)) return
+                                setRefLoading(true)
+                                try {
+                                  const res = await adminResetReferralCode(r.id)
+                                  setReferrals(rs => rs.map(x => x.id === r.id ? { ...x, referral_code: res.data.referral_code, referral_link: res.data.referral_link } : x))
+                                  toast.success('Code regenerated')
+                                } catch { toast.error('Failed to reset') } finally { setRefLoading(false) }
+                              }}
+                              className="p-1.5 rounded-lg text-[#848e9c] hover:text-[#627eea] hover:bg-[#627eea]/10 transition">
+                              <RotateCcw size={12} />
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        )
+      })()}
 
       {/* BONUSES */}
       {tab === 'bonuses' && (

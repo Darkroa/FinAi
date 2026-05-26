@@ -279,3 +279,10 @@ export const adminGrantBonus = (data: {
 }) => api.post('/admin/bonuses/grant', data)
 export const toggleAdminBonus = (id: number) => api.patch(`/admin/bonuses/${id}/toggle`)
 export const deleteAdminBonus = (id: number) => api.delete(`/admin/bonuses/${id}`)
+
+// Admin Referrals
+export const getAdminReferrals = () => api.get('/admin/referrals')
+export const adminUpdateReferralCode = (userId: number, code: string) =>
+  api.patch(`/admin/referrals/${userId}/code`, { referral_code: code })
+export const adminResetReferralCode = (userId: number) =>
+  api.delete(`/admin/referrals/${userId}/code`)
