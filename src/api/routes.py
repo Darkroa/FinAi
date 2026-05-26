@@ -179,9 +179,10 @@ class PriceAlertCreate(BaseModel):
 
 class BotStartRequestV2(BaseModel):
     ticker: str = "BTC-USD"
-    paper: bool = True
+    paper: bool = False
     initial_capital: float = 1000.0
-    risk_per_trade_pct: float = 1.0
+    balance_to_use: Optional[float] = None
+    risk_per_trade_pct: float = 40.0
     max_drawdown_pct: float = 10.0
     exchange_label: Optional[str] = None
     strategy: str = "sma"
@@ -1373,8 +1374,12 @@ async def jwt_start_bot(body: BotStartRequestV2, current_user=Depends(get_curren
         matched = [c for c in connections if c.get("label") == body.exchange_label or c.get("exchange") == body.exchange_label]
         if not matched:
             raise HTTPException(status_code=400, detail=f"Exchange '{body.exchange_label}' not found in your connections.")
-    capital = body.initial_capital if body.initial_capital > 0 else (user.default_capital or 1000.0)
-    if not body.paper and (user.balance_usdt or 0) < capital:
+    # balance_to_use overrides initial_capital when provided
+    capital = body.balance_to_use or body.initial_capital or user.default_capital or 1000.0
+    if capital <= 0:
+        capital = user.default_capital or 1000.0
+    # Always live — paper trading is disabled
+    if (user.balance_usdt or 0) < capital:
         raise HTTPException(status_code=400, detail=f"Insufficient balance. Need ${capital:,.2f} USDT.")
     # Find Binance credentials if user has a Binance connection
     binance_api_key = None
@@ -1393,7 +1398,7 @@ async def jwt_start_bot(body: BotStartRequestV2, current_user=Depends(get_curren
     manager = get_user_bot_manager(user.email, user.id)
     result = manager.start_bot(
         ticker=body.ticker,
-        paper=body.paper,
+        paper=False,           # paper trading disabled — all bots use real balance
         initial_capital=capital,
         risk_per_trade_pct=body.risk_per_trade_pct,
         max_drawdown_pct=body.max_drawdown_pct,

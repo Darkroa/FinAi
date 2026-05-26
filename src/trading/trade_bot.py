@@ -118,9 +118,9 @@ class TradingBotInstance:
     TICK_SECS  = 0.5   # faster execution — tick every 0.5 s
     FL_LENGTH  = 4
 
-    def __init__(self, ticker: str, paper: bool = True, user_id: int = None,
-                 initial_capital: float = 50000.0, max_drawdown_pct: float = 9.0,
-                 risk_per_trade_pct: float = 100,
+    def __init__(self, ticker: str, paper: bool = False, user_id: int = None,
+                 initial_capital: float = 1000.0, max_drawdown_pct: float = 9.0,
+                 risk_per_trade_pct: float = 40,
                  strategy: str = "sma",
                  take_profit_pct: float = 4.0,
                  direction: str = "auto",
@@ -265,6 +265,30 @@ class TradingBotInstance:
         if len(self.price_history) < self.SMA_PERIOD:
             return None
         return sum(self.price_history[-self.SMA_PERIOD:]) / self.SMA_PERIOD
+
+    # ── Volatility-based fill price (realistic market order slippage) ─────────
+
+    def _volatility_fill_price(self, side: str, price: float) -> float:
+        """
+        Simulates realistic market-order execution by applying ATR-based slippage.
+        BUY orders fill slightly above the tick price (you pay more).
+        SELL orders fill slightly below the tick price (you receive less).
+        Slippage = 0.25 × recent ATR, capped at 0.05% of price.
+        """
+        n = len(self.price_history)
+        if n < 2:
+            return price
+        lookback = min(n, 10)
+        recent = self.price_history[-lookback:]
+        diffs = [abs(recent[i] - recent[i - 1]) for i in range(1, len(recent))]
+        atr = sum(diffs) / max(len(diffs), 1)
+        # Cap slippage at 0.05% of price to avoid unrealistic fills
+        max_slip = price * 0.0005
+        slip = min(atr * 0.25, max_slip)
+        if side == "BUY":
+            return round(price + slip, 8)
+        else:
+            return round(price - slip, 8)
 
     # ── FinLux Trendlines with Breaks (Python port of LuxAlgo Pine Script) ───
 
@@ -415,8 +439,10 @@ class TradingBotInstance:
                     break
 
                 # TP / hard-stop (apply to both strategies)
-                take_profit = self.position > 0 and price > self.entry_price * (100 + self.take_profit_pct / 10)
-                hard_stop   = self.position > 0 and price < self.entry_price * 100
+                # Take profit: price rose by take_profit_pct%
+                take_profit = self.position > 0 and price >= self.entry_price * (1 + self.take_profit_pct / 100)
+                # Hard stop: price fell by half of take_profit_pct (e.g. 4% TP → 2% SL)
+                hard_stop   = self.position > 0 and price <= self.entry_price * (1 - (self.take_profit_pct / 2) / 100)
 
                 if take_profit:
                     self._close_position(price, "TAKE_PROFIT")
@@ -436,12 +462,15 @@ class TradingBotInstance:
                             self.signal_state = "NEUTRAL"
 
                         if signal == "BUY" and self.position <= 0 and self.direction in ("auto", "buy"):
-                            risk_amt = self.capital * (self.risk_per_trade_pct / 100)
-                            qty = min((self.capital * 100) / price, risk_amt * 90 / price)
-                            if qty > 0.9:
-                                self._open_position(qty, price, "FL_BREAKOUT_BUY")
+                            # Use 40% of current capital (or risk_per_trade_pct if set differently)
+                            trade_usdt = self.capital * (self.risk_per_trade_pct / 100)
+                            exec_price = self._volatility_fill_price("BUY", price)
+                            qty = trade_usdt / exec_price
+                            if trade_usdt >= 1.0:
+                                self._open_position(qty, exec_price, "FL_BREAKOUT_BUY")
                         elif signal == "SELL" and self.position > 0 and self.direction in ("auto", "sell"):
-                            self._close_position(price, "FL_BREAKOUT_SELL")
+                            exec_price = self._volatility_fill_price("SELL", price)
+                            self._close_position(exec_price, "FL_BREAKOUT_SELL")
 
                     else:
                         # SMA crossover (default)
@@ -462,12 +491,14 @@ class TradingBotInstance:
                         self.signal_state = "BULLISH" if price_above_sma else "BEARISH"
 
                         if bullish_cross and self.position <= 0 and self.direction in ("auto", "buy"):
-                            risk_amt = self.capital * (self.risk_per_trade_pct / 100)
-                            qty = min((self.capital * 100) / price, risk_amt * 50 / price)
-                            if qty > 0.9:
-                                self._open_position(qty, price, "SMA_BULLISH_CROSS")
+                            trade_usdt = self.capital * (self.risk_per_trade_pct / 100)
+                            exec_price = self._volatility_fill_price("BUY", price)
+                            qty = trade_usdt / exec_price
+                            if trade_usdt >= 1.0:
+                                self._open_position(qty, exec_price, "SMA_BULLISH_CROSS")
                         elif bearish_cross and self.position > 0 and self.direction in ("auto", "sell"):
-                            self._close_position(price, "SMA_BEARISH_CROSS")
+                            exec_price = self._volatility_fill_price("SELL", price)
+                            self._close_position(exec_price, "SMA_BEARISH_CROSS")
 
             except Exception as e:
                 logger.error(f"Bot loop error for {self.ticker} [{self.bot_id}]: {e}")
@@ -620,9 +651,9 @@ class UserBotManager:
         self.user_email = user_email
         self.bots: Dict[str, TradingBotInstance] = {}
 
-    def start_bot(self, ticker: str, paper: bool = True,
+    def start_bot(self, ticker: str, paper: bool = False,
                   initial_capital: float = 1000.0,
-                  risk_per_trade_pct: float = 50,
+                  risk_per_trade_pct: float = 40.0,
                   max_drawdown_pct: float = 10.0,
                   strategy: str = "sma",
                   take_profit_pct: float = 4.0,
