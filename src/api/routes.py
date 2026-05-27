@@ -917,12 +917,17 @@ async def admin_update_user(data: AdminUpdateUser, db: Session = Depends(get_db)
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
     old_tier = user.account_tier or 0
+    old_kyc  = user.kyc_status or ""
     for field, val in data.model_dump(exclude_unset=True).items():
         if field == "user_id":
             continue
         if val is not None and hasattr(user, field):
             setattr(user, field, val)
     new_tier = user.account_tier or 0
+    new_kyc  = user.kyc_status or ""
+
+    _deferred_notifs = []  # (title, message) pairs to fire after commit
+
     # Auto-trigger tier-achievement bonuses when tier increases
     if new_tier > old_tier:
         from src.database.models import Bonus as _Bonus
@@ -950,13 +955,46 @@ async def admin_update_user(data: AdminUpdateUser, db: Session = Depends(get_db)
                     status="completed",
                     note=f"Tier {new_tier} achievement bonus — tier_bonus_{_tb.id}",
                 ))
-                db.add(Notification(
-                    title=f"🎉 Tier {new_tier} Achievement Bonus!",
-                    message=f"Congratulations on reaching Tier {new_tier}! ${_tb.amount_usdt:.2f} USDT bonus has been added to your balance.",
-                    target_all=False, target_user_id=user.id, created_by=None,
+                _deferred_notifs.append((
+                    f"🎉 Tier {new_tier} Achievement Bonus!",
+                    f"Congratulations on reaching Tier {new_tier}! ${_tb.amount_usdt:.2f} USDT bonus has been added to your balance.",
                 ))
+        # Notify tier upgrade even without bonus
+        if not _deferred_notifs:
+            _tier_labels = {1: "Tier 1", 2: "Tier 2", 3: "Tier 3 — Priority"}
+            _deferred_notifs.append((
+                f"🏅 Account Upgraded to {_tier_labels.get(new_tier, f'Tier {new_tier}')}",
+                f"Your account has been upgraded to Tier {new_tier}. You now have access to higher limits and more features.",
+            ))
+
+    # KYC status change notification
+    if new_kyc != old_kyc and new_kyc:
+        if new_kyc == "approved":
+            _deferred_notifs.append((
+                "✅ KYC Verification Approved",
+                "Your identity verification has been approved. Your account is now verified and you have full access to all features.",
+            ))
+        elif new_kyc == "rejected":
+            _deferred_notifs.append((
+                "❌ KYC Verification Rejected",
+                "Your identity verification was not approved. Please contact support or resubmit with clearer documents.",
+            ))
+
     db.commit()
     db.refresh(user)
+
+    # Fire all deferred notifications (in-app + external channels)
+    import asyncio as _aio
+    for _t, _m in _deferred_notifs:
+        try:
+            loop = _aio.get_event_loop()
+            if loop.is_running():
+                loop.create_task(_notify_user(user, _t, _m, db))
+            else:
+                loop.run_until_complete(_notify_user(user, _t, _m, db))
+        except Exception:
+            pass
+
     return _user_dict(user)
 
 
@@ -996,14 +1034,28 @@ async def approve_transaction(data: ApproveTransaction, db: Session = Depends(ge
     tx.status = "approved"
     if data.tx_hash:
         tx.tx_hash = data.tx_hash
+    user = db.query(User).filter(User.id == tx.user_id).first()
     if tx.tx_type == "deposit":
-        user = db.query(User).filter(User.id == tx.user_id).first()
         if user:
             user.balance_usdt = (user.balance_usdt or 0) + tx.amount_usdt
-    elif tx.tx_type == "withdrawal" and tx.status == "rejected":
-        # refund on reject — handled in reject endpoint
-        pass
     db.commit()
+    # Notify user about approval
+    if user:
+        import asyncio as _aio
+        tx_label = tx.tx_type.replace("_", " ").title()
+        _notif_title = f"✅ {tx_label} Approved"
+        _notif_msg = (
+            f"Your {tx.tx_type.replace('_', ' ')} of ${tx.amount_usdt:.2f} USDT "
+            f"has been approved and your balance has been updated."
+        )
+        try:
+            loop = _aio.get_event_loop()
+            if loop.is_running():
+                loop.create_task(_notify_user(user, _notif_title, _notif_msg, db))
+            else:
+                loop.run_until_complete(_notify_user(user, _notif_title, _notif_msg, db))
+        except Exception:
+            pass
     return {"status": "approved", "transaction_id": data.transaction_id}
 
 
@@ -1017,13 +1069,32 @@ async def reject_transaction(data: RejectTransaction, db: Session = Depends(get_
             db.commit()
             return {"status": "rejected"}
         raise HTTPException(status_code=404, detail="Transaction not found")
+    user = db.query(User).filter(User.id == tx.user_id).first()
     if tx.tx_type == "withdrawal" and tx.status == "pending":
         # Refund the held amount
-        user = db.query(User).filter(User.id == tx.user_id).first()
         if user:
             user.balance_usdt = (user.balance_usdt or 0) + tx.amount_usdt
     tx.status = "rejected"
     db.commit()
+    # Notify user about rejection
+    if user:
+        import asyncio as _aio
+        tx_label = tx.tx_type.replace("_", " ").title()
+        _notif_title = f"❌ {tx_label} Rejected"
+        _notif_msg = (
+            f"Your {tx.tx_type.replace('_', ' ')} of ${tx.amount_usdt:.2f} USDT "
+            f"has been rejected. "
+            + ("Your funds have been returned to your balance." if tx.tx_type == "withdrawal" else
+               "Please contact support if you believe this is an error.")
+        )
+        try:
+            loop = _aio.get_event_loop()
+            if loop.is_running():
+                loop.create_task(_notify_user(user, _notif_title, _notif_msg, db))
+            else:
+                loop.run_until_complete(_notify_user(user, _notif_title, _notif_msg, db))
+        except Exception:
+            pass
     return {"status": "rejected", "transaction_id": data.transaction_id}
 
 
@@ -1073,6 +1144,34 @@ async def push_notification(data: PushNotification, current_user=Depends(get_cur
     db.add(notif)
     db.commit()
     db.refresh(notif)
+
+    # Deliver externally (Telegram / WhatsApp / Resend email) to targeted users
+    # We skip the already-persisted in-app record and just fire external channels
+    import threading as _pt
+    def _deliver_external():
+        try:
+            from src.database.session import SessionLocal as _SL
+            _db2 = _SL()
+            try:
+                if data.target_all:
+                    targets = _db2.query(User).filter(User.is_active == True).all() if hasattr(User, "is_active") else _db2.query(User).all()
+                else:
+                    t = _db2.query(User).filter(User.id == data.target_user_id).first()
+                    targets = [t] if t else []
+                import asyncio as _aio
+                loop = _aio.new_event_loop()
+                for u in targets:
+                    try:
+                        loop.run_until_complete(_notify_external_only(u, data.title, data.message))
+                    except Exception:
+                        pass
+                loop.close()
+            finally:
+                _db2.close()
+        except Exception as _ex:
+            logger.warning(f"Admin push external delivery failed: {_ex}")
+    _pt.Thread(target=_deliver_external, daemon=True).start()
+
     return {"id": notif.id, "title": notif.title, "message": notif.message,
             "target_all": notif.target_all, "target_user_id": notif.target_user_id,
             "created_at": notif.created_at.isoformat()}
@@ -1165,6 +1264,130 @@ async def admin_health_check(db: Session = Depends(get_db)):
             checks[name] = {"status": "error", "error": str(e)[:100]}
     overall = "healthy" if all(c["status"] == "healthy" for c in checks.values()) else "degraded"
     return {"overall": overall, "checks": checks, "timestamp": datetime.utcnow().isoformat()}
+
+
+# ===================== Notification Delivery Helper =====================
+async def _notify_user(user: "User", title: str, message: str, db: "Session") -> None:
+    """
+    Persist an in-app Notification for `user` and deliver it via every
+    external channel the user has enabled (Telegram, WhatsApp, Resend email).
+    Call this from any admin action that should reach users directly.
+    """
+    import threading as _thr
+    # 1. Persist in-app notification
+    db.add(Notification(title=title, message=message, target_all=False,
+                        target_user_id=user.id, created_by=None, read_by_user_ids=[]))
+    db.commit()
+
+    prefs       = dict(user.notification_preferences or {})
+    tg_token    = os.getenv("TELEGRAM_BOT_TOKEN", "").strip()
+    wa_sid      = os.getenv("TWILIO_ACCOUNT_SID", "").strip()
+    wa_token    = os.getenv("TWILIO_AUTH_TOKEN", "").strip()
+    wa_from_num = os.getenv("TWILIO_WHATSAPP_NUMBER", "+14155238886").strip()
+    resend_key  = os.getenv("RESEND_API_KEY", "").strip()
+    from_email  = os.getenv("RESEND_FROM_EMAIL", "noreply@finai.com").strip()
+    full_msg    = f"{title}\n\n{message}"
+
+    # 2. Telegram (user's own linked chat)
+    tg_chat = user.telegram_chat_id or prefs.get("telegram_chat_id")
+    if tg_token and tg_chat:
+        def _tg():
+            try:
+                import httpx as _hx
+                _hx.post(
+                    f"https://api.telegram.org/bot{tg_token}/sendMessage",
+                    json={"chat_id": tg_chat, "text": full_msg, "parse_mode": "Markdown"},
+                    timeout=6,
+                )
+            except Exception as _e:
+                logger.warning(f"Telegram delivery to user {user.id} failed: {_e}")
+        _thr.Thread(target=_tg, daemon=True).start()
+
+    # 3. WhatsApp (Twilio) — if user has linked number
+    wa_phone = user.whatsapp_number or prefs.get("whatsapp_number")
+    wa_verified = user.whatsapp_connected or prefs.get("whatsapp_verified")
+    if wa_sid and wa_token and wa_phone and wa_verified:
+        def _wa():
+            try:
+                import httpx as _hx
+                _hx.post(
+                    f"https://api.twilio.com/2010-04-01/Accounts/{wa_sid}/Messages.json",
+                    auth=(wa_sid, wa_token),
+                    data={"From": f"whatsapp:{wa_from_num}", "To": f"whatsapp:{wa_phone}",
+                          "Body": full_msg},
+                    timeout=6,
+                )
+            except Exception as _e:
+                logger.warning(f"WhatsApp delivery to user {user.id} failed: {_e}")
+        _thr.Thread(target=_wa, daemon=True).start()
+
+    # 4. Resend email
+    if resend_key and user.email:
+        def _email():
+            try:
+                import resend as _resend
+                _resend.api_key = resend_key
+                _resend.Emails.send({
+                    "from": from_email,
+                    "to": user.email,
+                    "subject": title,
+                    "html": f"<p>{message.replace(chr(10), '<br>')}</p>",
+                })
+            except Exception as _e:
+                logger.warning(f"Resend delivery to user {user.id} failed: {_e}")
+        _thr.Thread(target=_email, daemon=True).start()
+
+
+async def _notify_external_only(user: "User", title: str, message: str) -> None:
+    """Fire external channels only (no DB write). Runs in a plain thread event loop."""
+    prefs       = dict(user.notification_preferences or {})
+    tg_token    = os.getenv("TELEGRAM_BOT_TOKEN", "").strip()
+    wa_sid      = os.getenv("TWILIO_ACCOUNT_SID", "").strip()
+    wa_token    = os.getenv("TWILIO_AUTH_TOKEN", "").strip()
+    wa_from_num = os.getenv("TWILIO_WHATSAPP_NUMBER", "+14155238886").strip()
+    resend_key  = os.getenv("RESEND_API_KEY", "").strip()
+    from_email  = os.getenv("RESEND_FROM_EMAIL", "noreply@finai.com").strip()
+    full_msg    = f"{title}\n\n{message}"
+
+    tg_chat = getattr(user, "telegram_chat_id", None) or prefs.get("telegram_chat_id")
+    if tg_token and tg_chat:
+        try:
+            import httpx as _hx
+            _hx.post(
+                f"https://api.telegram.org/bot{tg_token}/sendMessage",
+                json={"chat_id": tg_chat, "text": full_msg, "parse_mode": "Markdown"},
+                timeout=6,
+            )
+        except Exception as _e:
+            logger.warning(f"Telegram ext delivery to user {user.id}: {_e}")
+
+    wa_phone    = getattr(user, "whatsapp_number", None) or prefs.get("whatsapp_number")
+    wa_verified = getattr(user, "whatsapp_connected", False) or prefs.get("whatsapp_verified")
+    if wa_sid and wa_token and wa_phone and wa_verified:
+        try:
+            import httpx as _hx
+            _hx.post(
+                f"https://api.twilio.com/2010-04-01/Accounts/{wa_sid}/Messages.json",
+                auth=(wa_sid, wa_token),
+                data={"From": f"whatsapp:{wa_from_num}", "To": f"whatsapp:{wa_phone}",
+                      "Body": full_msg},
+                timeout=6,
+            )
+        except Exception as _e:
+            logger.warning(f"WhatsApp ext delivery to user {user.id}: {_e}")
+
+    if resend_key and getattr(user, "email", None):
+        try:
+            import resend as _resend
+            _resend.api_key = resend_key
+            _resend.Emails.send({
+                "from": from_email,
+                "to": user.email,
+                "subject": title,
+                "html": f"<p>{message.replace(chr(10), '<br>')}</p>",
+            })
+        except Exception as _e:
+            logger.warning(f"Resend ext delivery to user {user.id}: {_e}")
 
 
 # ===================== Notifications =====================
@@ -2738,24 +2961,7 @@ async def admin_reject_subscription(body: SubActionBody, current_user=Depends(ge
     return {"status": "rejected"}
 
 
-# ===================== WhatsApp — Generate Code & Disconnect =====================
-
-@router.post("/users/whatsapp-generate-code")
-async def whatsapp_generate_code(current_user=Depends(get_current_user), db: Session = Depends(get_db)):
-    """Generate a pairing code for the user to send to the FinAi WhatsApp bot."""
-    import random, string
-    from datetime import datetime, timedelta
-    user = db.query(User).filter(User.email == current_user["email"]).first()
-    if not user:
-        raise HTTPException(status_code=404, detail="User not found")
-    code = "WA-" + "".join(random.choices(string.ascii_uppercase + string.digits, k=6))
-    prefs: dict = user.notification_prefs or {}
-    prefs["whatsapp_pending_code"] = code
-    prefs["whatsapp_code_expires"] = (datetime.utcnow() + timedelta(minutes=30)).isoformat()
-    prefs["whatsapp_verified"] = False
-    user.notification_prefs = prefs
-    db.commit()
-    return {"code": code, "message": "Send this code to +1 415 523 8886 on WhatsApp to connect."}
+# ===================== WhatsApp — Disconnect =====================
 
 
 @router.post("/users/disconnect-whatsapp")
