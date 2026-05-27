@@ -192,7 +192,7 @@ export default function WalletPage() {
 
   const depMethodObj = METHODS.find(m => m.key === depMethod)
   const depCfgKey = depMethodObj?.cfgKey
-  const depAddress = depCfgKey ? cfg[depCfgKey]?.value?.trim() : ''
+  const depAddress = depCfgKey ? (cfg[depCfgKey]?.value?.trim() ?? '') : ''
   const depConfigured = depMethod === 'bank'
     ? !!cfg['bank_account']?.value
     : !!depAddress
@@ -345,8 +345,19 @@ export default function WalletPage() {
                 </div>
               )}
 
-              {/* Step 3 - STRONGER FIX */}
-              {depStep === 3 && (
+              {/* Step 3 */}
+              {depStep === 3 && !depMethodObj && (
+                <div className="space-y-4">
+                  <div className="bg-[#f6465d]/5 border border-[#f6465d]/20 rounded-xl p-4 flex items-start gap-3">
+                    <AlertTriangle size={16} className="text-[#f6465d] flex-shrink-0 mt-0.5" />
+                    <div>
+                      <p className="text-xs font-semibold text-[#f6465d]">No payment method selected</p>
+                      <button onClick={() => setDepStep(2)} className="mt-3 text-xs text-[#f0b90b] hover:underline">← Choose a method</button>
+                    </div>
+                  </div>
+                </div>
+              )}
+              {depStep === 3 && depMethodObj && (
                 <div className="space-y-5">
                   <div className="flex items-center gap-2">
                     <button onClick={() => setDepStep(2)} className="p-1.5 text-[#848e9c] hover:text-[#eaecef] rounded-lg hover:bg-[#2b3139] transition">
@@ -355,7 +366,7 @@ export default function WalletPage() {
                     <div>
                       <h2 className="text-sm font-semibold text-[#eaecef]">Send your payment</h2>
                       <p className="text-xs text-[#848e9c]">
-                        {depMethodObj?.label || 'Unknown'} · ${parseFloat(depAmount || '0').toFixed(2)} USDT
+                        {depMethodObj.label} · ${parseFloat(depAmount || '0').toFixed(2)} USDT
                       </p>
                     </div>
                   </div>
