@@ -1,4 +1,5 @@
 import os
+import asyncio
 from pathlib import Path
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -9,12 +10,11 @@ from loguru import logger
 
 from src.api.routes import router
 from src.api.middleware import APIRateLimitMiddleware
-from src.notifications.scheduler import scheduler
 from src.database.models import Base
 from src.database.session import engine
 
 app = FastAPI(
-    title="FinAi API",           # Changed to match your repo name
+    title="FinAi API",
     version="1.0.0",
     description="AI-Powered Financial News Ingestion & Automated Trading Platform",
     docs_url="/docs",
@@ -22,49 +22,80 @@ app = FastAPI(
 )
 
 # ===================== Middleware =====================
-# CORS - Be more restrictive in production!
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],                    # Change to specific domains in production
+    allow_origins=["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
-
-# Custom Rate Limiting + API Usage Logging Middleware
 app.add_middleware(APIRateLimitMiddleware)
 
 # Prometheus metrics
 Instrumentator().instrument(app).expose(app, endpoint="/metrics")
 
-# Include API routes with prefix
+# Include API routes
 app.include_router(router, prefix="/api")
+
+# ===================== Static Frontend Serving =====================
+FRONTEND_DIST = Path(__file__).parent.parent.parent / "frontend" / "dist"
+
+if FRONTEND_DIST.exists():
+    app.mount("/assets", StaticFiles(directory=str(FRONTEND_DIST / "assets")), name="assets")
+
+    @app.get("/")
+    async def serve_root():
+        return FileResponse(str(FRONTEND_DIST / "index.html"))
+
+    @app.get("/{full_path:path}")
+    async def serve_spa(full_path: str):
+        if full_path.startswith(("api/", "docs", "redoc", "openapi.json", "metrics", "assets/")):
+            from fastapi import HTTPException
+            raise HTTPException(status_code=404)
+        index = FRONTEND_DIST / "index.html"
+        if index.exists():
+            return FileResponse(str(index))
+        from fastapi import HTTPException
+        raise HTTPException(status_code=404)
+else:
+    @app.get("/")
+    async def root():
+        return {
+            "message": "Welcome to FinAi - AI Powered Trading Platform",
+            "version": "1.0.0",
+            "status": "healthy",
+            "docs": "/docs",
+            "metrics": "/metrics",
+            "api_prefix": "/api"
+        }
 
 
 # ===================== Startup & Shutdown Events =====================
 @app.on_event("startup")
 async def startup_event():
+    # DB schema
     Base.metadata.create_all(bind=engine)
-
-    # Safe column migrations for new fields (idempotent)
     from sqlalchemy import text as _text
     try:
         with engine.connect() as _conn:
-            _conn.execute(_text("ALTER TABLE users ADD COLUMN IF NOT EXISTS transfer_pin VARCHAR(255)"))
-            _conn.execute(_text("ALTER TABLE users ADD COLUMN IF NOT EXISTS pending_deletion BOOLEAN DEFAULT FALSE"))
-            _conn.execute(_text("ALTER TABLE trade_logs ADD COLUMN IF NOT EXISTS stop_loss FLOAT"))
-            _conn.execute(_text("ALTER TABLE trade_logs ADD COLUMN IF NOT EXISTS take_profit FLOAT"))
-            _conn.execute(_text("ALTER TABLE trade_logs ADD COLUMN IF NOT EXISTS leverage FLOAT DEFAULT 1.0"))
-            _conn.execute(_text("ALTER TABLE trade_logs ADD COLUMN IF NOT EXISTS lot_size FLOAT"))
-            _conn.execute(_text("ALTER TABLE users ADD COLUMN IF NOT EXISTS subscription VARCHAR(50) DEFAULT 'free'"))
-            _conn.execute(_text("ALTER TABLE users ADD COLUMN IF NOT EXISTS telegram_chat_id VARCHAR(100)"))
-            _conn.execute(_text("ALTER TABLE users ADD COLUMN IF NOT EXISTS whatsapp_number VARCHAR(50)"))
-            _conn.execute(_text("ALTER TABLE users ADD COLUMN IF NOT EXISTS telegram_connected BOOLEAN DEFAULT FALSE"))
-            _conn.execute(_text("ALTER TABLE users ADD COLUMN IF NOT EXISTS whatsapp_connected BOOLEAN DEFAULT FALSE"))
-            _conn.execute(_text("ALTER TABLE users ADD COLUMN IF NOT EXISTS referral_code VARCHAR(20)"))
-            _conn.execute(_text("ALTER TABLE users ADD COLUMN IF NOT EXISTS referred_by VARCHAR(20)"))
+            for stmt in [
+                "ALTER TABLE users ADD COLUMN IF NOT EXISTS transfer_pin VARCHAR(255)",
+                "ALTER TABLE users ADD COLUMN IF NOT EXISTS pending_deletion BOOLEAN DEFAULT FALSE",
+                "ALTER TABLE trade_logs ADD COLUMN IF NOT EXISTS stop_loss FLOAT",
+                "ALTER TABLE trade_logs ADD COLUMN IF NOT EXISTS take_profit FLOAT",
+                "ALTER TABLE trade_logs ADD COLUMN IF NOT EXISTS leverage FLOAT DEFAULT 1.0",
+                "ALTER TABLE trade_logs ADD COLUMN IF NOT EXISTS lot_size FLOAT",
+                "ALTER TABLE users ADD COLUMN IF NOT EXISTS subscription VARCHAR(50) DEFAULT 'free'",
+                "ALTER TABLE users ADD COLUMN IF NOT EXISTS telegram_chat_id VARCHAR(100)",
+                "ALTER TABLE users ADD COLUMN IF NOT EXISTS whatsapp_number VARCHAR(50)",
+                "ALTER TABLE users ADD COLUMN IF NOT EXISTS telegram_connected BOOLEAN DEFAULT FALSE",
+                "ALTER TABLE users ADD COLUMN IF NOT EXISTS whatsapp_connected BOOLEAN DEFAULT FALSE",
+                "ALTER TABLE users ADD COLUMN IF NOT EXISTS referral_code VARCHAR(20)",
+                "ALTER TABLE users ADD COLUMN IF NOT EXISTS referred_by VARCHAR(20)",
+            ]:
+                _conn.execute(_text(stmt))
             _conn.commit()
-            # Backfill referral_code for existing users who don't have one
+
             import secrets as _sec, string as _str
             _alphabet = _str.ascii_uppercase + _str.digits
             _rows = _conn.execute(_text("SELECT id FROM users WHERE referral_code IS NULL")).fetchall()
@@ -79,7 +110,7 @@ async def startup_event():
     except Exception:
         pass
 
-    # Seed admin account (idempotent)
+    # Seed admin
     try:
         from src.database.session import SessionLocal as _SL
         from src.users.crud import get_user_by_email as _gube, create_user as _cu
@@ -105,90 +136,58 @@ async def startup_event():
     except Exception as _seed_err:
         logger.warning(f"Admin seed skipped: {_seed_err}")
 
-    scheduler.start()
+    # Scheduler + Telegram webhook run in background so startup finishes fast
+    asyncio.create_task(_deferred_init())
+    logger.success("🚀 FinAi API started — background init in progress")
 
-    # ── Auto-register Telegram webhook ──────────────────────────────────
+
+async def _deferred_init():
+    """Start scheduler and register Telegram webhook after server is ready."""
     try:
-        import httpx as _hx, asyncio as _asyncio
-        _bot_token  = os.getenv("TELEGRAM_BOT_TOKEN", "")
-        _wh_secret  = os.getenv("TELEGRAM_WEBHOOK_SECRET", "")
-        _domain     = (
+        from src.notifications.scheduler import scheduler
+        scheduler.start()
+        logger.success("⏰ Scheduler started")
+    except Exception as _sch_err:
+        logger.warning(f"Scheduler start skipped: {_sch_err}")
+
+    try:
+        import httpx as _hx
+        _bot_token = os.getenv("TELEGRAM_BOT_TOKEN", "")
+        _wh_secret = os.getenv("TELEGRAM_WEBHOOK_SECRET", "")
+        _domain = (
             os.getenv("REPLIT_DEV_DOMAIN")
             or os.getenv("REPLIT_DOMAINS", "").split(",")[0].strip()
         )
         if _bot_token and _domain:
             _wh_url = f"https://{_domain}/api/telegram/webhook"
-            async def _register_webhook():
-                try:
-                    payload = {"url": _wh_url}
-                    if _wh_secret:
-                        payload["secret_token"] = _wh_secret
-                    async with _hx.AsyncClient(timeout=10) as _c:
-                        _r = await _c.post(
-                            f"https://api.telegram.org/bot{_bot_token}/setWebhook",
-                            json=payload,
-                        )
-                        _data = _r.json()
-                        if _data.get("ok"):
-                            logger.success(f"✅ Telegram webhook registered: {_wh_url}")
-                        else:
-                            logger.warning(f"⚠️  Telegram webhook registration failed: {_data}")
-                except Exception as _we:
-                    logger.warning(f"Telegram webhook registration skipped: {_we}")
-            _asyncio.create_task(_register_webhook())
+            payload = {"url": _wh_url}
+            if _wh_secret:
+                payload["secret_token"] = _wh_secret
+            async with _hx.AsyncClient(timeout=10) as _c:
+                _r = await _c.post(
+                    f"https://api.telegram.org/bot{_bot_token}/setWebhook",
+                    json=payload,
+                )
+                _data = _r.json()
+                if _data.get("ok"):
+                    logger.success(f"✅ Telegram webhook registered: {_wh_url}")
+                else:
+                    logger.warning(f"⚠️  Telegram webhook registration failed: {_data}")
         else:
             if not _bot_token:
                 logger.info("ℹ️  TELEGRAM_BOT_TOKEN not set — webhook skipped")
     except Exception as _tg_err:
-        logger.warning(f"Telegram startup init skipped: {_tg_err}")
-
-    logger.success("🚀 FinAi API started successfully")
-    logger.info("📊 Docs available at: http://localhost:8000/docs")
-    logger.info("📈 Metrics available at: http://localhost:8000/metrics")
+        logger.warning(f"Telegram webhook init skipped: {_tg_err}")
 
 
 @app.on_event("shutdown")
 async def shutdown_event():
     try:
+        from src.notifications.scheduler import scheduler
         scheduler.shutdown()
         logger.info("🛑 Scheduler shut down gracefully")
     except Exception as e:
         logger.error(f"Error during shutdown: {e}")
-
-
-# ===================== Static Frontend Serving (Production) =====================
-FRONTEND_DIST = Path(__file__).parent.parent.parent / "frontend" / "dist"
-
-if FRONTEND_DIST.exists():
-    app.mount("/assets", StaticFiles(directory=str(FRONTEND_DIST / "assets")), name="assets")
-
-    @app.get("/")
-    async def serve_root():
-        return FileResponse(str(FRONTEND_DIST / "index.html"))
-
-    @app.get("/{full_path:path}")
-    async def serve_spa(full_path: str):
-        # Don't intercept API, docs, metrics, or static asset routes
-        if full_path.startswith(("api/", "docs", "redoc", "openapi.json", "metrics", "assets/")):
-            from fastapi import HTTPException
-            raise HTTPException(status_code=404)
-        index = FRONTEND_DIST / "index.html"
-        if index.exists():
-            return FileResponse(str(index))
-        from fastapi import HTTPException
-        raise HTTPException(status_code=404)
-else:
-    # ===================== Root Endpoint (Dev only) =====================
-    @app.get("/")
-    async def root():
-        return {
-            "message": "Welcome to FinAi - AI Powered Trading Platform",
-            "version": "1.0.0",
-            "status": "healthy",
-            "docs": "/docs",
-            "metrics": "/metrics",
-            "api_prefix": "/api"
-        }
 
 
 if __name__ == "__main__":

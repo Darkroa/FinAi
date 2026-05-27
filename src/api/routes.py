@@ -11,8 +11,6 @@ from loguru import logger
 from pydantic import BaseModel
 
 # Internal imports
-from src.celery_app import celery_app
-from src.celery_app.tasks import ingest_and_detect_events
 from src.auth.auth import create_access_token
 from src.users.crud import create_user, get_user_by_email
 from src.database.session import get_db
@@ -2087,6 +2085,7 @@ async def public_get_trades(limit: int = 20, user=Depends(authenticate_api_key))
 # ===================== Ingest / Analysis =====================
 @router.post("/ingest")
 async def trigger_ingestion(background_tasks: BackgroundTasks):
+    from src.celery_app.tasks import ingest_and_detect_events
     task = ingest_and_detect_events.delay()
     return {"status": "triggered", "task_id": task.id}
 
@@ -2450,7 +2449,8 @@ async def get_live_prices():
 @router.get("/celery/task/{task_id}")
 async def get_celery_task_status(task_id: str):
     from celery.result import AsyncResult
-    task_result = AsyncResult(task_id, app=celery_app)
+    from src.celery_app import celery_app as _celery_app
+    task_result = AsyncResult(task_id, app=_celery_app)
     response = {"task_id": task_id, "status": task_result.status,
                 "successful": task_result.successful(), "failed": task_result.failed()}
     if task_result.ready():
