@@ -47,6 +47,22 @@ if FRONTEND_DIST.exists():
     async def serve_root():
         return FileResponse(str(FRONTEND_DIST / "index.html"))
 
+    @app.get("/robots.txt", include_in_schema=False)
+    async def serve_robots():
+        robots = FRONTEND_DIST / "robots.txt"
+        if robots.exists():
+            return FileResponse(str(robots), media_type="text/plain")
+        from fastapi.responses import PlainTextResponse
+        return PlainTextResponse("User-agent: *\nAllow: /\nDisallow: /api/\n")
+
+    @app.get("/favicon.svg", include_in_schema=False)
+    async def serve_favicon():
+        favicon = FRONTEND_DIST / "favicon.svg"
+        if favicon.exists():
+            return FileResponse(str(favicon), media_type="image/svg+xml")
+        from fastapi import HTTPException
+        raise HTTPException(status_code=404)
+
     @app.get("/{full_path:path}")
     async def serve_spa(full_path: str):
         if full_path.startswith(("api/", "docs", "redoc", "openapi.json", "metrics", "assets/")):
