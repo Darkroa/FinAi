@@ -3,7 +3,7 @@ import {
   getBotStatus, startBot, stopBot, closeBotPosition,
   getBotTrades, updateBotParams, getBotPnlHistory, listApiKeys,
   getSubscriptionLimits,
-  finEventStart, finEventStop, finEventStatus, finEventTrades, finEventListBots,
+  finEventStart, finEventStop, finEventTrades, finEventListBots,
 } from '../lib/api'
 import { useAuthStore } from '../store/authStore'
 import toast from 'react-hot-toast'
