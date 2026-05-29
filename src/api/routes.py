@@ -20,7 +20,7 @@ from src.auth.dependencies import get_current_user, require_admin
 from src.database.models import (
     User, APIKey, Transaction, UserMoney, Event,
     Notification, WalletConfig, SupportTicket, SupportMessage, TradeLog, PriceAlert,
-    SubscriptionRequest
+    SubscriptionRequest, Ad
 )
 
 # ===================== Pydantic Schemas =====================
@@ -50,6 +50,7 @@ class DepositRequest(BaseModel):
     wallet_address: Optional[str] = None
     bank_ref: Optional[str] = None
     note: Optional[str] = None
+    payment_proof: Optional[str] = None  # base64 image for bank transfer proof
 
 class WithdrawRequest(BaseModel):
     method: str
@@ -267,6 +268,7 @@ def _tx_dict(t: Transaction) -> dict:
         "wallet_address": t.wallet_address,
         "bank_ref": t.bank_ref,
         "note": t.note,
+        "payment_proof": t.payment_proof,
         "recipient_user_id": t.recipient_user_id,
         "created_at": t.created_at.isoformat() if t.created_at else None,
         "updated_at": t.updated_at.isoformat() if t.updated_at else None,
@@ -716,6 +718,7 @@ async def get_wallet_config(db: Session = Depends(get_db)):
         "eth_address":          {"value": "", "label": "Ethereum (ETH) Address"},
         "usdt_trc20":           {"value": "", "label": "USDT TRC-20 Address"},
         "bank_name":            {"value": "", "label": "Bank Name"},
+        "bank_address":         {"value": "", "label": "Bank Address"},
         "bank_account":         {"value": "", "label": "Account Number / IBAN"},
         "bank_routing":         {"value": "", "label": "Routing / Sort Code"},
         "bank_swift":           {"value": "", "label": "SWIFT / BIC Code"},
@@ -744,6 +747,7 @@ async def request_deposit(data: DepositRequest, current_user=Depends(get_current
         wallet_address=data.wallet_address,
         bank_ref=data.bank_ref,
         note=data.note,
+        payment_proof=data.payment_proof,
     )
     db.add(tx)
     db.commit()
@@ -3410,6 +3414,81 @@ async def admin_update_referral_code(user_id: int, body: _ReferralCodeUpdate, db
         "referral_link": f"https://{domain}/login?ref={u.referral_code}" if domain else None,
         "referred_count": referred_count,
     }
+
+
+# ===================== Ads =====================
+class AdCreate(BaseModel):
+    title: str
+    image_base64: Optional[str] = None
+    link_url: Optional[str] = None
+    is_active: bool = True
+
+
+@router.get("/ads/active")
+async def get_active_ad(db: Session = Depends(get_db)):
+    """Return the latest active ad for display to users."""
+    ad = db.query(Ad).filter(Ad.is_active == True).order_by(Ad.created_at.desc()).first()
+    if not ad:
+        return None
+    return {
+        "id": ad.id,
+        "title": ad.title,
+        "image_base64": ad.image_base64,
+        "link_url": ad.link_url,
+        "created_at": ad.created_at.isoformat() if ad.created_at else None,
+    }
+
+
+@router.get("/admin/ads", dependencies=[Depends(require_admin)])
+async def admin_list_ads(db: Session = Depends(get_db)):
+    ads = db.query(Ad).order_by(Ad.created_at.desc()).all()
+    return [
+        {
+            "id": a.id,
+            "title": a.title,
+            "image_base64": a.image_base64,
+            "link_url": a.link_url,
+            "is_active": a.is_active,
+            "created_at": a.created_at.isoformat() if a.created_at else None,
+        }
+        for a in ads
+    ]
+
+
+@router.post("/admin/ads", dependencies=[Depends(require_admin)])
+async def admin_create_ad(data: AdCreate, current_user=Depends(get_current_user), db: Session = Depends(get_db)):
+    user = db.query(User).filter(User.email == current_user["email"]).first()
+    ad = Ad(
+        title=data.title,
+        image_base64=data.image_base64,
+        link_url=data.link_url,
+        is_active=data.is_active,
+        created_by=user.id if user else None,
+    )
+    db.add(ad)
+    db.commit()
+    db.refresh(ad)
+    return {"id": ad.id, "title": ad.title, "is_active": ad.is_active}
+
+
+@router.patch("/admin/ads/{ad_id}/toggle", dependencies=[Depends(require_admin)])
+async def admin_toggle_ad(ad_id: int, db: Session = Depends(get_db)):
+    ad = db.query(Ad).filter(Ad.id == ad_id).first()
+    if not ad:
+        raise HTTPException(status_code=404, detail="Ad not found")
+    ad.is_active = not ad.is_active
+    db.commit()
+    return {"id": ad.id, "is_active": ad.is_active}
+
+
+@router.delete("/admin/ads/{ad_id}", dependencies=[Depends(require_admin)])
+async def admin_delete_ad(ad_id: int, db: Session = Depends(get_db)):
+    ad = db.query(Ad).filter(Ad.id == ad_id).first()
+    if not ad:
+        raise HTTPException(status_code=404, detail="Ad not found")
+    db.delete(ad)
+    db.commit()
+    return {"message": "Ad deleted"}
 
 
 @router.delete("/admin/referrals/{user_id}/code", dependencies=[Depends(require_admin)])

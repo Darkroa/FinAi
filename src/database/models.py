@@ -132,6 +132,7 @@ class Transaction(Base):
     wallet_address = Column(String(300), nullable=True)
     bank_ref = Column(String(200), nullable=True)
     note = Column(Text, nullable=True)
+    payment_proof = Column(Text, nullable=True)   # base64 image uploaded by user for bank transfers
     recipient_user_id = Column(Integer, ForeignKey("users.id"), nullable=True)  # for P2P
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
@@ -318,6 +319,21 @@ class PriceAlert(Base):
     created_at = Column(DateTime, default=datetime.utcnow)
 
     user = relationship("User")
+
+
+class Ad(Base):
+    """Admin-created in-app advertisements shown to users after login."""
+    __tablename__ = "ads"
+
+    id            = Column(Integer, primary_key=True, index=True)
+    title         = Column(String(300), nullable=False)
+    image_base64  = Column(Text, nullable=True)    # base64-encoded image
+    link_url      = Column(String(500), nullable=True)
+    is_active     = Column(Boolean, default=True)
+    created_by    = Column(Integer, ForeignKey("users.id"), nullable=True)
+    created_at    = Column(DateTime, default=datetime.utcnow)
+
+    creator = relationship("User", foreign_keys=[created_by])
 
 
 class Bonus(Base):

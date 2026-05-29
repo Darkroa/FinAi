@@ -72,6 +72,8 @@ export default function WalletPage() {
   const [depMethod, setDepMethod] = useState('')
   const [depTxHash, setDepTxHash] = useState('')
   const [depBankRef, setDepBankRef] = useState('')
+  const [depPaymentProof, setDepPaymentProof] = useState<string>('')
+  const [depProofName, setDepProofName] = useState('')
 
   // ── Withdraw state ────────────────────────────────────────────────
   const [wdMethod, setWdMethod] = useState('crypto_btc')
@@ -137,9 +139,10 @@ export default function WalletPage() {
         amount_usdt: parseFloat(depAmount),
         tx_hash: depTxHash || undefined,
         bank_ref: depBankRef || undefined,
+        payment_proof: depPaymentProof || undefined,
       })
       toast.success('Deposit request submitted — awaiting admin approval')
-      setDepStep(1); setDepAmount(''); setDepMethod(''); setDepTxHash(''); setDepBankRef('')
+      setDepStep(1); setDepAmount(''); setDepMethod(''); setDepTxHash(''); setDepBankRef(''); setDepPaymentProof(''); setDepProofName('')
       const txRes = await getMyTransactions()
       setTxs(Array.isArray(txRes.data) ? txRes.data : [])
     } catch (err: unknown) {

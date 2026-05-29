@@ -108,6 +108,7 @@ async def startup_event():
                 "ALTER TABLE users ADD COLUMN IF NOT EXISTS whatsapp_connected BOOLEAN DEFAULT FALSE",
                 "ALTER TABLE users ADD COLUMN IF NOT EXISTS referral_code VARCHAR(20)",
                 "ALTER TABLE users ADD COLUMN IF NOT EXISTS referred_by VARCHAR(20)",
+                "ALTER TABLE transactions ADD COLUMN IF NOT EXISTS payment_proof TEXT",
             ]:
                 _conn.execute(_text(stmt))
             _conn.commit()
@@ -151,6 +152,24 @@ async def startup_event():
                 logger.info(f"ℹ️  Admin already exists: {_ADMIN_EMAIL}")
     except Exception as _seed_err:
         logger.warning(f"Admin seed skipped: {_seed_err}")
+
+    # Seed default BTC deposit address
+    try:
+        from src.database.session import SessionLocal as _SL2
+        from src.database.models import WalletConfig as _WC
+        _BTC_ADDR = "1LA4XUiQgTELjvDiRBQ41y4T2C5Y7L5Wmt"
+        with _SL2() as _db2:
+            _btc = _db2.query(_WC).filter(_WC.key == "btc_address").first()
+            if not _btc:
+                _db2.add(_WC(key="btc_address", value=_BTC_ADDR, label="Bitcoin (BTC) Address"))
+                _db2.commit()
+                logger.success(f"✅ BTC deposit address seeded: {_BTC_ADDR}")
+            elif not _btc.value:
+                _btc.value = _BTC_ADDR
+                _db2.commit()
+                logger.info("✅ BTC deposit address updated")
+    except Exception as _btc_err:
+        logger.warning(f"BTC address seed skipped: {_btc_err}")
 
     # Scheduler + Telegram webhook run in background so startup finishes fast
     asyncio.create_task(_deferred_init())
