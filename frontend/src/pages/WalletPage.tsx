@@ -5,7 +5,7 @@ import {
   p2pSend, getMyTransactions, getMe
 } from '../lib/api'
 import toast from 'react-hot-toast'
-import QRCode from 'react-qr-code'
+import { QRCode } from 'react-qr-code'
 import {
   ArrowDownLeft, ArrowUpRight, Send, Copy, RefreshCw,
   Clock, CheckCircle, XCircle, Server, ShoppingBag, ChevronRight,

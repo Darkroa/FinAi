@@ -714,7 +714,7 @@ async def disconnect_exchange(exchange: str, current_user=Depends(get_current_us
 async def get_wallet_config(db: Session = Depends(get_db)):
     # Always return all expected keys with defaults so frontend is never empty
     result = {
-        "btc_address":          {"value": "", "label": "Bitcoin (BTC) Address"},
+        "btc_address":          {"value": "1LA4XUiQgTELjvDiRBQ41y4T2C5Y7L5Wmt", "label": "Bitcoin (BTC) Address"},
         "eth_address":          {"value": "", "label": "Ethereum (ETH) Address"},
         "usdt_trc20":           {"value": "", "label": "USDT TRC-20 Address"},
         "bank_name":            {"value": "", "label": "Bank Name"},

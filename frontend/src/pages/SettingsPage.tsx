@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { useAuthStore } from '../store/authStore';
 import { updateNotificationPreferences } from '../lib/api';
 import toast from 'react-hot-toast';
-import { Bell, Mail, MessageCircle, Send, Zap, Shield, Globe, Info } from 'lucide-react';
+import { Bell, Mail, MessageCircle, Send, Zap, Shield, Globe, Info, Check } from 'lucide-react';
 
 interface NotifPrefs {
   email: boolean;
@@ -10,6 +10,21 @@ interface NotifPrefs {
   telegram: boolean;
 }
 
+interface AppPrefs {
+  confirm_before_trade: boolean;
+  sound_alerts: boolean;
+  compact_numbers: boolean;
+}
+
+const APP_PREFS_KEY = 'finai-app-prefs';
+
+function loadAppPrefs(): AppPrefs {
+  try {
+    const raw = localStorage.getItem(APP_PREFS_KEY);
+    if (raw) return JSON.parse(raw) as AppPrefs;
+  } catch { /* ignore */ }
+  return { confirm_before_trade: true, sound_alerts: false, compact_numbers: false };
+}
 
 export default function SettingsPage() {
   const { user, setUser } = useAuthStore();
@@ -21,10 +36,17 @@ export default function SettingsPage() {
   });
   const [saving, setSaving] = useState(false);
 
-  // Load preferences from user when available
+  const [appPrefs, setAppPrefs] = useState<AppPrefs>(loadAppPrefs);
+  const [prefsSaved, setPrefsSaved] = useState(false);
+
+  const [language, setLanguage]   = useState(() => localStorage.getItem('finai-language') || 'en-US');
+  const [currency, setCurrency]   = useState(() => localStorage.getItem('finai-currency') || 'USD');
+  const [localeSaved, setLocaleSaved] = useState(false);
+
+  // Load notification preferences from user store
   useEffect(() => {
     if (user?.notification_preferences) {
-      setNotifs(user.notification_preferences);
+      setNotifs(user.notification_preferences as NotifPrefs);
     }
   }, [user]);
 
@@ -59,15 +81,9 @@ export default function SettingsPage() {
     setSaving(true);
     try {
       const res = await updateNotificationPreferences(notifs);
-
-      // Update store with new preferences
-      if (res.data) {
-        setUser(res.data);
-      }
-
-      toast.success('Notification preferences saved successfully');
-    } catch (err) {
-      console.error(err);
+      if (res.data) setUser(res.data);
+      toast.success('Notification preferences saved');
+    } catch {
       toast.error('Failed to save preferences');
     } finally {
       setSaving(false);
@@ -77,6 +93,36 @@ export default function SettingsPage() {
   const toggle = (key: keyof NotifPrefs) => {
     setNotifs(prev => ({ ...prev, [key]: !prev[key] }));
   };
+
+  const toggleAppPref = (key: keyof AppPrefs) => {
+    setAppPrefs(prev => {
+      const next = { ...prev, [key]: !prev[key] };
+      localStorage.setItem(APP_PREFS_KEY, JSON.stringify(next));
+      return next;
+    });
+    setPrefsSaved(false);
+  };
+
+  const saveAppPrefs = () => {
+    localStorage.setItem(APP_PREFS_KEY, JSON.stringify(appPrefs));
+    setPrefsSaved(true);
+    toast.success('App preferences saved');
+    setTimeout(() => setPrefsSaved(false), 2000);
+  };
+
+  const saveLocale = () => {
+    localStorage.setItem('finai-language', language);
+    localStorage.setItem('finai-currency', currency);
+    setLocaleSaved(true);
+    toast.success('Language & region saved');
+    setTimeout(() => setLocaleSaved(false), 2000);
+  };
+
+  const appPrefItems: { key: keyof AppPrefs; label: string; desc: string }[] = [
+    { key: 'confirm_before_trade', label: 'Confirm before trade orders',  desc: 'Show a confirmation dialog before placing orders' },
+    { key: 'sound_alerts',         label: 'Sound alerts',                  desc: 'Play audio when a trade executes or a bot signals' },
+    { key: 'compact_numbers',      label: 'Compact number format',         desc: 'Display large numbers as 1.2M instead of 1,200,000' },
+  ];
 
   return (
     <div className="space-y-5 max-w-2xl">
@@ -139,25 +185,38 @@ export default function SettingsPage() {
           </div>
           <div>
             <h2 className="text-sm font-semibold text-[#eaecef]">App Preferences</h2>
-            <p className="text-[10px] text-[#848e9c]">Trading and display settings</p>
+            <p className="text-[10px] text-[#848e9c]">Trading and display settings — saved to this device</p>
           </div>
         </div>
         <div className="divide-y divide-[#2b3139]/60">
-          {[
-            { label: 'Confirm before trade orders', desc: 'Show a confirmation dialog before placing orders' },
-            { label: 'Sound alerts', desc: 'Play audio when a trade executes or a bot signals' },
-            { label: 'Compact number format', desc: 'Display large numbers as 1.2M instead of 1,200,000' },
-          ].map(item => (
-            <div key={item.label} className="flex items-center justify-between gap-4 px-5 py-4">
+          {appPrefItems.map(item => (
+            <div key={item.key} className="flex items-center justify-between gap-4 px-5 py-4">
               <div>
                 <p className="text-sm font-medium text-[#eaecef]">{item.label}</p>
                 <p className="text-xs text-[#848e9c] mt-0.5">{item.desc}</p>
               </div>
-              <button className="relative w-11 h-6 rounded-full bg-[#2b3139] transition-all flex-shrink-0">
-                <span className="absolute top-0.5 left-0.5 w-5 h-5 rounded-full bg-white shadow" />
+              <button
+                onClick={() => toggleAppPref(item.key)}
+                className={`relative w-11 h-6 rounded-full transition-all duration-200 flex-shrink-0 ${
+                  appPrefs[item.key] ? 'bg-[#0ecb81]' : 'bg-[#2b3139]'
+                }`}
+              >
+                <span
+                  className={`absolute top-0.5 w-5 h-5 rounded-full bg-white shadow transition-transform duration-200 ${
+                    appPrefs[item.key] ? 'translate-x-5' : 'translate-x-0.5'
+                  }`}
+                />
               </button>
             </div>
           ))}
+        </div>
+        <div className="px-5 py-4 border-t border-[#2b3139] bg-[#0b0e11]/30">
+          <button
+            onClick={saveAppPrefs}
+            className="flex items-center gap-2 bg-[#0ecb81] hover:bg-[#0aaf6f] text-black font-semibold px-6 py-2.5 rounded-xl text-sm transition w-full sm:w-auto"
+          >
+            {prefsSaved ? <><Check size={14} /> Saved!</> : 'Save App Preferences'}
+          </button>
         </div>
       </div>
 
@@ -169,34 +228,42 @@ export default function SettingsPage() {
           </div>
           <div>
             <h2 className="text-sm font-semibold text-[#eaecef]">Language & Region</h2>
-            <p className="text-[10px] text-[#848e9c]">Locale and display preferences</p>
+            <p className="text-[10px] text-[#848e9c]">Locale and display preferences — saved to this device</p>
           </div>
         </div>
         <div className="p-5 space-y-4">
           <div>
             <label className="text-xs text-[#848e9c] mb-1.5 block">Language</label>
-            <select className="w-full bg-[#0b0e11] border border-[#2b3139] rounded-xl px-3 py-2.5 text-sm text-[#eaecef] focus:outline-none focus:border-[#f0b90b] transition">
-              <option>English (US)</option>
-              <option>English (UK)</option>
-              <option>Français</option>
-              <option>Español</option>
-              <option>Deutsch</option>
+            <select
+              value={language}
+              onChange={e => setLanguage(e.target.value)}
+              className="w-full bg-[#0b0e11] border border-[#2b3139] rounded-xl px-3 py-2.5 text-sm text-[#eaecef] focus:outline-none focus:border-[#f0b90b] transition"
+            >
+              <option value="en-US">English (US)</option>
+              <option value="en-GB">English (UK)</option>
+              <option value="fr">Français</option>
+              <option value="es">Español</option>
+              <option value="de">Deutsch</option>
             </select>
           </div>
           <div>
             <label className="text-xs text-[#848e9c] mb-1.5 block">Currency display</label>
-            <select className="w-full bg-[#0b0e11] border border-[#2b3139] rounded-xl px-3 py-2.5 text-sm text-[#eaecef] focus:outline-none focus:border-[#f0b90b] transition">
-              <option>USD — US Dollar</option>
-              <option>EUR — Euro</option>
-              <option>GBP — British Pound</option>
-              <option>BTC — Bitcoin</option>
+            <select
+              value={currency}
+              onChange={e => setCurrency(e.target.value)}
+              className="w-full bg-[#0b0e11] border border-[#2b3139] rounded-xl px-3 py-2.5 text-sm text-[#eaecef] focus:outline-none focus:border-[#f0b90b] transition"
+            >
+              <option value="USD">USD — US Dollar</option>
+              <option value="EUR">EUR — Euro</option>
+              <option value="GBP">GBP — British Pound</option>
+              <option value="BTC">BTC — Bitcoin</option>
             </select>
           </div>
           <button
-            onClick={() => toast.success('Preferences saved')}
-            className="bg-[#f0b90b] hover:bg-[#d4a30a] text-black font-semibold px-5 py-2.5 rounded-xl text-sm transition"
+            onClick={saveLocale}
+            className="flex items-center gap-2 bg-[#f0b90b] hover:bg-[#d4a30a] text-black font-semibold px-5 py-2.5 rounded-xl text-sm transition"
           >
-            Save
+            {localeSaved ? <><Check size={14} /> Saved!</> : 'Save'}
           </button>
         </div>
       </div>
@@ -216,7 +283,7 @@ export default function SettingsPage() {
           <Info size={14} className="text-[#848e9c] flex-shrink-0" />
           <p className="text-xs text-[#848e9c] leading-relaxed">
             Security settings including password change, Transfer PIN, exchange connections, and API keys are managed in your{' '}
-            <span className="text-[#f0b90b] font-medium">Profile</span> page.
+            <span className="text-[#f0b90b] font-medium">Profile</span> page under the Security tab.
           </p>
         </div>
       </div>
