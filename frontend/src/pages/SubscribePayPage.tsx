@@ -1,7 +1,7 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuthStore } from '../store/authStore'
-import { requestSubscription } from '../lib/api'
+import { requestSubscription, getPricingPlans } from '../lib/api'
 import toast from 'react-hot-toast'
 import { Check, Zap, ArrowLeft, CreditCard, Wallet, Copy, RefreshCw } from 'lucide-react'
 
@@ -53,12 +53,26 @@ export default function SubscribePayPage() {
   const [autoRenew, setAutoRenew] = useState(true)
   const [confirming, setConfirming] = useState(false)
   const [submitted, setSubmitted] = useState(false)
+  const [apiPrices, setApiPrices] = useState<Record<string, number>>({})
+
+  useEffect(() => {
+    getPricingPlans()
+      .then(r => {
+        if (Array.isArray(r.data)) {
+          const m: Record<string, number> = {}
+          r.data.forEach((p: { name: string; price: number }) => { m[p.name] = p.price })
+          setApiPrices(m)
+        }
+      })
+      .catch(() => {})
+  }, [])
 
   const plan = PLANS.find(p => p.id === selectedPlan)
   const period = BILLING_PERIODS.find(p => p.key === billingPeriod)!
   const balance = user?.balance_usdt ?? 0
 
-  const monthlyPrice = plan && plan.basePrice > 0 ? plan.basePrice : 0
+  const apiMonthly = plan && plan.basePrice > 0 ? (apiPrices[plan.name] ?? plan.basePrice) : 0
+  const monthlyPrice = apiMonthly
   const totalBeforeDiscount = monthlyPrice * period.months
   const discount = totalBeforeDiscount * period.discount
   const finalPrice = totalBeforeDiscount - discount

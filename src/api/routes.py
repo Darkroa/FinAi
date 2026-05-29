@@ -2984,7 +2984,7 @@ class SubActionBody(BaseModel):
 
 @router.post("/admin/approve-subscription")
 async def admin_approve_subscription(body: SubActionBody, current_user=Depends(get_current_user), db: Session = Depends(get_db)):
-    from src.database.models import SubscriptionRequest
+    from src.database.models import SubscriptionRequest, Notification, Transaction
     from datetime import datetime, timedelta
     admin = db.query(User).filter(User.email == current_user["email"]).first()
     if not admin or not admin.is_admin:
@@ -3000,17 +3000,61 @@ async def admin_approve_subscription(body: SubActionBody, current_user=Depends(g
     req.note = body.note
     user = db.query(User).filter(User.id == req.user_id).first()
     if user:
+        # ── Upgrade the user's subscription plan ──────────────────────────
+        user.subscription = req.plan
         user.subscription_expires_at = expires
         user.subscription_period = req.period
         if hasattr(user, 'subscription_auto_renew'):
-            user.subscription_auto_renew = req.auto_renew
+            user.subscription_auto_renew = getattr(req, 'auto_renew', True)
+
+        # ── Deduct wallet balance if paid via wallet ──────────────────────
+        payment_method = getattr(req, 'payment_method', None)
+        amount = getattr(req, 'amount_usdt', 0) or 0
+        if payment_method == 'wallet' and amount > 0:
+            user.balance_usdt = max(0.0, (user.balance_usdt or 0.0) - float(amount))
+            # Record subscription transaction
+            tx = Transaction(
+                user_id=user.id,
+                tx_type='subscription',
+                method='wallet',
+                asset='USDT',
+                amount_usdt=float(amount),
+                status='completed',
+                note=f"Subscription: {req.plan} ({req.period})"
+            )
+            db.add(tx)
+
+        # ── Push notification to user ─────────────────────────────────────
+        plan_display = (req.plan or '').replace('_', ' ').replace('elite+', 'Elite+').title()
+        period_display = {'monthly': 'Monthly', '6month': '6 Months', 'yearly': 'Yearly'}.get(req.period, req.period or 'Monthly')
+        expires_str = expires.strftime('%b %d, %Y')
+        notif = Notification(
+            title=f"🎉 Subscription Activated — {plan_display} Plan",
+            message=(
+                f"Your {plan_display} subscription has been approved and activated! "
+                f"Billing period: {period_display}. "
+                f"Expires: {expires_str}. "
+                f"Enjoy your upgraded features. Thank you for subscribing to FinAi!"
+            ),
+            target_all=False,
+            target_user_id=user.id,
+            read_by_user_ids=[],
+            created_by=admin.id,
+        )
+        db.add(notif)
+
     db.commit()
-    return {"status": "approved", "expires_at": expires.isoformat()}
+    return {
+        "status": "approved",
+        "plan": req.plan,
+        "expires_at": expires.isoformat(),
+        "user_id": user.id if user else None,
+    }
 
 
 @router.post("/admin/reject-subscription")
 async def admin_reject_subscription(body: SubActionBody, current_user=Depends(get_current_user), db: Session = Depends(get_db)):
-    from src.database.models import SubscriptionRequest
+    from src.database.models import SubscriptionRequest, Notification
     from datetime import datetime
     admin = db.query(User).filter(User.email == current_user["email"]).first()
     if not admin or not admin.is_admin:
@@ -3022,6 +3066,24 @@ async def admin_reject_subscription(body: SubActionBody, current_user=Depends(ge
     req.processed_at = datetime.utcnow()
     req.processed_by = admin.id
     req.note = body.note
+    # Notify the user of rejection
+    user = db.query(User).filter(User.id == req.user_id).first()
+    if user:
+        plan_display = (req.plan or '').replace('_', ' ').replace('elite+', 'Elite+').title()
+        reason = body.note or "Please contact support for more information."
+        notif = Notification(
+            title=f"Subscription Request Not Approved — {plan_display}",
+            message=(
+                f"Unfortunately your {plan_display} subscription request could not be approved at this time. "
+                f"Reason: {reason} "
+                f"If you believe this is an error or need assistance, please open a support ticket."
+            ),
+            target_all=False,
+            target_user_id=user.id,
+            read_by_user_ids=[],
+            created_by=admin.id,
+        )
+        db.add(notif)
     db.commit()
     return {"status": "rejected"}
 

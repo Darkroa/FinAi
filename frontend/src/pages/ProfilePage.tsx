@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { useAuthStore, type User as UserProfile } from '../store/authStore'
 import {
   updateProfile, uploadPhoto, sendVerifyEmail, verifyEmail,
@@ -523,6 +524,8 @@ function PersonalTab({ user, setUser }: { user: UserProfile | null; setUser: (u:
 
 /* ─────────────────────────── FINAPI TAB ─────────────────────────── */
 function FinApiTab({ user, setUser }: { user: UserProfile | null; setUser: (u: any) => void }) {
+  const navigate = useNavigate()
+  const isFreeUser = !user?.subscription || user.subscription === 'free'
   const [apiKeys, setApiKeys]         = useState<ApiKey[]>([])
   const [keysLoaded, setKeysLoaded]   = useState(false)
   const [newKeyName, setNewKeyName]   = useState('')
@@ -821,72 +824,113 @@ function FinApiTab({ user, setUser }: { user: UserProfile | null; setUser: (u: a
           <p className="text-[11px] text-[#848e9c]">Connect Telegram and WhatsApp to receive real-time trade alerts and AI signals.</p>
 
           {/* Telegram — via @FinAitradebot */}
-          <div className="bg-[#0b0e11] border border-[#2b3139] rounded-xl p-4 space-y-3">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <Send size={12} className="text-[#229ED9]" />
-                <span className="text-xs font-semibold text-[#eaecef]">Telegram (@FinAitradebot)</span>
-              </div>
-              {tgVerified && (
-                <span className="flex items-center gap-1 text-[10px] text-[#0ecb81] bg-[#0ecb81]/10 border border-[#0ecb81]/20 px-2 py-0.5 rounded-full">
-                  <Wifi size={9} /> Connected
-                </span>
-              )}
-            </div>
-
-            {tgVerified ? (
-              <div className="space-y-2">
-                <div className="flex items-center gap-2 bg-[#0ecb81]/8 border border-[#0ecb81]/15 rounded-lg px-3 py-2.5">
-                  <CheckCircle size={13} className="text-[#0ecb81] flex-shrink-0" />
-                  <div>
-                    <p className="text-xs font-medium text-[#eaecef]">{tgLinkedName || 'Telegram User'}</p>
-                    <p className="text-[10px] text-[#848e9c]">Chat ID: {tgLinkedChatId} · Alerts enabled</p>
-                  </div>
+          {isFreeUser ? (
+            <div className="relative rounded-xl overflow-hidden">
+              <div className="bg-[#0b0e11] border border-[#2b3139] rounded-xl p-4 space-y-3 opacity-25 pointer-events-none select-none">
+                <div className="flex items-center gap-2">
+                  <Send size={12} className="text-[#229ED9]" />
+                  <span className="text-xs font-semibold text-[#eaecef]">Telegram (@FinAitradebot)</span>
                 </div>
-                <button onClick={handleDisconnectTelegram}
-                  className="w-full border border-[#f6465d]/30 hover:bg-[#f6465d]/10 text-[#f6465d] font-medium py-2 rounded-lg text-xs transition">
-                  Disconnect Telegram
+                <div className="h-16 bg-[#229ED9]/10 rounded-lg" />
+              </div>
+              <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-[#0b0e11]/80 rounded-xl">
+                <Lock size={16} className="text-[#f0b90b]" />
+                <p className="text-xs font-bold text-[#eaecef]">Pro Plan Required</p>
+                <p className="text-[10px] text-[#848e9c] text-center px-4">Upgrade to connect Telegram alerts</p>
+                <button onClick={() => navigate('/app/pricing')}
+                  className="mt-1 bg-[#f0b90b] hover:bg-[#d4a30a] text-black font-bold text-[10px] px-4 py-1.5 rounded-lg transition">
+                  Upgrade Now
                 </button>
               </div>
-            ) : (
-              <div className="space-y-3">
-                <ol className="text-[10px] text-[#848e9c] space-y-1 list-decimal list-inside">
-                  <li>Open Telegram and search for <span className="text-[#229ED9] font-mono">@FinAitradebot</span></li>
-                  <li>Click <span className="text-[#f0b90b]">Start</span> to begin a chat</li>
-                  <li>Click <span className="text-[#f0b90b]">Generate Code</span> below and send the code to the bot</li>
-                </ol>
-                {tgCode ? (
-                  <div className="space-y-2">
-                    <div className="bg-[#229ED9]/10 border border-[#229ED9]/20 rounded-xl p-3 text-center">
-                      <p className="text-[10px] text-[#848e9c] mb-1">Send this code to @FinAitradebot:</p>
-                      <div className="flex items-center justify-center gap-2">
-                        <code className="text-lg font-mono font-bold text-[#229ED9] tracking-widest">{tgCode}</code>
-                        <button onClick={() => { navigator.clipboard.writeText(tgCode); toast.success('Copied!') }}
-                          className="p-1 text-[#229ED9] hover:bg-[#229ED9]/10 rounded-lg transition">
-                          <Copy size={13}/>
-                        </button>
-                      </div>
-                    </div>
-                    <a href="https://t.me/FinAitradebot" target="_blank" rel="noopener noreferrer"
-                      className="flex items-center justify-center gap-2 w-full bg-[#229ED9] hover:bg-[#1a8bc4] text-white font-semibold py-2.5 rounded-lg text-xs transition">
-                      <Send size={12}/> Open @FinAitradebot
-                    </a>
-                    <p className="text-[10px] text-[#4a5568] text-center">After sending the code, this page will update automatically on next refresh.</p>
-                    <button onClick={() => setTgCode(null)} className="w-full text-xs text-[#848e9c] hover:text-[#eaecef] py-1 transition">
-                      Generate new code
-                    </button>
-                  </div>
-                ) : (
-                  <button onClick={handleGenerateTgCode} disabled={generatingTgCode}
-                    className="w-full bg-[#229ED9]/20 hover:bg-[#229ED9]/30 disabled:opacity-50 border border-[#229ED9]/30 text-[#229ED9] font-semibold py-2.5 rounded-lg text-xs transition flex items-center justify-center gap-2">
-                    {generatingTgCode ? <><RefreshCw size={12} className="animate-spin" /> Generating…</> : <><Send size={12}/> Generate Telegram Code</>}
-                  </button>
+            </div>
+          ) : (
+            <div className="bg-[#0b0e11] border border-[#2b3139] rounded-xl p-4 space-y-3">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <Send size={12} className="text-[#229ED9]" />
+                  <span className="text-xs font-semibold text-[#eaecef]">Telegram (@FinAitradebot)</span>
+                </div>
+                {tgVerified && (
+                  <span className="flex items-center gap-1 text-[10px] text-[#0ecb81] bg-[#0ecb81]/10 border border-[#0ecb81]/20 px-2 py-0.5 rounded-full">
+                    <Wifi size={9} /> Connected
+                  </span>
                 )}
               </div>
-            )}
-          </div>
+
+              {tgVerified ? (
+                <div className="space-y-2">
+                  <div className="flex items-center gap-2 bg-[#0ecb81]/8 border border-[#0ecb81]/15 rounded-lg px-3 py-2.5">
+                    <CheckCircle size={13} className="text-[#0ecb81] flex-shrink-0" />
+                    <div>
+                      <p className="text-xs font-medium text-[#eaecef]">{tgLinkedName || 'Telegram User'}</p>
+                      <p className="text-[10px] text-[#848e9c]">Chat ID: {tgLinkedChatId} · Alerts enabled</p>
+                    </div>
+                  </div>
+                  <button onClick={handleDisconnectTelegram}
+                    className="w-full border border-[#f6465d]/30 hover:bg-[#f6465d]/10 text-[#f6465d] font-medium py-2 rounded-lg text-xs transition">
+                    Disconnect Telegram
+                  </button>
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  <ol className="text-[10px] text-[#848e9c] space-y-1 list-decimal list-inside">
+                    <li>Open Telegram and search for <span className="text-[#229ED9] font-mono">@FinAitradebot</span></li>
+                    <li>Click <span className="text-[#f0b90b]">Start</span> to begin a chat</li>
+                    <li>Click <span className="text-[#f0b90b]">Generate Code</span> below and send the code to the bot</li>
+                  </ol>
+                  {tgCode ? (
+                    <div className="space-y-2">
+                      <div className="bg-[#229ED9]/10 border border-[#229ED9]/20 rounded-xl p-3 text-center">
+                        <p className="text-[10px] text-[#848e9c] mb-1">Send this code to @FinAitradebot:</p>
+                        <div className="flex items-center justify-center gap-2">
+                          <code className="text-lg font-mono font-bold text-[#229ED9] tracking-widest">{tgCode}</code>
+                          <button onClick={() => { navigator.clipboard.writeText(tgCode); toast.success('Copied!') }}
+                            className="p-1 text-[#229ED9] hover:bg-[#229ED9]/10 rounded-lg transition">
+                            <Copy size={13}/>
+                          </button>
+                        </div>
+                      </div>
+                      <a href="https://t.me/FinAitradebot" target="_blank" rel="noopener noreferrer"
+                        className="flex items-center justify-center gap-2 w-full bg-[#229ED9] hover:bg-[#1a8bc4] text-white font-semibold py-2.5 rounded-lg text-xs transition">
+                        <Send size={12}/> Open @FinAitradebot
+                      </a>
+                      <p className="text-[10px] text-[#4a5568] text-center">After sending the code, this page will update automatically on next refresh.</p>
+                      <button onClick={() => setTgCode(null)} className="w-full text-xs text-[#848e9c] hover:text-[#eaecef] py-1 transition">
+                        Generate new code
+                      </button>
+                    </div>
+                  ) : (
+                    <button onClick={handleGenerateTgCode} disabled={generatingTgCode}
+                      className="w-full bg-[#229ED9]/20 hover:bg-[#229ED9]/30 disabled:opacity-50 border border-[#229ED9]/30 text-[#229ED9] font-semibold py-2.5 rounded-lg text-xs transition flex items-center justify-center gap-2">
+                      {generatingTgCode ? <><RefreshCw size={12} className="animate-spin" /> Generating…</> : <><Send size={12}/> Generate Telegram Code</>}
+                    </button>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
 
           {/* WhatsApp */}
+          {isFreeUser ? (
+            <div className="relative rounded-xl overflow-hidden">
+              <div className="bg-[#0b0e11] border border-[#2b3139] rounded-xl p-4 space-y-3 opacity-25 pointer-events-none select-none">
+                <div className="flex items-center gap-2">
+                  <MessageCircle size={12} className="text-[#25D366]" />
+                  <span className="text-xs font-semibold text-[#eaecef]">WhatsApp (Twilio)</span>
+                </div>
+                <div className="h-16 bg-[#25D366]/10 rounded-lg" />
+              </div>
+              <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-[#0b0e11]/80 rounded-xl">
+                <Lock size={16} className="text-[#f0b90b]" />
+                <p className="text-xs font-bold text-[#eaecef]">Pro Plan Required</p>
+                <p className="text-[10px] text-[#848e9c] text-center px-4">Upgrade to connect WhatsApp alerts</p>
+                <button onClick={() => navigate('/app/pricing')}
+                  className="mt-1 bg-[#f0b90b] hover:bg-[#d4a30a] text-black font-bold text-[10px] px-4 py-1.5 rounded-lg transition">
+                  Upgrade Now
+                </button>
+              </div>
+            </div>
+          ) : (
           <div className="bg-[#0b0e11] border border-[#2b3139] rounded-xl p-4 space-y-3">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
@@ -957,6 +1001,7 @@ function FinApiTab({ user, setUser }: { user: UserProfile | null; setUser: (u: a
               </div>
             )}
           </div>
+          )}
         </div>
       </div>
     </div>

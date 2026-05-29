@@ -1,6 +1,8 @@
 import { useNavigate } from 'react-router-dom'
+import { useState, useEffect } from 'react'
 import { Check, Zap, Crown, Star, Infinity, Phone, Bot } from 'lucide-react'
 import { useAuthStore } from '../store/authStore'
+import { getPricingPlans } from '../lib/api'
 
 const plans = [
   {
@@ -119,6 +121,24 @@ export default function PricingPage() {
   const { user }  = useAuthStore()
   const userSub   = (user as unknown as { subscription?: string })?.subscription ?? 'free'
 
+  const [apiPrices, setApiPrices] = useState<Record<string, number>>({})
+  useEffect(() => {
+    getPricingPlans()
+      .then(r => {
+        if (Array.isArray(r.data)) {
+          const m: Record<string, number> = {}
+          r.data.forEach((p: { name: string; price: number }) => { m[p.name] = p.price })
+          setApiPrices(m)
+        }
+      })
+      .catch(() => {})
+  }, [])
+
+  const resolvedPlans = plans.map(p => ({
+    ...p,
+    price: p.price >= 0 && apiPrices[p.name] !== undefined ? apiPrices[p.name] : p.price,
+  }))
+
   const handleSelect = (tier: string) => {
     if (tier === 'custom') {
       navigate('/app/support')
@@ -164,7 +184,7 @@ export default function PricingPage() {
 
       {/* Plan cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-4">
-        {plans.map(plan => {
+        {resolvedPlans.map(plan => {
           const Icon      = plan.icon
           const isCurrent = plan.tier === userSub
           return (
