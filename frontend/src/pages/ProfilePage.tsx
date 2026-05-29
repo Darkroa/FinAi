@@ -738,81 +738,107 @@ function FinApiTab({ user, setUser }: { user: UserProfile | null; setUser: (u: a
       </div>
 
       {/* Exchange Connections */}
-      <div className="bg-[#161a1e] border border-[#2b3139] rounded-xl overflow-hidden">
-        <div className="flex items-center gap-2 px-4 py-3 border-b border-[#2b3139] bg-[#1a1f25]">
-          <Zap size={13} className="text-[#f0b90b]" />
-          <span className="text-xs font-semibold text-[#eaecef]">Exchange Connections</span>
-        </div>
-        <div className="p-4 space-y-4">
-          {connections.length > 0 && (
-            <div className="space-y-2">
-              {connections.map(c => {
-                const exch = EXCHANGES.find(e => e.id === c.exchange)
-                return (
-                  <div key={c.exchange} className="flex items-center justify-between bg-[#0b0e11] border border-[#0ecb81]/20 rounded-lg px-3 py-2.5">
-                    <div className="flex items-center gap-2.5">
-                      {exch?.logo
-                        ? <img src={exch.logo} alt={exch.label} className="w-6 h-6 rounded-full object-cover flex-shrink-0" onError={e => { (e.target as HTMLImageElement).style.display='none' }} />
-                        : <div className="w-6 h-6 rounded-full bg-[#2b3139] flex-shrink-0" />
-                      }
-                      <div>
-                        <p className="text-xs font-medium text-[#eaecef]">{c.label || c.exchange}</p>
-                        <p className="text-[10px] text-[#848e9c] font-mono">{c.api_key_masked}</p>
-                      </div>
-                      <CheckCircle size={12} className="text-[#0ecb81]" />
-                    </div>
-                    <button onClick={() => handleDisconnect(c.exchange)}
-                      className="p-1.5 rounded-lg text-[#848e9c] hover:text-[#f6465d] hover:bg-[#f6465d]/10 transition">
-                      <Trash2 size={12}/>
-                    </button>
-                  </div>
-                )
-              })}
+      {isFreeUser ? (
+        <div className="relative rounded-xl overflow-hidden">
+          <div className="bg-[#161a1e] border border-[#2b3139] rounded-xl overflow-hidden opacity-25 pointer-events-none select-none">
+            <div className="flex items-center gap-2 px-4 py-3 border-b border-[#2b3139] bg-[#1a1f25]">
+              <Zap size={13} className="text-[#f0b90b]" />
+              <span className="text-xs font-semibold text-[#eaecef]">Exchange Connections</span>
             </div>
-          )}
-
-          <div>
-            <label className="text-xs font-medium text-[#848e9c] mb-2 block">Select Exchange</label>
-            <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-              {EXCHANGES.map(ex => (
-                <button key={ex.id} type="button" onClick={() => setSelExchange(selExchange === ex.id ? '' : ex.id)}
-                  className={`flex items-center gap-2 px-3 py-2 rounded-lg border transition text-xs font-medium ${selExchange === ex.id ? 'border-[#f0b90b] bg-[#f0b90b]/10 text-[#f0b90b]' : 'border-[#2b3139] text-[#848e9c] hover:border-[#3c4451] hover:text-[#eaecef]'}`}>
-                  <img src={ex.logo} alt={ex.label} className="w-4 h-4 rounded-full object-cover flex-shrink-0"
-                    onError={e => { (e.target as HTMLImageElement).style.display='none' }} />
-                  {ex.label}
-                </button>
-              ))}
+            <div className="p-4 space-y-3">
+              <div className="grid grid-cols-3 gap-2">
+                {[1,2,3,4,5,6].map(i => <div key={i} className="h-9 bg-[#2b3139] rounded-lg" />)}
+              </div>
+              <div className="h-24 bg-[#2b3139]/60 rounded-xl" />
             </div>
           </div>
-
-          {selExchange && (
-            <form onSubmit={handleConnect} className="space-y-3 border-t border-[#2b3139] pt-4">
-              <Field label="API Key" required>
-                <input value={exchApiKey} onChange={e => setExchApiKey(e.target.value)} required placeholder="API key" className={inp} />
-              </Field>
-              <Field label="API Secret" required>
-                <div className="relative">
-                  <input type={showSecret ? 'text' : 'password'} value={exchSecret}
-                    onChange={e => setExchSecret(e.target.value)} required placeholder="API secret" className={`${inp} pr-10`} />
-                  <button type="button" onClick={() => setShowSecret(!showSecret)}
-                    className="absolute right-3 top-1/2 -translate-y-1/2 text-[#848e9c] hover:text-[#eaecef]">
-                    {showSecret ? <EyeOff size={13}/> : <Eye size={13}/>}
-                  </button>
-                </div>
-              </Field>
-              {selectedExch?.hasPassphrase && (
-                <Field label="Passphrase">
-                  <input type="password" value={exchPass} onChange={e => setExchPass(e.target.value)} placeholder="Passphrase" className={inp} />
-                </Field>
-              )}
-              <button type="submit" disabled={connecting}
-                className="w-full bg-[#f0b90b] hover:bg-[#d4a30a] disabled:opacity-60 text-black font-semibold py-2.5 rounded-lg text-xs transition">
-                {connecting ? 'Connecting…' : `Connect ${selectedExch?.label}`}
-              </button>
-            </form>
-          )}
+          <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-[#0b0e11]/80 rounded-xl">
+            <Lock size={16} className="text-[#f0b90b]" />
+            <p className="text-xs font-bold text-[#eaecef]">Pro Plan Required</p>
+            <p className="text-[10px] text-[#848e9c] text-center px-4">Upgrade to connect exchange APIs</p>
+            <button onClick={() => navigate('/app/pricing')}
+              className="mt-1 bg-[#f0b90b] hover:bg-[#d4a30a] text-black font-bold text-[10px] px-4 py-1.5 rounded-lg transition">
+              Upgrade Now
+            </button>
+          </div>
         </div>
-      </div>
+      ) : (
+        <div className="bg-[#161a1e] border border-[#2b3139] rounded-xl overflow-hidden">
+          <div className="flex items-center gap-2 px-4 py-3 border-b border-[#2b3139] bg-[#1a1f25]">
+            <Zap size={13} className="text-[#f0b90b]" />
+            <span className="text-xs font-semibold text-[#eaecef]">Exchange Connections</span>
+          </div>
+          <div className="p-4 space-y-4">
+            {connections.length > 0 && (
+              <div className="space-y-2">
+                {connections.map(c => {
+                  const exch = EXCHANGES.find(e => e.id === c.exchange)
+                  return (
+                    <div key={c.exchange} className="flex items-center justify-between bg-[#0b0e11] border border-[#0ecb81]/20 rounded-lg px-3 py-2.5">
+                      <div className="flex items-center gap-2.5">
+                        {exch?.logo
+                          ? <img src={exch.logo} alt={exch.label} className="w-6 h-6 rounded-full object-cover flex-shrink-0" onError={e => { (e.target as HTMLImageElement).style.display='none' }} />
+                          : <div className="w-6 h-6 rounded-full bg-[#2b3139] flex-shrink-0" />
+                        }
+                        <div>
+                          <p className="text-xs font-medium text-[#eaecef]">{c.label || c.exchange}</p>
+                          <p className="text-[10px] text-[#848e9c] font-mono">{c.api_key_masked}</p>
+                        </div>
+                        <CheckCircle size={12} className="text-[#0ecb81]" />
+                      </div>
+                      <button onClick={() => handleDisconnect(c.exchange)}
+                        className="p-1.5 rounded-lg text-[#848e9c] hover:text-[#f6465d] hover:bg-[#f6465d]/10 transition">
+                        <Trash2 size={12}/>
+                      </button>
+                    </div>
+                  )
+                })}
+              </div>
+            )}
+
+            <div>
+              <label className="text-xs font-medium text-[#848e9c] mb-2 block">Select Exchange</label>
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                {EXCHANGES.map(ex => (
+                  <button key={ex.id} type="button" onClick={() => setSelExchange(selExchange === ex.id ? '' : ex.id)}
+                    className={`flex items-center gap-2 px-3 py-2 rounded-lg border transition text-xs font-medium ${selExchange === ex.id ? 'border-[#f0b90b] bg-[#f0b90b]/10 text-[#f0b90b]' : 'border-[#2b3139] text-[#848e9c] hover:border-[#3c4451] hover:text-[#eaecef]'}`}>
+                    <img src={ex.logo} alt={ex.label} className="w-4 h-4 rounded-full object-cover flex-shrink-0"
+                      onError={e => { (e.target as HTMLImageElement).style.display='none' }} />
+                    {ex.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {selExchange && (
+              <form onSubmit={handleConnect} className="space-y-3 border-t border-[#2b3139] pt-4">
+                <Field label="API Key" required>
+                  <input value={exchApiKey} onChange={e => setExchApiKey(e.target.value)} required placeholder="API key" className={inp} />
+                </Field>
+                <Field label="API Secret" required>
+                  <div className="relative">
+                    <input type={showSecret ? 'text' : 'password'} value={exchSecret}
+                      onChange={e => setExchSecret(e.target.value)} required placeholder="API secret" className={`${inp} pr-10`} />
+                    <button type="button" onClick={() => setShowSecret(!showSecret)}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-[#848e9c] hover:text-[#eaecef]">
+                      {showSecret ? <EyeOff size={13}/> : <Eye size={13}/>}
+                    </button>
+                  </div>
+                </Field>
+                {selectedExch?.hasPassphrase && (
+                  <Field label="Passphrase">
+                    <input type="password" value={exchPass} onChange={e => setExchPass(e.target.value)} placeholder="Passphrase" className={inp} />
+                  </Field>
+                )}
+                <button type="submit" disabled={connecting}
+                  className="w-full bg-[#f0b90b] hover:bg-[#d4a30a] disabled:opacity-60 text-black font-semibold py-2.5 rounded-lg text-xs transition">
+                  {connecting ? 'Connecting…' : `Connect ${selectedExch?.label}`}
+                </button>
+              </form>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* Alert Webhooks */}
       <div className="bg-[#161a1e] border border-[#2b3139] rounded-xl overflow-hidden">
