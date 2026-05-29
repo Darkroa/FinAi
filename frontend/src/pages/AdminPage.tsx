@@ -547,6 +547,140 @@ export default function AdminPage() {
         </div>
       )}
 
+      {/* ADS MANAGEMENT */}
+      {tab === 'ads' && (
+        <div className="space-y-4">
+          {/* Create new ad */}
+          <div className="bg-[#161a1e] border border-[#2b3139] rounded-xl p-5">
+            <h2 className="text-sm font-semibold text-[#eaecef] mb-4 flex items-center gap-2"><Plus size={14} className="text-[#f0b90b]" /> Create New Ad</h2>
+            <div className="space-y-3">
+              <div>
+                <label className="text-xs text-[#848e9c] mb-1.5 block">Ad Title *</label>
+                <input value={adForm.title} onChange={e => setAdForm(f => ({ ...f, title: e.target.value }))} placeholder="Ad title..." className={inp} />
+              </div>
+              <div>
+                <label className="text-xs text-[#848e9c] mb-1.5 block">Link URL (optional)</label>
+                <div className="relative">
+                  <Link2 size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-[#848e9c]" />
+                  <input value={adForm.link_url} onChange={e => setAdForm(f => ({ ...f, link_url: e.target.value }))} placeholder="https://..." className={`${inp} pl-8`} />
+                </div>
+              </div>
+              <div>
+                <label className="text-xs text-[#848e9c] mb-1.5 block">Ad Image (optional)</label>
+                <div className="border border-dashed border-[#2b3139] rounded-xl p-4 text-center hover:border-[#f0b90b]/40 transition cursor-pointer"
+                  onClick={() => document.getElementById('ad-img-upload')?.click()}>
+                  <input id="ad-img-upload" type="file" accept="image/*" className="hidden"
+                    onChange={e => {
+                      const file = e.target.files?.[0]
+                      if (!file) return
+                      if (file.size > 5 * 1024 * 1024) { toast.error('File too large — max 5MB'); return }
+                      setAdImageName(file.name)
+                      const reader = new FileReader()
+                      reader.onload = ev => setAdForm(f => ({ ...f, image_base64: ev.target?.result as string }))
+                      reader.readAsDataURL(file)
+                    }}
+                  />
+                  {adForm.image_base64 ? (
+                    <div className="space-y-2">
+                      <img src={adForm.image_base64} alt="preview" className="max-h-32 mx-auto rounded-lg object-contain" />
+                      <p className="text-[10px] text-[#0ecb81]">{adImageName}</p>
+                      <button type="button" onClick={e => { e.stopPropagation(); setAdForm(f => ({ ...f, image_base64: '' })); setAdImageName('') }}
+                        className="text-[10px] text-[#f6465d] hover:underline">Remove</button>
+                    </div>
+                  ) : (
+                    <div>
+                      <Image size={20} className="mx-auto text-[#4a5568] mb-1" />
+                      <p className="text-xs text-[#848e9c]">Click to upload ad image</p>
+                      <p className="text-[10px] text-[#4a5568] mt-0.5">PNG, JPG (max 5MB)</p>
+                    </div>
+                  )}
+                </div>
+              </div>
+              <div className="flex items-center gap-2">
+                <label className="text-xs text-[#848e9c]">Active immediately</label>
+                <button type="button" onClick={() => setAdForm(f => ({ ...f, is_active: !f.is_active }))}
+                  className={`w-10 h-5 rounded-full transition relative ${adForm.is_active ? 'bg-[#0ecb81]' : 'bg-[#2b3139]'}`}>
+                  <span className={`absolute top-0.5 w-4 h-4 rounded-full bg-white transition-transform ${adForm.is_active ? 'translate-x-5' : 'translate-x-0.5'}`} />
+                </button>
+              </div>
+              <button
+                onClick={async () => {
+                  if (!adForm.title.trim()) return toast.error('Title is required')
+                  setAdLoading(true)
+                  try {
+                    await adminCreateAd({ title: adForm.title, image_base64: adForm.image_base64 || undefined, link_url: adForm.link_url || undefined, is_active: adForm.is_active })
+                    toast.success('Ad created!')
+                    setAdForm({ title: '', image_base64: '', link_url: '', is_active: true }); setAdImageName('')
+                    const res = await adminGetAds(); setAds(Array.isArray(res.data) ? res.data : [])
+                  } catch { toast.error('Failed to create ad') }
+                  finally { setAdLoading(false) }
+                }}
+                disabled={adLoading}
+                className="flex items-center gap-2 px-4 py-2.5 bg-[#f0b90b]/10 hover:bg-[#f0b90b]/20 border border-[#f0b90b]/30 text-[#f0b90b] rounded-xl text-xs font-semibold transition disabled:opacity-60">
+                <Plus size={12} /> {adLoading ? 'Creating...' : 'Create Ad'}
+              </button>
+            </div>
+          </div>
+
+          {/* Existing ads list */}
+          <div className="bg-[#161a1e] border border-[#2b3139] rounded-xl overflow-hidden">
+            <div className="px-4 py-3 border-b border-[#2b3139]">
+              <h2 className="text-sm font-semibold text-[#eaecef]">All Ads ({ads.length})</h2>
+            </div>
+            {ads.length === 0 ? (
+              <div className="py-12 text-center text-[#848e9c] text-sm">No ads yet — create one above</div>
+            ) : (
+              <div className="divide-y divide-[#2b3139]/50">
+                {ads.map(ad => (
+                  <div key={ad.id} className="flex items-start gap-4 px-4 py-4 hover:bg-[#1e2329] transition">
+                    {ad.image_base64 ? (
+                      <img src={ad.image_base64} alt={ad.title} className="w-20 h-14 rounded-lg object-cover flex-shrink-0 border border-[#2b3139]" />
+                    ) : (
+                      <div className="w-20 h-14 rounded-lg bg-[#0b0e11] border border-[#2b3139] flex items-center justify-center flex-shrink-0">
+                        <Image size={16} className="text-[#4a5568]" />
+                      </div>
+                    )}
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium text-[#eaecef] truncate">{ad.title}</p>
+                      {ad.link_url && (
+                        <a href={ad.link_url} target="_blank" rel="noopener noreferrer" className="text-[10px] text-[#f0b90b] hover:underline flex items-center gap-0.5 mt-0.5">
+                          <ExternalLink size={9} /> {ad.link_url.slice(0, 40)}{ad.link_url.length > 40 ? '…' : ''}
+                        </a>
+                      )}
+                      <p className="text-[10px] text-[#4a5568] mt-0.5">{new Date(ad.created_at).toLocaleString()}</p>
+                      <span className={`text-[10px] px-1.5 py-0.5 rounded-full ${ad.is_active ? 'bg-[#0ecb81]/10 text-[#0ecb81]' : 'bg-[#2b3139] text-[#848e9c]'}`}>
+                        {ad.is_active ? 'Active' : 'Inactive'}
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-1 flex-shrink-0">
+                      <button onClick={async () => {
+                        try {
+                          await adminToggleAd(ad.id)
+                          setAds(as => as.map(a => a.id === ad.id ? { ...a, is_active: !a.is_active } : a))
+                          toast.success(ad.is_active ? 'Ad deactivated' : 'Ad activated')
+                        } catch { toast.error('Failed to toggle') }
+                      }} className="p-1.5 rounded-lg text-[#848e9c] hover:text-[#f0b90b] hover:bg-[#f0b90b]/10 transition" title={ad.is_active ? 'Deactivate' : 'Activate'}>
+                        {ad.is_active ? <ToggleRight size={16} className="text-[#0ecb81]" /> : <ToggleLeft size={16} />}
+                      </button>
+                      <button onClick={async () => {
+                        if (!confirm('Delete this ad?')) return
+                        try {
+                          await adminDeleteAd(ad.id)
+                          setAds(as => as.filter(a => a.id !== ad.id))
+                          toast.success('Ad deleted')
+                        } catch { toast.error('Failed to delete') }
+                      }} className="p-1.5 rounded-lg text-[#848e9c] hover:text-[#f6465d] hover:bg-[#f6465d]/10 transition" title="Delete">
+                        <Trash2 size={14} />
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
       {/* API KEY USERS */}
       {tab === 'api-users' && (
         <div className="bg-[#161a1e] border border-[#2b3139] rounded-xl overflow-hidden">

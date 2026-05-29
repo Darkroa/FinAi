@@ -249,7 +249,9 @@ export const trackVisitor = (sessionId: string, page: string) =>
   api.post('/visitors/track', { sessionId, page }).catch(() => {})
 
 // FinEventAI Bot
+export const finEventListBots = () => api.get('/bots/finevent/list')
 export const finEventStart = (data: {
+  bot_name?: string
   min_impact_score?: number
   tickers?: string[]
   capital_per_trade?: number
@@ -258,8 +260,8 @@ export const finEventStart = (data: {
   sentiment_filter?: string
 }) => api.post('/bots/finevent/start', data)
 
-export const finEventStop = () => api.post('/bots/finevent/stop')
-export const finEventStatus = () => api.get('/bots/finevent/status')
+export const finEventStop = (botName = 'default') => api.post(`/bots/finevent/stop?bot_name=${encodeURIComponent(botName)}`)
+export const finEventStatus = (botName = 'default') => api.get(`/bots/finevent/status?bot_name=${encodeURIComponent(botName)}`)
 export const finEventTrades = (limit = 50) => api.get(`/bots/finevent/trades?limit=${limit}`)
 
 // Referral

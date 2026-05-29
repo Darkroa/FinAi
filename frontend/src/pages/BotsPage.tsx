@@ -3,7 +3,7 @@ import {
   getBotStatus, startBot, stopBot, closeBotPosition,
   getBotTrades, updateBotParams, getBotPnlHistory, listApiKeys,
   getSubscriptionLimits,
-  finEventStart, finEventStop, finEventStatus, finEventTrades,
+  finEventStart, finEventStop, finEventStatus, finEventTrades, finEventListBots,
 } from '../lib/api'
 import { useAuthStore } from '../store/authStore'
 import toast from 'react-hot-toast'
@@ -160,11 +160,13 @@ export default function BotsPage() {
 
   const [params, setParams] = useState({ ...EMPTY_PARAMS })
 
-  // ── FinEventAI state ──────────────────────────────────────────────────────
-  const [feStatus,     setFeStatus]     = useState<any>(null)
+  // ── FinEventAI multi-bot state ────────────────────────────────────────────
+  const [feBots,       setFeBots]       = useState<any[]>([])
+  const [feMaxBots,    setFeMaxBots]    = useState(0)
   const [feTrades,     setFeTrades]     = useState<any[]>([])
   const [feLoading,    setFeLoading]    = useState(false)
   const [feParams,     setFeParams]     = useState({
+    bot_name:           '',
     min_impact_score:   7,
     tickers:            ['BTC-USD', 'ETH-USD'],
     capital_per_trade:  500,
@@ -175,7 +177,6 @@ export default function BotsPage() {
   const [feTickerInput, setFeTickerInput] = useState('BTC-USD,ETH-USD')
   const [showFePanel,  setShowFePanel]  = useState(false)
   const [feCollapsed,  setFeCollapsed]  = useState(false)
-
   useEffect(() => {
     Promise.allSettled([listApiKeys(), getSubscriptionLimits()])
       .then(([keysRes, limitsRes]) => {
@@ -203,11 +204,15 @@ export default function BotsPage() {
     }
   }, [user])
 
-  // ── FinEventAI handlers ───────────────────────────────────────────────────
+  // ── FinEventAI multi-bot handlers ─────────────────────────────────────────
   const fetchFeStatus = useCallback(async () => {
     try {
-      const [sRes, tRes] = await Promise.allSettled([finEventStatus(), finEventTrades(20)])
-      if (sRes.status === 'fulfilled') setFeStatus(sRes.value.data)
+      const [listRes, tRes] = await Promise.allSettled([finEventListBots(), finEventTrades(20)])
+      if (listRes.status === 'fulfilled') {
+        const d = listRes.value.data
+        setFeBots(Array.isArray(d.bots) ? d.bots : [])
+        setFeMaxBots(d.max_event_bots ?? 0)
+      }
       if (tRes.status === 'fulfilled') setFeTrades(Array.isArray(tRes.value.data) ? tRes.value.data : [])
     } catch { /* silent */ }
   }, [])
@@ -219,23 +224,25 @@ export default function BotsPage() {
   }, [fetchFeStatus])
 
   const handleFeStart = async () => {
+    const botName = feParams.bot_name.trim() || `Bot ${feBots.length + 1}`
     setFeLoading(true)
     try {
       const tickers = feTickerInput.split(',').map(s => s.trim()).filter(Boolean)
-      await finEventStart({ ...feParams, tickers })
-      toast.success('FinEventAI bot started')
+      await finEventStart({ ...feParams, bot_name: botName, tickers })
+      toast.success(`FinEventAI "${botName}" started`)
       await fetchFeStatus()
       setShowFePanel(false)
+      setFeParams(p => ({ ...p, bot_name: '' }))
     } catch (err: any) {
       toast.error(err?.response?.data?.detail || 'Failed to start FinEventAI')
     } finally { setFeLoading(false) }
   }
 
-  const handleFeStop = async () => {
+  const handleFeStop = async (botName: string) => {
     setFeLoading(true)
     try {
-      await finEventStop()
-      toast.success('FinEventAI bot stopped')
+      await finEventStop(botName)
+      toast.success(`FinEventAI "${botName}" stopped`)
       await fetchFeStatus()
     } catch { toast.error('Failed to stop FinEventAI') } finally { setFeLoading(false) }
   }
@@ -867,9 +874,9 @@ export default function BotsPage() {
         </div>
       )}
 
-      {/* ── FinEventAI Bot ── */}
+      {/* ── FinEventAI Multi-Bot Section ── */}
       <div className="bg-[#161a1e] border border-[#2b3139] rounded-xl overflow-hidden">
-        {/* Header — always visible, click anywhere to collapse */}
+        {/* Header */}
         <div
           className="px-5 py-4 flex flex-wrap items-center justify-between gap-3 cursor-pointer select-none"
           onClick={() => setFeCollapsed(c => !c)}
@@ -879,32 +886,24 @@ export default function BotsPage() {
               <Brain size={18} className="text-[#627eea]" />
             </div>
             <div>
-              <p className="text-sm font-bold text-[#eaecef]">FinEventAI Bot</p>
-              <p className="text-xs text-[#848e9c]">Trades automatically on high-impact financial news events</p>
+              <p className="text-sm font-bold text-[#eaecef]">FinEventAI Bots</p>
+              <p className="text-xs text-[#848e9c]">Multiple bots trading on high-impact financial news events</p>
             </div>
-            <span className={`text-[10px] px-2 py-0.5 rounded-full font-medium ${feStatus?.running ? 'bg-[#0ecb81]/10 text-[#0ecb81] animate-pulse' : 'bg-[#2b3139] text-[#848e9c]'}`}>
-              {feStatus?.running ? 'ACTIVE' : 'IDLE'}
+            <span className="text-[10px] px-2 py-0.5 rounded-full font-medium bg-[#627eea]/10 text-[#627eea]">
+              {feBots.filter(b => b.running).length} running / {feMaxBots} slots
             </span>
           </div>
           <div className="flex items-center gap-2" onClick={e => e.stopPropagation()}>
             <button onClick={fetchFeStatus} className="p-2 rounded-lg text-[#848e9c] hover:text-[#eaecef] hover:bg-[#2b3139] transition">
               <RefreshCw size={13} />
             </button>
-            {feStatus?.running ? (
-              <button onClick={handleFeStop} disabled={feLoading}
-                className="flex items-center gap-2 px-4 py-2 rounded-xl bg-[#f6465d]/10 hover:bg-[#f6465d]/20 border border-[#f6465d]/30 text-[#f6465d] text-xs font-semibold transition disabled:opacity-60">
-                <Square size={11} /> Stop Bot
-              </button>
-            ) : (
+            {feMaxBots > 0 && feBots.filter(b => b.running).length < feMaxBots && (
               <button onClick={() => { setShowFePanel(s => !s); setFeCollapsed(false) }}
                 className="flex items-center gap-2 px-4 py-2 rounded-xl bg-[#627eea]/10 hover:bg-[#627eea]/20 border border-[#627eea]/30 text-[#627eea] text-xs font-semibold transition">
-                <Play size={11} /> {showFePanel ? 'Cancel' : 'Configure & Start'}
+                <Play size={11} /> {showFePanel ? 'Cancel' : 'Add Bot'}
               </button>
             )}
-            <button
-              onClick={() => setFeCollapsed(c => !c)}
-              className="p-2 rounded-lg text-[#848e9c] hover:text-[#eaecef] hover:bg-[#2b3139] transition"
-            >
+            <button onClick={() => setFeCollapsed(c => !c)} className="p-2 rounded-lg text-[#848e9c] hover:text-[#eaecef] hover:bg-[#2b3139] transition">
               {feCollapsed ? <ChevronDown size={14} /> : <ChevronUp size={14} />}
             </button>
           </div>
@@ -913,27 +912,45 @@ export default function BotsPage() {
         {/* Collapsible body */}
         {!feCollapsed && (
           <>
-            {/* Stats row when running */}
-            {feStatus?.running && (
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-px bg-[#2b3139] border-t border-[#2b3139]">
-                {[
-                  { label: 'Trades Today',   value: feStatus.trades_today ?? 0,                          suffix: `/ ${feStatus.max_trades_per_day}` },
-                  { label: 'Total Trades',   value: feStatus.total_trades ?? 0,                          suffix: '' },
-                  { label: 'Min Impact',     value: feStatus.min_impact_score ?? 7,                      suffix: '/10' },
-                  { label: 'Balance Used',   value: `$${(feStatus.balance_to_use ?? feStatus.capital_per_trade ?? 0).toFixed(0)}`, suffix: ' USDT' },
-                ].map(s => (
-                  <div key={s.label} className="bg-[#161a1e] px-4 py-3">
-                    <p className="text-[10px] text-[#848e9c] mb-0.5">{s.label}</p>
-                    <p className="text-sm font-bold text-[#eaecef] font-mono">{s.value}<span className="text-xs text-[#848e9c]">{s.suffix}</span></p>
+            {/* Running bots list */}
+            {feBots.length > 0 && (
+              <div className="border-t border-[#2b3139] divide-y divide-[#2b3139]/50">
+                {feBots.map(bot => (
+                  <div key={bot.bot_name} className="px-5 py-3 flex flex-wrap items-center gap-3">
+                    <div className="flex items-center gap-2 flex-1 min-w-0">
+                      <span className={`w-2 h-2 rounded-full flex-shrink-0 ${bot.running ? 'bg-[#0ecb81] animate-pulse' : 'bg-[#2b3139]'}`} />
+                      <span className="text-xs font-semibold text-[#eaecef] truncate capitalize">{bot.bot_name}</span>
+                      <span className={`text-[10px] px-1.5 py-0.5 rounded-full ${bot.running ? 'bg-[#0ecb81]/10 text-[#0ecb81]' : 'bg-[#2b3139] text-[#848e9c]'}`}>
+                        {bot.running ? 'Running' : 'Stopped'}
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-4 text-xs text-[#848e9c]">
+                      <span>Trades: <span className="text-[#eaecef] font-mono">{bot.trades_today ?? 0}/{bot.max_trades_per_day ?? 10}</span></span>
+                      <span>Impact: <span className="text-[#eaecef] font-mono">≥{bot.min_impact_score ?? 7}</span></span>
+                      <span>Capital: <span className="text-[#eaecef] font-mono">${(bot.capital_per_trade ?? 500).toFixed(0)}</span></span>
+                    </div>
+                    {bot.running && (
+                      <button onClick={() => handleFeStop(bot.bot_name)} disabled={feLoading}
+                        className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-[#f6465d]/10 hover:bg-[#f6465d]/20 border border-[#f6465d]/30 text-[#f6465d] text-xs font-semibold transition disabled:opacity-60">
+                        <Square size={10} /> Stop
+                      </button>
+                    )}
                   </div>
                 ))}
               </div>
             )}
 
-            {/* Config panel */}
-            {showFePanel && !feStatus?.running && (
+            {/* Config panel for new bot */}
+            {showFePanel && (
               <div className="px-5 py-5 space-y-4 border-t border-[#2b3139]">
+                <p className="text-xs font-semibold text-[#627eea]">Configure New FinEventAI Bot</p>
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                  <div>
+                    <label className="text-xs text-[#848e9c] mb-1.5 block">Bot Name</label>
+                    <input value={feParams.bot_name} onChange={e => setFeParams(p => ({ ...p, bot_name: e.target.value }))}
+                      placeholder={`Bot ${feBots.length + 1}`}
+                      className="w-full bg-[#0b0e11] border border-[#2b3139] rounded-xl px-3 py-2.5 text-sm text-[#eaecef] focus:outline-none focus:border-[#627eea]" />
+                  </div>
                   <div>
                     <label className="text-xs text-[#848e9c] mb-1.5 block">Min Impact Score (1–10)</label>
                     <input type="number" min={1} max={10} value={feParams.min_impact_score}
@@ -968,28 +985,14 @@ export default function BotsPage() {
                       <option value="bearish">Bearish only (SELL)</option>
                     </select>
                   </div>
-                  <div>
-                    <label className="text-xs text-[#848e9c] mb-1.5 block">Balance to Use (USDT)</label>
-                    <div className="relative">
-                      <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs text-[#848e9c] font-mono">$</span>
-                      <input
-                        type="number" min={10}
-                        value={feParams.balance_to_use}
-                        onChange={e => setFeParams(p => ({ ...p, balance_to_use: Number(e.target.value) }))}
-                        className="w-full bg-[#0b0e11] border border-[#2b3139] rounded-xl pl-6 pr-3 py-2.5 text-sm text-[#eaecef] font-mono focus:outline-none focus:border-[#627eea]"
-                        placeholder="1000"
-                      />
-                    </div>
-                    <p className="text-[10px] text-[#4a5568] mt-1">Max allocated from your wallet for this session</p>
-                  </div>
                 </div>
                 <div className="flex items-center gap-3 pt-1">
                   <button onClick={handleFeStart} disabled={feLoading}
                     className="flex items-center gap-2 px-6 py-2.5 bg-[#627eea] hover:bg-[#5568cc] disabled:opacity-60 text-white rounded-xl text-sm font-semibold transition">
                     {feLoading ? <RefreshCw size={13} className="animate-spin" /> : <Play size={13} />}
-                    {feLoading ? 'Starting…' : 'Start FinEventAI'}
+                    {feLoading ? 'Starting…' : 'Launch Bot'}
                   </button>
-                  <p className="text-xs text-[#848e9c]">Bot polls for events every 30s · Min impact {feParams.min_impact_score}/10</p>
+                  <p className="text-xs text-[#848e9c]">{feBots.filter(b => b.running).length}/{feMaxBots} bot slots used</p>
                 </div>
               </div>
             )}
@@ -1015,11 +1018,20 @@ export default function BotsPage() {
             )}
 
             {/* Empty state */}
-            {!feStatus?.running && feTrades.length === 0 && !showFePanel && (
+            {feBots.length === 0 && feTrades.length === 0 && !showFePanel && (
               <div className="py-8 text-center border-t border-[#2b3139]">
                 <Brain size={28} className="text-[#2b3139] mx-auto mb-2" />
-                <p className="text-sm text-[#848e9c]">Configure and start FinEventAI to trade on high-impact news</p>
-                <p className="text-xs text-[#4a5568] mt-0.5">Impact score ≥ 7 · Bullish events → BUY · Bearish events → SELL</p>
+                {feMaxBots === 0 ? (
+                  <>
+                    <p className="text-sm text-[#848e9c]">FinEventAI bots require a Pro subscription or higher</p>
+                    <p className="text-xs text-[#4a5568] mt-0.5">Upgrade your plan to unlock up to 50 bots</p>
+                  </>
+                ) : (
+                  <>
+                    <p className="text-sm text-[#848e9c]">No FinEventAI bots running</p>
+                    <p className="text-xs text-[#4a5568] mt-0.5">Your plan allows {feMaxBots} bot{feMaxBots !== 1 ? 's' : ''} · click "Add Bot" to get started</p>
+                  </>
+                )}
               </div>
             )}
           </>

@@ -3108,6 +3108,7 @@ async def get_live_visitors(current_user=Depends(get_current_user), db: Session 
 
 # ===================== FinEventAI Bot =====================
 class FinEventBotStartRequest(BaseModel):
+    bot_name:           str   = "default"
     min_impact_score:   int   = 7
     tickers:            list  = ["BTC-USD", "ETH-USD"]
     capital_per_trade:  float = 500.0
@@ -3125,11 +3126,22 @@ async def start_fin_event_bot(
     user = db.query(User).filter(User.email == current_user["email"]).first()
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
+
+    # Check subscription limit
+    limits = _subscription_limits(user.subscription or "free")
     from src.trading.fin_event_bot import FinEventBotManager
     mgr = FinEventBotManager.instance()
+    running = mgr.list_user_bots(user.id)
+    running_count = sum(1 for b in running if b.get("running"))
+    if running_count >= limits["event_bots"] and limits["event_bots"] > 0:
+        raise HTTPException(status_code=403, detail=f"Your plan allows up to {limits['event_bots']} FinEventAI bots. Upgrade to add more.")
+    if limits["event_bots"] == 0:
+        raise HTTPException(status_code=403, detail="FinEventAI bots require a Pro subscription or higher.")
+
     result = mgr.start(
         user_id            = user.id,
         user_email         = user.email,
+        bot_name           = body.bot_name,
         min_impact_score   = body.min_impact_score,
         tickers            = body.tickers,
         capital_per_trade  = body.capital_per_trade,
@@ -3137,28 +3149,51 @@ async def start_fin_event_bot(
         paper              = body.paper,
         sentiment_filter   = body.sentiment_filter,
     )
-    return {"status": "started", "message": result}
+    return {"status": "started", "message": result, "bot_name": body.bot_name}
 
 
 @router.post("/bots/finevent/stop")
-async def stop_fin_event_bot(current_user=Depends(get_current_user), db: Session = Depends(get_db)):
+async def stop_fin_event_bot(
+    bot_name: str = "default",
+    current_user=Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
     user = db.query(User).filter(User.email == current_user["email"]).first()
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
     from src.trading.fin_event_bot import FinEventBotManager
     mgr = FinEventBotManager.instance()
-    result = mgr.stop(user.id)
+    result = mgr.stop(user.id, bot_name)
     return {"status": "stopped", "message": result}
 
 
 @router.get("/bots/finevent/status")
-async def get_fin_event_status(current_user=Depends(get_current_user), db: Session = Depends(get_db)):
+async def get_fin_event_status(
+    bot_name: str = "default",
+    current_user=Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
     user = db.query(User).filter(User.email == current_user["email"]).first()
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
     from src.trading.fin_event_bot import FinEventBotManager
     mgr = FinEventBotManager.instance()
-    return mgr.get_status(user.id)
+    return mgr.get_status(user.id, bot_name)
+
+
+@router.get("/bots/finevent/list")
+async def list_fin_event_bots(current_user=Depends(get_current_user), db: Session = Depends(get_db)):
+    user = db.query(User).filter(User.email == current_user["email"]).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    from src.trading.fin_event_bot import FinEventBotManager
+    mgr = FinEventBotManager.instance()
+    limits = _subscription_limits(user.subscription or "free")
+    return {
+        "bots": mgr.list_user_bots(user.id),
+        "max_event_bots": limits["event_bots"],
+        "subscription": user.subscription or "free",
+    }
 
 
 @router.get("/bots/finevent/trades")

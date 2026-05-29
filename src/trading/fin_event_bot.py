@@ -273,14 +273,15 @@ class FinEventBot:
         }
 
 
-# ── Global singleton manager (per user_id) ───────────────────────────────────
+# ── Global singleton manager (per (user_id, bot_name)) ────────────────────────
 
 class FinEventBotManager:
     _instance = None
     _lock      = threading.Lock()
 
     def __init__(self):
-        self._bots: Dict[int, FinEventBot] = {}
+        # key: (user_id, bot_name)
+        self._bots: Dict[tuple, FinEventBot] = {}
 
     @classmethod
     def instance(cls) -> "FinEventBotManager":
@@ -290,25 +291,45 @@ class FinEventBotManager:
                     cls._instance = cls()
         return cls._instance
 
-    def start(self, user_id: int, user_email: str, **kwargs) -> str:
-        if user_id in self._bots and self._bots[user_id].running:
-            return "FinEventAI bot is already running."
+    def _key(self, user_id: int, bot_name: str) -> tuple:
+        return (user_id, bot_name.strip().lower())
+
+    def start(self, user_id: int, user_email: str, bot_name: str = "default", **kwargs) -> str:
+        k = self._key(user_id, bot_name)
+        if k in self._bots and self._bots[k].running:
+            return f"FinEventAI bot '{bot_name}' is already running."
         bot = FinEventBot(user_id=user_id, user_email=user_email, **kwargs)
-        self._bots[user_id] = bot
-        return bot.start()
+        self._bots[k] = bot
+        result = bot.start()
+        return result
 
-    def stop(self, user_id: int) -> str:
-        bot = self._bots.get(user_id)
+    def stop(self, user_id: int, bot_name: str = "default") -> str:
+        k = self._key(user_id, bot_name)
+        bot = self._bots.get(k)
         if bot:
-            return bot.stop()
-        return "No FinEventAI bot running for this user."
+            msg = bot.stop()
+            del self._bots[k]
+            return msg
+        return f"No FinEventAI bot '{bot_name}' running for this user."
 
-    def get_status(self, user_id: int) -> dict:
-        bot = self._bots.get(user_id)
+    def stop_all(self, user_id: int) -> int:
+        """Stop all bots for a user. Returns count stopped."""
+        stopped = 0
+        keys_to_del = [k for k in self._bots if k[0] == user_id]
+        for k in keys_to_del:
+            self._bots[k].stop()
+            del self._bots[k]
+            stopped += 1
+        return stopped
+
+    def get_status(self, user_id: int, bot_name: str = "default") -> dict:
+        k = self._key(user_id, bot_name)
+        bot = self._bots.get(k)
         if bot:
-            return bot.get_status()
+            return {**bot.get_status(), "bot_name": bot_name}
         return {
             "running": False,
+            "bot_name": bot_name,
             "paper": True,
             "min_impact_score": 7,
             "tickers": ["BTC-USD", "ETH-USD"],
@@ -321,3 +342,11 @@ class FinEventBotManager:
             "started_at": None,
             "recent_trades": [],
         }
+
+    def list_user_bots(self, user_id: int) -> list:
+        """Return status for all bots belonging to user_id."""
+        result = []
+        for (uid, bot_name), bot in self._bots.items():
+            if uid == user_id:
+                result.append({**bot.get_status(), "bot_name": bot_name})
+        return result
