@@ -432,12 +432,12 @@ export default function WalletPage() {
                       {/* Bank Section */}
                       {depMethod === 'bank' && (
                         <div className="bg-[#0b0e11] border border-[#2b3139] rounded-xl p-4 space-y-3">
-                          {['bank_name', 'bank_account', 'bank_routing', 'bank_swift', 'bank_name_beneficiary'].map(k => 
+                          {['bank_name', 'bank_address', 'bank_account', 'bank_routing', 'bank_swift', 'bank_name_beneficiary'].map(k => 
                             cfg[k]?.value && (
-                              <div key={k} className="flex justify-between items-center">
-                                <span className="text-[#848e9c] capitalize text-xs">{cfg[k].label || k.replace(/_/g, ' ')}</span>
+                              <div key={k} className="flex justify-between items-center gap-2">
+                                <span className="text-[#848e9c] capitalize text-xs flex-shrink-0">{cfg[k].label || k.replace(/_/g, ' ')}</span>
                                 <div className="flex items-center gap-2">
-                                  <span className="font-mono text-[#eaecef]">{cfg[k].value}</span>
+                                  <span className="font-mono text-[#eaecef] text-xs text-right">{cfg[k].value}</span>
                                   <button onClick={() => { navigator.clipboard.writeText(cfg[k].value); toast.success('Copied!'); }}>
                                     <Copy size={14} className="text-[#848e9c]" />
                                   </button>
@@ -456,10 +456,42 @@ export default function WalletPage() {
                         </div>
                       )}
                       {depMethod === 'bank' && (
-                        <div>
-                          <label className="text-xs text-[#848e9c] mb-1.5 block">Bank Reference *</label>
-                          <input value={depBankRef} onChange={e => setDepBankRef(e.target.value)} placeholder="Transfer reference" className={inp} />
-                        </div>
+                        <>
+                          <div>
+                            <label className="text-xs text-[#848e9c] mb-1.5 block">Bank Reference *</label>
+                            <input value={depBankRef} onChange={e => setDepBankRef(e.target.value)} placeholder="Transfer reference" className={inp} />
+                          </div>
+                          <div>
+                            <label className="text-xs text-[#848e9c] mb-1.5 block">Upload Payment Proof (optional)</label>
+                            <div className="border border-dashed border-[#2b3139] rounded-xl p-4 text-center hover:border-[#f0b90b]/40 transition cursor-pointer"
+                              onClick={() => document.getElementById('proof-upload')?.click()}>
+                              <input id="proof-upload" type="file" accept="image/*" className="hidden"
+                                onChange={e => {
+                                  const file = e.target.files?.[0]
+                                  if (!file) return
+                                  if (file.size > 5 * 1024 * 1024) { toast.error('File too large — max 5MB'); return }
+                                  setDepProofName(file.name)
+                                  const reader = new FileReader()
+                                  reader.onload = ev => setDepPaymentProof(ev.target?.result as string)
+                                  reader.readAsDataURL(file)
+                                }}
+                              />
+                              {depPaymentProof ? (
+                                <div className="space-y-2">
+                                  <img src={depPaymentProof} alt="proof" className="max-h-32 mx-auto rounded-lg object-contain" />
+                                  <p className="text-[10px] text-[#0ecb81]">{depProofName}</p>
+                                  <button type="button" onClick={e => { e.stopPropagation(); setDepPaymentProof(''); setDepProofName('') }}
+                                    className="text-[10px] text-[#f6465d] hover:underline">Remove</button>
+                                </div>
+                              ) : (
+                                <div>
+                                  <p className="text-xs text-[#848e9c]">Click to upload screenshot / receipt</p>
+                                  <p className="text-[10px] text-[#4a5568] mt-1">PNG, JPG, JPEG (max 5MB)</p>
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        </>
                       )}
 
                       <button

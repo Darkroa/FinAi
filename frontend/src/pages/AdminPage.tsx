@@ -6,7 +6,8 @@ import {
   adminUpdateTicketStatus, adminHealthCheck, adminUpdateUser,
   adminGetSubscriptions, adminApproveSubscription, adminRejectSubscription,
   getAdminBonuses, adminGrantBonus, toggleAdminBonus, deleteAdminBonus,
-  getAdminReferrals, adminUpdateReferralCode, adminResetReferralCode
+  getAdminReferrals, adminUpdateReferralCode, adminResetReferralCode,
+  adminGetAds, adminCreateAd, adminToggleAd, adminDeleteAd,
 } from '../lib/api'
 import { AdminLiveVisitors } from '../components/AdminLiveVisitors'
 import toast from 'react-hot-toast'
@@ -14,10 +15,10 @@ import {
   Users, Receipt, ShieldCheck, CheckCircle, XCircle, Bell, Send, Globe, User,
   Key, MessageSquare, Activity, Wallet, Save, RefreshCw,
   Edit3, CreditCard, Eye, Gift, Trash2, ToggleLeft, ToggleRight,
-  Share2, Copy, RotateCcw
+  Share2, Copy, RotateCcw, Megaphone, Image, Plus, Link2, ExternalLink
 } from 'lucide-react'
 
-type Tab = 'users' | 'transactions' | 'notifications' | 'wallet-config' | 'api-users' | 'support' | 'health' | 'subscriptions' | 'visitors' | 'bonuses' | 'referrals'
+type Tab = 'users' | 'transactions' | 'notifications' | 'wallet-config' | 'api-users' | 'support' | 'health' | 'subscriptions' | 'visitors' | 'bonuses' | 'referrals' | 'ads'
 
 export default function AdminPage() {
   const [tab, setTab] = useState<Tab>('users')
@@ -46,6 +47,13 @@ export default function AdminPage() {
     note: '', grant_now: true,
   })
   const [bonusLoading, setBonusLoading] = useState(false)
+
+  // Ads
+  const [ads, setAds] = useState<any[]>([])
+  const [adForm, setAdForm] = useState({ title: '', image_base64: '', link_url: '', is_active: true })
+  const [adImageName, setAdImageName] = useState('')
+  const [adLoading, setAdLoading] = useState(false)
+  const [viewProofTx, setViewProofTx] = useState<any>(null)
 
   // Notification form
   const [notifTitle, setNotifTitle] = useState('')
@@ -105,6 +113,10 @@ export default function AdminPage() {
     if (t === 'referrals') {
       const res = await getAdminReferrals().catch(() => null)
       if (res) setReferrals(Array.isArray(res.data) ? res.data : [])
+    }
+    if (t === 'ads') {
+      const res = await adminGetAds().catch(() => null)
+      if (res) setAds(Array.isArray(res.data) ? res.data : [])
     }
   }
 
@@ -216,6 +228,7 @@ export default function AdminPage() {
     { id: 'support', label: 'Support', icon: MessageSquare },
     { id: 'health', label: 'Health', icon: Activity },
     { id: 'visitors', label: 'Live Visitors', icon: Eye },
+    { id: 'ads', label: 'Ads', icon: Megaphone },
   ] as const
 
   const inp = 'w-full bg-[#0b0e11] border border-[#2b3139] rounded-xl px-3 py-2 text-sm text-[#eaecef] placeholder-[#4a5568] focus:outline-none focus:border-[#f0b90b] transition'
@@ -408,17 +421,46 @@ export default function AdminPage() {
                       </span>
                     </td>
                     <td className="px-4 py-3 text-right">
-                      {tx.status === 'pending' && (
-                        <div className="flex justify-end gap-1">
-                          <button onClick={() => approve(tx.id)} className="p-1.5 rounded-lg text-[#0ecb81] hover:bg-[#0ecb81]/10 transition" title="Approve"><CheckCircle size={14} /></button>
-                          <button onClick={() => reject(tx.id)} className="p-1.5 rounded-lg text-[#f6465d] hover:bg-[#f6465d]/10 transition" title="Reject"><XCircle size={14} /></button>
-                        </div>
-                      )}
+                      <div className="flex justify-end gap-1">
+                        {tx.payment_proof && (
+                          <button onClick={() => setViewProofTx(tx)} className="p-1.5 rounded-lg text-[#f0b90b] hover:bg-[#f0b90b]/10 transition" title="View payment proof">
+                            <Image size={14} />
+                          </button>
+                        )}
+                        {tx.status === 'pending' && (
+                          <>
+                            <button onClick={() => approve(tx.id)} className="p-1.5 rounded-lg text-[#0ecb81] hover:bg-[#0ecb81]/10 transition" title="Approve"><CheckCircle size={14} /></button>
+                            <button onClick={() => reject(tx.id)} className="p-1.5 rounded-lg text-[#f6465d] hover:bg-[#f6465d]/10 transition" title="Reject"><XCircle size={14} /></button>
+                          </>
+                        )}
+                      </div>
                     </td>
                   </tr>
                 ))}
               </tbody>
             </table>
+          </div>
+        </div>
+      )}
+
+      {/* Payment proof viewer modal */}
+      {viewProofTx && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4" onClick={() => setViewProofTx(null)}>
+          <div className="bg-[#161a1e] border border-[#2b3139] rounded-2xl p-5 max-w-lg w-full space-y-3" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center justify-between">
+              <h3 className="text-sm font-semibold text-[#eaecef]">Payment Proof — TX #{viewProofTx.id}</h3>
+              <button onClick={() => setViewProofTx(null)} className="text-xs text-[#848e9c] hover:text-[#eaecef]">Close</button>
+            </div>
+            <p className="text-xs text-[#848e9c]">{viewProofTx.user_email} · ${(viewProofTx.amount_usdt || 0).toFixed(2)} USDT</p>
+            <img src={viewProofTx.payment_proof} alt="payment proof" className="w-full rounded-xl object-contain max-h-96 border border-[#2b3139]" />
+            <div className="flex gap-2">
+              {viewProofTx.status === 'pending' && (
+                <>
+                  <button onClick={() => { approve(viewProofTx.id); setViewProofTx(null) }} className="flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-xl text-xs font-semibold bg-[#0ecb81]/10 text-[#0ecb81] border border-[#0ecb81]/30 hover:bg-[#0ecb81]/20 transition"><CheckCircle size={12} />Approve</button>
+                  <button onClick={() => { reject(viewProofTx.id); setViewProofTx(null) }} className="flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-xl text-xs font-semibold bg-[#f6465d]/10 text-[#f6465d] border border-[#f6465d]/30 hover:bg-[#f6465d]/20 transition"><XCircle size={12} />Reject</button>
+                </>
+              )}
+            </div>
           </div>
         </div>
       )}
@@ -471,6 +513,7 @@ export default function AdminPage() {
             <div className="space-y-3">
               {[
                 { key: 'bank_name',             label: 'Bank Name' },
+                { key: 'bank_address',          label: 'Bank Address' },
                 { key: 'bank_account',          label: 'Account Number / IBAN' },
                 { key: 'bank_routing',          label: 'Routing / Sort Code' },
                 { key: 'bank_swift',            label: 'SWIFT / BIC Code' },
@@ -490,7 +533,7 @@ export default function AdminPage() {
             </div>
             <button
               onClick={async () => {
-                const bankKeys = ['bank_name', 'bank_account', 'bank_routing', 'bank_swift', 'bank_name_beneficiary']
+                const bankKeys = ['bank_name', 'bank_address', 'bank_account', 'bank_routing', 'bank_swift', 'bank_name_beneficiary']
                 let saved = 0
                 for (const key of bankKeys) {
                   if (cfgEdits[key] !== undefined) { await saveWalletConfig(key); saved++ }

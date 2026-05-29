@@ -286,3 +286,11 @@ export const adminUpdateReferralCode = (userId: number, code: string) =>
   api.patch(`/admin/referrals/${userId}/code`, { referral_code: code })
 export const adminResetReferralCode = (userId: number) =>
   api.delete(`/admin/referrals/${userId}/code`)
+
+// Ads
+export const getActiveAd = () => api.get('/ads/active')
+export const adminGetAds = () => api.get('/admin/ads')
+export const adminCreateAd = (data: { title: string; image_base64?: string; link_url?: string; is_active?: boolean }) =>
+  api.post('/admin/ads', data)
+export const adminToggleAd = (id: number) => api.patch(`/admin/ads/${id}/toggle`)
+export const adminDeleteAd = (id: number) => api.delete(`/admin/ads/${id}`)

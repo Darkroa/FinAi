@@ -11,6 +11,7 @@ import { cn } from '../lib/utils'
 import { getUserNotifications, markAllNotificationsRead } from '../lib/api'
 import { useLivePrices } from '../hooks/useLivePrices'
 import FloatingAI from '../components/FloatingAI'
+import AdPopup from '../components/AdPopup'
 
 const navItems = [
   { to: '/app/dashboard',    icon: LayoutDashboard, label: 'Dashboard' },
@@ -288,6 +289,9 @@ export default function DashboardLayout() {
 
       {/* Floating AI button */}
       <FloatingAI />
+
+      {/* In-app Ad popup */}
+      <AdPopup />
     </div>
   )
 }
