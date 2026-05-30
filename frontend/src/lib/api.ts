@@ -123,23 +123,27 @@ export const startBot = (params: {
   exchange_label?: string
   strategy?: string
   take_profit_pct?: number
+  stop_loss_pct?: number
   direction?: string
   bot_name?: string
   leverage?: number
+  lot_size?: number
   sl_usdt?: number
 }) => api.post('/bots/start', {
   ticker:             params.ticker            ?? 'BTC-USD',
   paper:              params.paper             ?? false,
   initial_capital:    params.initial_capital   ?? 200,
-  risk_per_trade_pct: params.risk_per_trade_pct ?? 1.0,
-  max_drawdown_pct:   params.max_drawdown_pct  ?? 10.0,
+  risk_per_trade_pct: params.risk_per_trade_pct ?? 100,
+  max_drawdown_pct:   params.max_drawdown_pct  ?? 25.0,
   exchange_label:     params.exchange_label,
   strategy:           params.strategy          ?? 'finlux',
-  take_profit_pct:    params.take_profit_pct   ?? 4.0,
+  take_profit_pct:    params.take_profit_pct   ?? 50.0,
+  stop_loss_pct:      params.stop_loss_pct     ?? 30.0,
   direction:          params.direction         ?? 'auto',
   bot_name:           params.bot_name,
-  leverage:           params.leverage          ?? 200,
-  sl_usdt:            params.sl_usdt           ?? 100,
+  leverage:           params.leverage          ?? 10,
+  lot_size:           params.lot_size          ?? 1,
+  sl_usdt:            params.sl_usdt,
 })
 export const stopBot = (botId = 'ALL') => api.post(`/bots/stop?ticker=${encodeURIComponent(botId)}`)
 export const closeBotPosition = (bot_id: string) => api.post('/bots/close-position', { bot_id })

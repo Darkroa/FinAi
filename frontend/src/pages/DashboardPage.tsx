@@ -271,7 +271,7 @@ export default function DashboardPage() {
       <div>
         <p className="text-xs font-bold text-[#eaecef] mb-3">Activity Center</p>
         <div className="grid grid-cols-3 gap-2">
-          <button onClick={() => navigate('/app/markets?tab=news')} className="bg-[#161a1e] border border-[#2b3139] rounded-xl p-6 flex flex-col items-center justify-center">
+          <button onClick={() => navigate('/app/news')} className="bg-[#161a1e] border border-[#2b3139] rounded-xl p-6 flex flex-col items-center justify-center">
             <Newspaper size={28} className="text-[#f0b90b] mb-2" />
             <span className="text-sm font-semibold">News</span>
           </button>
@@ -282,7 +282,7 @@ export default function DashboardPage() {
             </div>
             <span className="text-sm font-bold text-[#eaecef]">FIN BOT</span>
             <div className="w-full flex items-center justify-between px-0.5">
-              <span className="text-[9px] text-[#848e9c]">FinT Bot</span>
+              <span className="text-[9px] text-[#848e9c]">AI Bot</span>
               <span className={`text-[9px] font-semibold ${botRunning ? 'text-[#0ecb81]' : 'text-[#848e9c]'}`}>{botRunning ? 'Live' : 'Offline'}</span>
             </div>
             <div className="w-full h-px bg-[#2b3139]" />

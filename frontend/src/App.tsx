@@ -19,6 +19,8 @@ import RecommendationsPage from './pages/RecommendationsPage'
 import SubscribePayPage from './pages/SubscribePayPage'
 import PricingPage from './pages/PricingPage'
 import NotificationsPage from './pages/NotificationsPage'
+import NewsPage from './pages/NewsPage'
+import ChatFinPage from './pages/ChatFinPage'
 import { useAuthStore } from './store/authStore'
 import DashboardLayout from './layouts/DashboardLayout'
 import { trackVisitor } from './lib/api'
@@ -70,17 +72,19 @@ export default function App() {
           }
         >
           <Route index element={<Navigate to="/app/dashboard" replace />} />
-          <Route path="dashboard"    element={<DashboardPage />} />
-          <Route path="markets"      element={<MarketsPage />} />
-          <Route path="trade"        element={<TradePage />} />
-          <Route path="wallet"       element={<WalletPage />} />
-          <Route path="transactions" element={<TransactionHistoryPage />} />
-          <Route path="bots"         element={<BotsPage />} />
-          <Route path="settings"     element={<SettingsPage />} />
-          <Route path="profile"      element={<ProfilePage />} />
-          <Route path="calendar"     element={<CalendarPage />} />
-          <Route path="support"      element={<SupportPage />} />
-          <Route path="admin"        element={<AdminPage />} />
+          <Route path="dashboard"       element={<DashboardPage />} />
+          <Route path="markets"         element={<MarketsPage />} />
+          <Route path="news"            element={<NewsPage />} />
+          <Route path="chat"            element={<ChatFinPage />} />
+          <Route path="trade"           element={<TradePage />} />
+          <Route path="wallet"          element={<WalletPage />} />
+          <Route path="transactions"    element={<TransactionHistoryPage />} />
+          <Route path="bots"            element={<BotsPage />} />
+          <Route path="settings"        element={<SettingsPage />} />
+          <Route path="profile"         element={<ProfilePage />} />
+          <Route path="calendar"        element={<CalendarPage />} />
+          <Route path="support"         element={<SupportPage />} />
+          <Route path="admin"           element={<AdminPage />} />
           <Route path="alerts"          element={<AlertsPage />} />
           <Route path="recommendations" element={<RecommendationsPage />} />
           <Route path="subscribe"       element={<SubscribePayPage />} />
