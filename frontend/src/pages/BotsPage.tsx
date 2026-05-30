@@ -306,7 +306,6 @@ export default function BotsPage() {
   const [pnlHistory, setPnlHistory] = useState<PnlPoint[]>([])
   const [loading, setLoading] = useState(true)
   const [actionLoading, setActionLoading] = useState<string | null>(null)
-  const [showAddBot, setShowAddBot] = useState(false)
   const [savingParams, setSavingParams] = useState(false)
   const [showTickerDD, setShowTickerDD] = useState(false)
   const [showRouteDD, setShowRouteDD] = useState(false)
@@ -430,7 +429,7 @@ export default function BotsPage() {
       })
       setStatus(s => ({ ...s, running: true }))
       toast.success(res.data?.message || 'Bot started')
-      setShowAddBot(false); setParams({ ...EMPTY_PARAMS }); fetchData()
+      setParams({ ...EMPTY_PARAMS }); fetchData()
     } catch (err: unknown) {
       toast.error((err as { response?: { data?: { detail?: string } } })?.response?.data?.detail || 'Failed to start bot')
     } finally { setActionLoading(null) }
@@ -523,30 +522,25 @@ export default function BotsPage() {
             <button onClick={() => navigate('/app/pricing')} className="flex items-center gap-1.5 text-xs bg-[#f0b90b]/10 hover:bg-[#f0b90b]/20 border border-[#f0b90b]/30 text-[#f0b90b] px-3 py-1.5 rounded-lg transition">
               <Crown size={11} /> Upgrade
             </button>
-          ) : (
-            <button onClick={() => setShowAddBot(v => !v)} className={`flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-lg transition ${showAddBot ? 'bg-[#2b3139] text-[#848e9c]' : 'bg-[#f0b90b] hover:bg-[#d9a60b] text-black'}`}>
-              {showAddBot ? <><X size={12} /> Cancel</> : <><Plus size={12} /> Add Bot</>}
-            </button>
-          )}
+          ) : null}
           <button onClick={fetchData} disabled={loading} className="flex items-center gap-1.5 text-xs text-[#848e9c] hover:text-[#eaecef] transition">
             <RefreshCw size={12} className={loading ? 'animate-spin' : ''} /> Refresh
           </button>
         </div>
       </div>
 
-      {/* AI Bot Config Panel — toggled by Add Bot */}
-      {showAddBot && (
-        <BotConfigPanel
-          title="Configure New AI Bot" icon={Bot} accentColor="#f0b90b"
-          params={params} setParams={setParams} exchanges={exchanges}
-          showTickerDD={showTickerDD} setShowTickerDD={setShowTickerDD}
-          showRouteDD={showRouteDD} setShowRouteDD={setShowRouteDD}
-          onStart={handleStart} onSave={handleSaveDefaults}
-          actionLoading={actionLoading} savingParams={savingParams}
-          startLabel="Start AI Bot"
-          onClose={() => setShowAddBot(false)}
-        />
-      )}
+      {/* AI Bot Config — always visible */}
+      <BotConfigPanel
+        title="Add AI Bot" icon={Bot} accentColor="#f0b90b"
+        params={params} setParams={setParams} exchanges={exchanges}
+        showTickerDD={showTickerDD} setShowTickerDD={setShowTickerDD}
+        showRouteDD={showRouteDD} setShowRouteDD={setShowRouteDD}
+        onStart={handleStart} onSave={handleSaveDefaults}
+        actionLoading={actionLoading} savingParams={savingParams}
+        startLabel="Start AI Bot"
+        onClose={() => setParams({ ...EMPTY_PARAMS })}
+        closeLabel="↺ Reset"
+      />
 
       {/* Active Bots Grid */}
       {activeBots.length > 0 && (
