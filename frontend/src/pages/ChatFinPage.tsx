@@ -288,7 +288,7 @@ export default function ChatFinPage() {
               <Send size={16} />
             </button>
           </form>
-          <p className="text-[10px] text-[#4a5568] text-center mt-2">Chat Fin is AI-powered · Not financial advice</p>
+          <p className="text-[10px] text-[#4a5568] text-center mt-2">Chat Fin is AI-powered · Not financial advice · <a href="mailto:supportfinaibot@gmail.com" className="hover:text-[#848e9c] transition">supportfinaibot@gmail.com</a></p>
         </div>
       </div>
     </div>

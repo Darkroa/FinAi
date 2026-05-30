@@ -45,6 +45,8 @@ export default function DashboardPage() {
   const [todayPnl, setTodayPnl] = useState(0);
   const [unrealizedPnl, setUnrealizedPnl] = useState(0);
   const [openPositions, setOpenPositions] = useState(0);
+  const [portfolioValue, setPortfolioValue] = useState(0);
+  const [activeBotCount, setActiveBotCount] = useState(0);
 
   const balance = user?.balance_usdt ?? 0;
 
@@ -76,11 +78,15 @@ export default function DashboardPage() {
       setTodayPnl(pnlRes.data?.today_pnl ?? 0);
 
       // Unrealized P&L + open positions from bot status (accurate with leverage)
-      const bots: Record<string, { position: number; unrealized_pnl: number }> =
+      const bots: Record<string, { position: number; unrealized_pnl: number; running?: boolean; portfolio_value?: number }> =
         botRes.data?.bots ?? {};
       let totalUnrealized = 0;
       let openCount = 0;
+      let portfolioVal = 0;
+      let activeBotCnt = 0;
       for (const bot of Object.values(bots)) {
+        portfolioVal += bot.portfolio_value ?? 0;
+        if (bot.running) activeBotCnt++;
         if (bot.position > 0) {
           totalUnrealized += bot.unrealized_pnl ?? 0;
           openCount++;
@@ -88,6 +94,8 @@ export default function DashboardPage() {
       }
       setUnrealizedPnl(totalUnrealized);
       setOpenPositions(openCount);
+      setPortfolioValue(portfolioVal);
+      setActiveBotCount(activeBotCnt);
 
       // FinEvent running status
       const feBots: { running: boolean }[] = finEventRes.data?.bots ?? [];
@@ -210,26 +218,42 @@ export default function DashboardPage() {
       
       {/* Small P&L Cards */}
       <div className="grid grid-cols-2 gap-3">
-        
-        <div className="bg-[#161a1e] border border-[#2b3139] rounded-xl px-4 py-3">
-          <div className="flex items-center gap-1">
-            {todayPnl >= 0 ? <TrendingUp size={13} className="text-[#0ecb81]" /> : <TrendingDown size={13} className="text-[#f6465d]" />}
-            <span className="text-[10px] text-[#848e9c]">Today's P&L</span>
+        <div className="bg-[#161a1e] border border-[#2b3139] rounded-xl px-4 py-2.5">
+          <div className="flex items-center gap-1 mb-0.5">
+            {todayPnl >= 0 ? <TrendingUp size={11} className="text-[#0ecb81]" /> : <TrendingDown size={11} className="text-[#f6465d]" />}
+            <span className="text-[9px] text-[#848e9c]">Today's P&L</span>
           </div>
-          <p className={`text-lg font-bold font-mono ${todayPnl >= 0 ? 'text-[#0ecb81]' : 'text-[#f6465d]'}`}>
+          <p className={`text-sm font-bold font-mono ${todayPnl >= 0 ? 'text-[#0ecb81]' : 'text-[#f6465d]'}`}>
             {todayPnl >= 0 ? '+' : ''}${todayPnl.toFixed(2)}
           </p>
         </div>
 
-        <div className="bg-[#161a1e] border border-[#2b3139] rounded-xl px-3 py-2">
-          <div className="flex items-center gap-1.5">
-            <DollarSign size={2} className="text-[#f0b90b]" />
-            <span className="text-[8px] text-[#848e9c]">Unrealized P&L</span>
+        <div className="bg-[#161a1e] border border-[#2b3139] rounded-xl px-3 py-2.5">
+          <div className="flex items-center gap-1 mb-0.5">
+            <DollarSign size={11} className="text-[#f0b90b]" />
+            <span className="text-[9px] text-[#848e9c]">Unrealized P&L</span>
           </div>
-          <p className={`text-lg font-bold font-mono ${unrealizedPnl >= 0 ? 'text-[#0ecb81]' : 'text-[#f6465d]'}`}>
+          <p className={`text-sm font-bold font-mono ${unrealizedPnl >= 0 ? 'text-[#0ecb81]' : 'text-[#f6465d]'}`}>
             {unrealizedPnl >= 0 ? '+' : ''}${unrealizedPnl.toFixed(2)}
           </p>
-          <p className="text-[8px] text-[#848e9c]">{openPositions} open</p>
+        </div>
+      </div>
+
+      {/* Portfolio Strip */}
+      <div className="bg-[#161a1e] border border-[#2b3139] rounded-xl px-4 py-2.5 flex items-center justify-between">
+        <div className="flex flex-col items-center gap-0.5">
+          <span className="text-[9px] text-[#848e9c]">Portfolio Value</span>
+          <span className="text-xs font-bold font-mono text-[#eaecef]">${portfolioValue.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+        </div>
+        <div className="w-px h-6 bg-[#2b3139]" />
+        <div className="flex flex-col items-center gap-0.5">
+          <span className="text-[9px] text-[#848e9c]">Active Bots</span>
+          <span className="text-xs font-bold text-[#eaecef]">{activeBotCount}</span>
+        </div>
+        <div className="w-px h-6 bg-[#2b3139]" />
+        <div className="flex flex-col items-center gap-0.5">
+          <span className="text-[9px] text-[#848e9c]">Open Positions</span>
+          <span className="text-xs font-bold text-[#eaecef]">{openPositions}</span>
         </div>
       </div>
       
@@ -283,12 +307,18 @@ export default function DashboardPage() {
             <span className="text-sm font-bold text-[#eaecef]">FIN BOT</span>
             <div className="w-full flex items-center justify-between px-0.5">
               <span className="text-[9px] text-[#848e9c]">AI Bot</span>
-              <span className={`text-[9px] font-semibold ${botRunning ? 'text-[#0ecb81]' : 'text-[#848e9c]'}`}>{botRunning ? 'Live' : 'Offline'}</span>
+              <span className={`flex items-center gap-0.5 text-[9px] font-semibold ${botRunning ? 'text-[#0ecb81]' : 'text-[#848e9c]'}`}>
+                <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${botRunning ? 'bg-[#0ecb81] animate-pulse' : 'bg-[#f6465d]'}`} />
+                {botRunning ? 'Live' : 'Offline'}
+              </span>
             </div>
             <div className="w-full h-px bg-[#2b3139]" />
             <div className="w-full flex items-center justify-between px-0.5">
               <span className="text-[9px] text-[#848e9c]">FinEvent</span>
-              <span className={`text-[9px] font-semibold ${finEventRunning ? 'text-[#0ecb81]' : 'text-[#848e9c]'}`}>{finEventRunning ? 'Live' : 'Offline'}</span>
+              <span className={`flex items-center gap-0.5 text-[9px] font-semibold ${finEventRunning ? 'text-[#0ecb81]' : 'text-[#848e9c]'}`}>
+                <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${finEventRunning ? 'bg-[#0ecb81] animate-pulse' : 'bg-[#f6465d]'}`} />
+                {finEventRunning ? 'Live' : 'Offline'}
+              </span>
             </div>
           </button>
           

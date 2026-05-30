@@ -82,12 +82,14 @@ const EMPTY_PARAMS = {
   risk_per_trade_pct: 100,
   max_drawdown_pct: 25,
   strategy: 'finlux' as 'sma' | 'finlux' | 'auto' | 'live',
-  take_profit_pct: 40,
-  stop_loss_pct: 20,
-  leverage: 200,
+  take_profit_pct: 50,
+  stop_loss_pct: 30,
+  leverage: 100,
   sl_usdt: 100,
   direction: 'auto' as 'auto' | 'buy' | 'sell',
   bot_name: '',
+  lot_size: 1,
+  execution_cooldown: 40,
 }
 
 // Mini live-price chart for a single bot
@@ -300,6 +302,13 @@ export default function BotsPage() {
       toast.error(`Minimum capital is $${MIN_CAPITAL} USDT.`)
       return
     }
+
+    // Broker margin check
+    const requiredMargin = (params.lot_size * 100000) / params.leverage
+    if (requiredMargin > params.initial_capital) {
+      toast.error(`Insufficient Capital for this Lot Size/Leverage configuration. Required margin: $${requiredMargin.toLocaleString('en-US', { maximumFractionDigits: 2 })}`)
+      return
+    }
     const usingBalance = params.route === '__balance__'
     const balance      = (user as unknown as { balance_usdt?: number })?.balance_usdt ?? 0
     if (usingBalance && balance < params.initial_capital) {
@@ -435,7 +444,7 @@ export default function BotsPage() {
       {/* ── Header ── */}
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-3 flex-wrap">
-          <h1 className="text-xl font-bold text-[#eaecef]">AI Trading Bots</h1>
+          <h1 className="text-xl font-bold text-[#eaecef]">Fin Bot</h1>
           <span className={`text-xs px-2.5 py-1 rounded-full font-medium ${status.running ? 'bg-[#0ecb81]/10 text-[#0ecb81] border border-[#0ecb81]/20 animate-pulse' : 'bg-[#2b3139] text-[#848e9c]'}`}>
             {status.running ? `● ${activeBots.length} Live` : 'Offline'}
           </span>
@@ -445,13 +454,17 @@ export default function BotsPage() {
             </span>
           )}
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
           {status.running && (
             <button onClick={() => handleStop('ALL')} disabled={!!actionLoading}
               className="flex items-center gap-1.5 text-xs bg-[#f6465d]/10 hover:bg-[#f6465d]/20 border border-[#f6465d]/30 text-[#f6465d] px-3 py-1.5 rounded-lg transition">
               <Square size={11} /> Stop All
             </button>
           )}
+          <button onClick={() => { setFeCollapsed(false); setShowFePanel(s => !s) }}
+            className="flex items-center gap-1.5 text-xs bg-[#627eea]/10 hover:bg-[#627eea]/20 border border-[#627eea]/30 text-[#627eea] px-3 py-1.5 rounded-lg transition">
+            <Brain size={11} /> FinEventAI Bots
+          </button>
           {atBotLimit ? (
             <button onClick={() => navigate('/app/pricing')}
               className="flex items-center gap-1.5 text-xs bg-[#f0b90b]/10 hover:bg-[#f0b90b]/20 border border-[#f0b90b]/30 text-[#f0b90b] px-3 py-1.5 rounded-lg transition">
@@ -596,71 +609,57 @@ export default function BotsPage() {
               )}
             </div>
 
+            {/* Lot Size */}
+            <div>
+              <label className="text-xs text-[#848e9c] mb-1.5 block">Lot Size</label>
+              <input type="number" min={1} max={100} step={1} value={params.lot_size}
+                onChange={e => setParams(p => ({ ...p, lot_size: Math.min(100, Math.max(1, parseInt(e.target.value) || 1)) }))}
+                className="w-full bg-[#0b0e11] border border-[#2b3139] focus:border-[#f0b90b] rounded-xl px-3 py-2.5 text-sm font-mono text-[#eaecef] focus:outline-none transition" />
+              <p className="text-[10px] text-[#4a5568] mt-1">Range: 1 – 100 lots</p>
+            </div>
+
             {/* Take Profit */}
             <div>
-              <label className="text-xs text-[#848e9c] mb-1.5 block">
-                Take Profit: <span className="text-[#0ecb81] font-semibold">{params.take_profit_pct}%</span>
-              </label>
-              <input type="range" min={1} max={50} step={0.5} value={params.take_profit_pct}
-                onChange={e => setParams(p => ({ ...p, take_profit_pct: parseFloat(e.target.value) }))}
-                className="w-full accent-[#0ecb81]" />
-              <div className="flex justify-between text-[10px] text-[#4a5568] mt-1">
-                <span>1%</span><span>Auto-close on gain</span><span>50%</span>
-              </div>
+              <label className="text-xs text-[#848e9c] mb-1.5 block">Take Profit (%)</label>
+              <input type="number" min={5} max={200} step={1} value={params.take_profit_pct}
+                onChange={e => setParams(p => ({ ...p, take_profit_pct: Math.min(200, Math.max(5, parseFloat(e.target.value) || 5)) }))}
+                className="w-full bg-[#0b0e11] border border-[#2b3139] focus:border-[#0ecb81] rounded-xl px-3 py-2.5 text-sm font-mono text-[#0ecb81] focus:outline-none transition" />
+              <p className="text-[10px] text-[#4a5568] mt-1">Range: 5% – 200%</p>
             </div>
 
             {/* Stop Loss */}
             <div>
-              <label className="text-xs text-[#848e9c] mb-1.5 block">
-                Stop Loss: <span className="text-[#f6465d] font-semibold">{params.stop_loss_pct}%</span>
-                {params.stop_loss_pct >= 20 && <span className="ml-1 text-[#f6465d] font-bold text-[10px]">⚠ High Risk</span>}
-              </label>
-              <input type="range" min={0.5} max={50} step={0.5} value={params.stop_loss_pct}
-                onChange={e => setParams(p => ({ ...p, stop_loss_pct: parseFloat(e.target.value) }))}
-                className="w-full accent-[#f6465d]" />
-              <div className="flex justify-between text-[10px] text-[#4a5568] mt-1">
-                <span>0.5%</span><span>Auto-exit on loss</span><span>50%</span>
-              </div>
+              <label className="text-xs text-[#848e9c] mb-1.5 block">Stop Loss (%)</label>
+              <input type="number" min={5} max={100} step={1} value={params.stop_loss_pct}
+                onChange={e => setParams(p => ({ ...p, stop_loss_pct: Math.min(100, Math.max(5, parseFloat(e.target.value) || 5)) }))}
+                className="w-full bg-[#0b0e11] border border-[#2b3139] focus:border-[#f6465d] rounded-xl px-3 py-2.5 text-sm font-mono text-[#f6465d] focus:outline-none transition" />
+              <p className="text-[10px] text-[#4a5568] mt-1">Range: 5% – 100%</p>
+            </div>
+
+            {/* Execution Cooldown */}
+            <div>
+              <label className="text-xs text-[#848e9c] mb-1.5 block">Cooldown Delay (sec)</label>
+              <input type="number" min={40} max={3600} step={1} value={params.execution_cooldown}
+                onChange={e => setParams(p => ({ ...p, execution_cooldown: Math.max(40, parseInt(e.target.value) || 40) }))}
+                className="w-full bg-[#0b0e11] border border-[#2b3139] focus:border-[#f0b90b] rounded-xl px-3 py-2.5 text-sm font-mono text-[#eaecef] focus:outline-none transition" />
+              <p className="text-[10px] text-[#4a5568] mt-1">Min: 40 sec between trades</p>
             </div>
 
             {/* Leverage */}
             <div className="sm:col-span-2 lg:col-span-3">
-              <label className="text-xs text-[#848e9c] mb-1.5 block flex items-center gap-2">
-                Leverage:
-                <span className={`font-bold text-sm ${params.leverage >= 100 ? 'text-[#f6465d]' : params.leverage >= 20 ? 'text-[#f0b90b]' : 'text-[#eaecef]'}`}>
-                  1:{params.leverage}
-                </span>
-                {params.leverage >= 100 && <span className="text-[#f6465d] text-[10px] font-bold">⚠ EXTREME — High liquidation risk</span>}
-                {params.leverage >= 20 && params.leverage < 100 && <span className="text-[#f0b90b] text-[10px] font-bold">⚠ High leverage</span>}
+              <label className="text-xs text-[#848e9c] mb-2 block">
+                Leverage: <span className={`font-bold ${params.leverage >= 100 ? 'text-[#f6465d]' : params.leverage >= 20 ? 'text-[#f0b90b]' : 'text-[#eaecef]'}`}>1:{params.leverage}</span>
+                {params.leverage >= 100 && <span className="ml-2 text-[#f6465d] text-[10px] font-bold">⚠ EXTREME — High liquidation risk</span>}
+                {params.leverage >= 20 && params.leverage < 100 && <span className="ml-2 text-[#f0b90b] text-[10px] font-bold">⚠ High leverage</span>}
               </label>
-              <input type="range" min={1} max={1200} step={1} value={params.leverage}
-                onChange={e => setParams(p => ({ ...p, leverage: parseInt(e.target.value) }))}
-                className="w-full accent-[#f0b90b] h-2" />
-              <div className="flex justify-between text-[10px] text-[#4a5568] mt-1">
-                <span>1:1</span><span>1:10</span><span>1:50</span><span>1:100</span><span>1:500</span><span>1:1000</span><span>1:1200</span>
-              </div>
-              <div className="flex gap-2 mt-2 flex-wrap">
+              <div className="grid grid-cols-5 sm:grid-cols-10 gap-1.5">
                 {[1, 5, 10, 25, 50, 100, 200, 500, 1000, 1200].map(lv => (
                   <button key={lv} type="button"
                     onClick={() => setParams(p => ({ ...p, leverage: lv }))}
-                    className={`text-[10px] px-2 py-1 rounded-lg border transition font-mono ${params.leverage === lv ? 'bg-[#f0b90b] text-black border-[#f0b90b]' : 'border-[#2b3139] text-[#848e9c] hover:border-[#f0b90b]/40 hover:text-[#eaecef]'}`}>
+                    className={`text-[10px] py-2 rounded-lg border transition font-mono text-center ${params.leverage === lv ? 'bg-[#f0b90b] text-black border-[#f0b90b]' : 'border-[#2b3139] text-[#848e9c] hover:border-[#f0b90b]/40 hover:text-[#eaecef]'}`}>
                     1:{lv}
                   </button>
                 ))}
-              </div>
-            </div>
-
-            {/* Risk per trade */}
-            <div>
-              <label className="text-xs text-[#848e9c] mb-1.5 block">
-                Risk Per Trade: <span className="text-[#f0b90b] font-semibold">{params.risk_per_trade_pct}%</span>
-                {params.risk_per_trade_pct >= 50 && <span className="ml-1 text-[#f6465d] font-bold text-[10px]">⚠ Aggressive</span>}
-              </label>
-              <input type="range" min={1} max={100} step={1} value={params.risk_per_trade_pct}
-                onChange={e => setParams(p => ({ ...p, risk_per_trade_pct: parseFloat(e.target.value) }))}
-                className="w-full accent-[#f0b90b]" />
-              <div className="flex justify-between text-[10px] text-[#4a5568] mt-1">
-                <span>1%</span><span>Conservative ← → Aggressive</span><span>100%</span>
               </div>
             </div>
 
@@ -1130,7 +1129,7 @@ export default function BotsPage() {
             <h2 className="text-sm font-semibold text-[#eaecef]">Live Trade Log</h2>
             {status.running && <span className="text-[10px] bg-[#0ecb81]/10 text-[#0ecb81] border border-[#0ecb81]/20 px-2 py-0.5 rounded-full animate-pulse">LIVE</span>}
           </div>
-          <span className="text-xs text-[#848e9c]">{trades.length} trades</span>
+          <span className="text-xs text-[#848e9c]">{Math.min(trades.length, 10)} of {trades.length} trades</span>
         </div>
         <div className="overflow-x-auto">
           <table className="w-full text-sm min-w-[640px]">
@@ -1149,7 +1148,7 @@ export default function BotsPage() {
                     <p className="text-sm text-[#848e9c]">No trades yet — start a bot to begin</p>
                   </div>
                 </td></tr>
-              ) : trades.map((t, i) => (
+              ) : trades.slice(0, 10).map((t, i) => (
                 <tr key={t.id ?? i} className="border-b border-[#2b3139]/50 hover:bg-[#1e2329] transition">
                   <td className="px-4 py-3 text-xs text-[#848e9c] whitespace-nowrap">{t.created_at ? new Date(t.created_at).toLocaleString() : '—'}</td>
                   <td className="px-4 py-3"><span className="text-xs font-mono font-semibold text-[#f0b90b]">{t.ticker}</span></td>
@@ -1167,6 +1166,14 @@ export default function BotsPage() {
             </tbody>
           </table>
         </div>
+        {trades.length > 0 && (
+          <div className="px-4 py-3 border-t border-[#2b3139] flex justify-center">
+            <button onClick={() => navigate('/app/transactions')}
+              className="flex items-center gap-1.5 text-xs text-[#f0b90b] hover:text-[#eaecef] border border-[#f0b90b]/30 hover:border-[#f0b90b]/60 bg-[#f0b90b]/5 hover:bg-[#f0b90b]/10 px-4 py-2 rounded-lg transition font-medium">
+              <ArrowRight size={11} /> View All AI Trade History
+            </button>
+          </div>
+        )}
       </div>
     </div>
   )
