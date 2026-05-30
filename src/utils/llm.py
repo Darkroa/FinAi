@@ -7,7 +7,7 @@ def get_llm(model: str = "grok", temperature: float = 0.6, **kwargs):
     from langchain_openai import ChatOpenAI
 
     if model == "grok":
-        grok_key = os.getenv("GROK_API_KEY")
+        grok_key = os.getenv("GROK_API_KEY") or os.getenv("GROQ_API_KEY")
         if grok_key:
             return ChatOpenAI(
                 model="grok-3-fast",

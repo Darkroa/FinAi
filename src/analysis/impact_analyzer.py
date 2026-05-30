@@ -25,7 +25,7 @@ class ImpactAnalyzer:
             self._llm = ChatOpenAI(
                 model="gpt-4o-mini",
                 temperature=0.1,
-                api_key=os.getenv("OPENAI_API_KEY") or os.getenv("GROK_API_KEY") or "placeholder",
+                api_key=os.getenv("OPENAI_API_KEY") or os.getenv("GROK_API_KEY") or os.getenv("GROQ_API_KEY") or "placeholder",
             )
         return self._llm
 

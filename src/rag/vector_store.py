@@ -22,7 +22,7 @@ class FinancialRAG:
             from langchain_openai import OpenAIEmbeddings
             self._embeddings = OpenAIEmbeddings(
                 model="text-embedding-3-small",
-                api_key=os.getenv("OPENAI_API_KEY") or os.getenv("GROK_API_KEY") or "placeholder",
+                api_key=os.getenv("OPENAI_API_KEY") or os.getenv("GROK_API_KEY") or os.getenv("GROQ_API_KEY") or "placeholder",
             )
         return self._embeddings
 

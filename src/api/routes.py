@@ -2916,7 +2916,7 @@ async def ai_chat(body: AIChatRequest, current_user=Depends(get_current_user)):
         return {"reply": reply}
     except Exception as e:
         logger.error(f"AI chat error: {e}")
-        return {"reply": f"I'm having trouble connecting to my AI engine right now. Please make sure the GROK_API_KEY or OPENAI_API_KEY is configured. Error: {str(e)[:120]}"}
+        return {"reply": "I'm Fin, probably under maintenance. Please check back soon."}
 
 
 # ===================== Subscriptions (User) =====================
