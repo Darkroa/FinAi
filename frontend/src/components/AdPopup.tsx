@@ -1,6 +1,6 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { X, ExternalLink } from 'lucide-react'
-import { getActiveAd } from '../lib/api'
+import { getAllActiveAds } from '../lib/api'
 
 interface Ad {
   id: number
@@ -9,33 +9,34 @@ interface Ad {
   link_url?: string
 }
 
-const SHOW_DELAY_MS  = 3_000   // appear 3 s after login
-const DISPLAY_SECS   = 80      // auto-dismiss after 80 s
-const SESSION_KEY    = 'finai-ad-dismissed'
+const FIRST_DELAY_MS = 300_000  // 5 minutes after login
+const CYCLE_DELAY_MS = 180_000  // 3 minutes between ads
+const DISPLAY_SECS   = 80       // auto-dismiss countdown
 
 export default function AdPopup() {
-  const [ad,       setAd]       = useState<Ad | null>(null)
+  const [ads,      setAds]      = useState<Ad[]>([])
+  const [adIndex,  setAdIndex]  = useState(0)
   const [visible,  setVisible]  = useState(false)
   const [secs,     setSecs]     = useState(DISPLAY_SECS)
+  const cycleTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
-  // Fetch and schedule show
+  // Fetch all active ads and shuffle once on mount
   useEffect(() => {
-    if (sessionStorage.getItem(SESSION_KEY)) return
-
-    const timer = setTimeout(async () => {
-      try {
-        const res = await getActiveAd()
-        if (res.data && res.data.id) {
-          setAd(res.data)
-          setVisible(true)
-        }
-      } catch {
-        // no ad or network error — silent
-      }
-    }, SHOW_DELAY_MS)
-
-    return () => clearTimeout(timer)
+    getAllActiveAds()
+      .then(res => {
+        const data: Ad[] = Array.isArray(res.data) ? res.data : []
+        const shuffled = [...data].sort(() => Math.random() - 0.5)
+        setAds(shuffled)
+      })
+      .catch(() => {})
   }, [])
+
+  // Schedule first show at 5 minutes
+  useEffect(() => {
+    if (ads.length === 0) return
+    const timer = setTimeout(() => setVisible(true), FIRST_DELAY_MS)
+    return () => clearTimeout(timer)
+  }, [ads])
 
   // Countdown + auto-dismiss
   useEffect(() => {
@@ -45,24 +46,38 @@ export default function AdPopup() {
       setSecs(s => {
         if (s <= 1) {
           clearInterval(tick)
-          dismiss()
+          scheduleNext()
           return 0
         }
         return s - 1
       })
     }, 1_000)
     return () => clearInterval(tick)
-  }, [visible]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [visible, adIndex]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  const scheduleNext = () => {
+    setVisible(false)
+    if (ads.length <= 1) return
+    if (cycleTimer.current) clearTimeout(cycleTimer.current)
+    cycleTimer.current = setTimeout(() => {
+      setAdIndex(i => (i + 1) % ads.length)
+      setVisible(true)
+    }, CYCLE_DELAY_MS)
+  }
 
   const dismiss = () => {
     setVisible(false)
-    sessionStorage.setItem(SESSION_KEY, '1')
+    scheduleNext()
   }
 
+  // Cleanup cycle timer on unmount
+  useEffect(() => () => { if (cycleTimer.current) clearTimeout(cycleTimer.current) }, [])
+
+  const ad = ads[adIndex]
   if (!visible || !ad) return null
 
-  const pct = secs / DISPLAY_SECS
-  const r   = 11
+  const pct  = secs / DISPLAY_SECS
+  const r    = 11
   const circ = 2 * Math.PI * r
 
   return (
@@ -95,6 +110,15 @@ export default function AdPopup() {
           </svg>
           <span className="text-[9px] font-bold text-[#f0b90b] relative z-10 leading-none">{secs}</span>
         </div>
+
+        {/* Ad counter badge (top-center) */}
+        {ads.length > 1 && (
+          <div className="absolute top-3 left-1/2 -translate-x-1/2 z-10">
+            <span className="text-[9px] text-[#848e9c] bg-[#0b0e11]/70 px-2 py-0.5 rounded-full">
+              {adIndex + 1}/{ads.length}
+            </span>
+          </div>
+        )}
 
         {/* Close button (top-right) */}
         <button

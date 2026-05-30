@@ -1,3 +1,4 @@
+import os
 import time
 import threading
 import requests
@@ -125,7 +126,9 @@ class TradingBotInstance:
                  take_profit_pct: float = 4.0,
                  direction: str = "auto",
                  bot_id: str = None,
-                 bot_name: str = None):
+                 bot_name: str = None,
+                 leverage: float = 200.0,
+                 sl_usdt: float = 100.0):
         self.ticker           = ticker.upper()
         self.paper            = paper
         self.user_id          = user_id
@@ -153,6 +156,11 @@ class TradingBotInstance:
         self.price_timestamps: List[datetime] = []
         self.signal_state     = "NEUTRAL"
         self.last_signal_time: Optional[datetime] = None
+
+        self.leverage         = float(leverage)
+        self.sl_usdt          = float(sl_usdt)
+        self.open_margin      = 0.0
+        self.trail_high       = 0.0
 
         self.binance_api_key: Optional[str] = None
         self.binance_secret:  Optional[str] = None
@@ -188,8 +196,8 @@ class TradingBotInstance:
     # ── Status ────────────────────────────────────────────────────────────────
 
     def get_status(self):
-        portfolio_value  = self.capital + self.position * self.latest_price
-        unrealized_pnl   = (self.latest_price - self.entry_price) * self.position
+        unrealized_pnl  = (self.latest_price - self.entry_price) * self.position if self.position > 0 else 0.0
+        portfolio_value = self.capital + self.open_margin + unrealized_pnl
         self.peak_capital = max(self.peak_capital, portfolio_value)
         current_dd = ((self.peak_capital - portfolio_value) / self.peak_capital * 100) if self.peak_capital > 0 else 0
 
@@ -231,6 +239,8 @@ class TradingBotInstance:
             "strategy":             self.strategy,
             "direction":            self.direction,
             "take_profit_pct":      self.take_profit_pct,
+            "leverage":             self.leverage,
+            "sl_usdt":              self.sl_usdt,
             "mode":                 "LIVE" if not self.paper else "PAPER",
             "balance":              round(self.capital, 2),
             "portfolio_value":      round(portfolio_value, 2),
@@ -438,17 +448,21 @@ class TradingBotInstance:
                     self.stop()
                     break
 
-                # TP / hard-stop (apply to both strategies)
-                # Take profit: price rose by take_profit_pct%
-                take_profit = self.position > 0 and price >= self.entry_price * (1 + self.take_profit_pct / 100)
-                # Hard stop: price fell by half of take_profit_pct (e.g. 4% TP → 2% SL)
-                hard_stop   = self.position > 0 and price <= self.entry_price * (1 - (self.take_profit_pct / 2) / 100)
+                # ── Risk management: dollar SL + trailing stop ─────────────
+                risk_closed = False
+                if self.position > 0:
+                    if price > self.trail_high:
+                        self.trail_high = price
+                    unrealized = (price - self.entry_price) * self.position
+                    if unrealized <= -self.sl_usdt:
+                        self._close_position(price, "STOP_LOSS")
+                        risk_closed = True
+                    elif (self.trail_high > self.entry_price and
+                          price < self.trail_high * (1 - 1.5 / 100)):
+                        self._close_position(price, "TRAILING_STOP")
+                        risk_closed = True
 
-                if take_profit:
-                    self._close_position(price, "TAKE_PROFIT")
-                elif hard_stop:
-                    self._close_position(price, "HARD_STOP_LOSS")
-                else:
+                if not risk_closed:
                     # ── Dispatch to strategy ──────────────────────────────────
                     if self.strategy == "finlux":
                         signal = self._step_finlux(price)
@@ -462,12 +476,12 @@ class TradingBotInstance:
                             self.signal_state = "NEUTRAL"
 
                         if signal == "BUY" and self.position <= 0 and self.direction in ("auto", "buy"):
-                            # Use 40% of current capital (or risk_per_trade_pct if set differently)
-                            trade_usdt = self.capital * (self.risk_per_trade_pct / 100)
+                            margin_usdt = self.capital * (self.risk_per_trade_pct / 100)
+                            notional_usdt = margin_usdt * self.leverage
                             exec_price = self._volatility_fill_price("BUY", price)
-                            qty = trade_usdt / exec_price
-                            if trade_usdt >= 1.0:
-                                self._open_position(qty, exec_price, "FL_BREAKOUT_BUY")
+                            qty = notional_usdt / exec_price
+                            if margin_usdt >= 1.0:
+                                self._open_position(qty, exec_price, "FL_BREAKOUT_BUY", margin_usdt)
                         elif signal == "SELL" and self.position > 0 and self.direction in ("auto", "sell"):
                             exec_price = self._volatility_fill_price("SELL", price)
                             self._close_position(exec_price, "FL_BREAKOUT_SELL")
@@ -491,11 +505,12 @@ class TradingBotInstance:
                         self.signal_state = "BULLISH" if price_above_sma else "BEARISH"
 
                         if bullish_cross and self.position <= 0 and self.direction in ("auto", "buy"):
-                            trade_usdt = self.capital * (self.risk_per_trade_pct / 100)
+                            margin_usdt = self.capital * (self.risk_per_trade_pct / 100)
+                            notional_usdt = margin_usdt * self.leverage
                             exec_price = self._volatility_fill_price("BUY", price)
-                            qty = trade_usdt / exec_price
-                            if trade_usdt >= 1.0:
-                                self._open_position(qty, exec_price, "SMA_BULLISH_CROSS")
+                            qty = notional_usdt / exec_price
+                            if margin_usdt >= 1.0:
+                                self._open_position(qty, exec_price, "SMA_BULLISH_CROSS", margin_usdt)
                         elif bearish_cross and self.position > 0 and self.direction in ("auto", "sell"):
                             exec_price = self._volatility_fill_price("SELL", price)
                             self._close_position(exec_price, "SMA_BEARISH_CROSS")
@@ -508,9 +523,9 @@ class TradingBotInstance:
 
     # ── Position helpers ──────────────────────────────────────────────────────
 
-    def _open_position(self, qty: float, price: float, reason: str):
+    def _open_position(self, qty: float, price: float, reason: str, margin: float = None):
         try:
-            cost = qty * price
+            cost = margin if margin is not None else qty * price / max(self.leverage, 1.0)
             if not self.paper and self.binance_api_key and self.binance_secret:
                 try:
                     _place_binance_order("BUY", self.ticker, round(qty, 4), self.binance_api_key, self.binance_secret)
@@ -518,8 +533,10 @@ class TradingBotInstance:
                     logger.warning(f"Binance BUY skipped: {e}")
 
             self.capital    -= cost
+            self.open_margin = cost
             self.position    = qty
             self.entry_price = price
+            self.trail_high  = price
 
             if not self.paper:
                 self._update_user_balance(-cost)
@@ -535,7 +552,8 @@ class TradingBotInstance:
             }
             self.trades.append(trade)
             self._log_trade_to_db(trade)
-            logger.success(f"🟢 BUY  {qty:.6f} {self.ticker} @ ${price:,.4f}  [{reason}]  cost=${cost:,.2f}")
+            self._notify_trade(trade)
+            logger.success(f"🟢 BUY  {qty:.6f} {self.ticker} @ ${price:,.4f}  [{reason}]  margin=${cost:,.2f}  lev={self.leverage:.0f}x")
         except Exception as e:
             logger.error(f"Failed to open {self.ticker}: {e}")
 
@@ -543,7 +561,7 @@ class TradingBotInstance:
         if self.position <= 0:
             return
         pnl      = (price - self.entry_price) * self.position
-        proceeds = self.position * price
+        proceeds = self.open_margin + pnl  # return margin + profit/loss
         try:
             if not self.paper and self.binance_api_key and self.binance_secret:
                 try:
@@ -551,10 +569,10 @@ class TradingBotInstance:
                 except Exception as e:
                     logger.warning(f"Binance SELL skipped: {e}")
 
-            self.capital += proceeds
+            self.capital += max(proceeds, 0.0)
 
             if not self.paper:
-                self._update_user_balance(proceeds)
+                self._update_user_balance(pnl)  # credit/debit only the P&L delta
 
             trade = {
                 "time":   datetime.now(),
@@ -567,12 +585,90 @@ class TradingBotInstance:
             }
             self.trades.append(trade)
             self._log_trade_to_db(trade)
+            self._notify_trade(trade)
             emoji = "📈" if pnl >= 0 else "📉"
             logger.info(f"🔴 SELL {self.position:.6f} {self.ticker} @ ${price:,.4f}  [{reason}]  P&L=${pnl:+.2f} {emoji}")
             self.position    = 0.0
             self.entry_price = 0.0
+            self.open_margin = 0.0
+            self.trail_high  = 0.0
         except Exception as e:
             logger.error(f"Failed to close {self.ticker}: {e}")
+
+    def _notify_trade(self, trade: dict):
+        """Send Telegram + WhatsApp notification for every trade open/close."""
+        if not self.user_id:
+            return
+
+        def _send():
+            db = SessionLocal()
+            try:
+                user = db.query(User).filter(User.id == self.user_id).first()
+                if not user:
+                    return
+                prefs   = user.notification_preferences or {}
+                action  = trade["action"]
+                ticker  = trade["ticker"]
+                price   = trade["price"]
+                qty     = trade["qty"]
+                pnl     = trade.get("pnl")
+                ts      = (trade["time"].strftime("%Y-%m-%d %H:%M:%S")
+                           if isinstance(trade["time"], datetime) else str(trade["time"]))
+
+                if action == "BUY":
+                    msg = (
+                        f"🟢 FIN BOT — Position Opened\n"
+                        f"Pair: {ticker}\n"
+                        f"Price: ${price:,.4f}\n"
+                        f"Size: {qty:.6f}\n"
+                        f"Leverage: {self.leverage:.0f}x\n"
+                        f"Signal: {trade.get('reason', 'Signal')}\n"
+                        f"Time: {ts}"
+                    )
+                else:
+                    pnl_str = f"${pnl:+.2f}" if pnl is not None else "N/A"
+                    emoji   = "📈" if (pnl or 0) >= 0 else "📉"
+                    msg = (
+                        f"{emoji} FIN BOT — Position Closed\n"
+                        f"Pair: {ticker}\n"
+                        f"Price: ${price:,.4f}\n"
+                        f"Size: {qty:.6f}\n"
+                        f"P&L: {pnl_str}\n"
+                        f"Reason: {trade.get('reason', 'Signal')}\n"
+                        f"Time: {ts}"
+                    )
+
+                # Telegram
+                telegram_chat_id = prefs.get("telegram_chat_id")
+                bot_token        = os.environ.get("TELEGRAM_BOT_TOKEN")
+                if telegram_chat_id and bot_token:
+                    try:
+                        requests.post(
+                            f"https://api.telegram.org/bot{bot_token}/sendMessage",
+                            json={"chat_id": telegram_chat_id, "text": msg},
+                            timeout=10,
+                        )
+                    except Exception as ex:
+                        logger.warning(f"Telegram notify failed: {ex}")
+
+                # WhatsApp
+                whatsapp_number = prefs.get("whatsapp_number")
+                if whatsapp_number and notifier.twilio_client:
+                    try:
+                        notifier.twilio_client.messages.create(
+                            from_=notifier.whatsapp_from,
+                            body=msg,
+                            to=f"whatsapp:{whatsapp_number}",
+                        )
+                    except Exception as ex:
+                        logger.warning(f"WhatsApp notify failed: {ex}")
+
+            except Exception as ex:
+                logger.warning(f"Trade notification error: {ex}")
+            finally:
+                db.close()
+
+        threading.Thread(target=_send, daemon=True).start()
 
 
 # ── Legacy multi-ticker bot (kept for compatibility) ─────────────────────────
@@ -652,7 +748,7 @@ class UserBotManager:
         self.bots: Dict[str, TradingBotInstance] = {}
 
     def start_bot(self, ticker: str, paper: bool = False,
-                  initial_capital: float = 1000.0,
+                  initial_capital: float = 200.0,
                   risk_per_trade_pct: float = 40.0,
                   max_drawdown_pct: float = 10.0,
                   strategy: str = "sma",
@@ -660,7 +756,9 @@ class UserBotManager:
                   direction: str = "auto",
                   bot_name: Optional[str] = None,
                   binance_api_key: Optional[str] = None,
-                  binance_secret:  Optional[str] = None) -> str:
+                  binance_secret:  Optional[str] = None,
+                  leverage: float = 200.0,
+                  sl_usdt: float = 100.0) -> str:
         # Derive a stable bot_id from the name, or generate a unique one
         if bot_name and bot_name.strip():
             bot_id = bot_name.strip().replace(" ", "_").lower()
@@ -682,6 +780,8 @@ class UserBotManager:
             direction=direction,
             bot_id=bot_id,
             bot_name=bot_name or f"Bot-{ticker.upper()}",
+            leverage=leverage,
+            sl_usdt=sl_usdt,
         )
         if binance_api_key and binance_secret:
             bot.binance_api_key = binance_api_key
@@ -692,11 +792,12 @@ class UserBotManager:
         logger.info(
             f"User {self.user_email} started {'paper' if paper else 'LIVE'} bot '{bot_id}' "
             f"on {ticker} | strategy={strategy} | capital=${initial_capital} "
-            f"risk={risk_per_trade_pct}% dd={max_drawdown_pct}% tp={take_profit_pct}%"
+            f"lev={leverage}x sl=${sl_usdt} risk={risk_per_trade_pct}% dd={max_drawdown_pct}%"
         )
         return (
             f"✅ Bot '{bot_id}' started on {ticker} ({'Paper' if paper else 'LIVE'}) | "
-            f"Strategy: {strategy.upper()} | Capital: ${initial_capital:,.2f} | Broker: {broker}"
+            f"Strategy: {strategy.upper()} | Capital: ${initial_capital:,.2f} | "
+            f"Leverage: {leverage:.0f}x | SL: ${sl_usdt:.0f} | Broker: {broker}"
         )
 
     def stop_bot(self, bot_id: str = "ALL") -> str:

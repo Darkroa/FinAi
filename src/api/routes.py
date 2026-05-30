@@ -179,7 +179,7 @@ class PriceAlertCreate(BaseModel):
 class BotStartRequestV2(BaseModel):
     ticker: str = "BTC-USD"
     paper: bool = False
-    initial_capital: float = 1000.0
+    initial_capital: float = 200.0
     balance_to_use: Optional[float] = None
     risk_per_trade_pct: float = 40.0
     max_drawdown_pct: float = 10.0
@@ -188,6 +188,8 @@ class BotStartRequestV2(BaseModel):
     take_profit_pct: float = 4.0
     direction: str = "auto"
     bot_name: Optional[str] = None
+    leverage: float = 200.0
+    sl_usdt: float = 100.0
 
 
 class BotClosePositionRequest(BaseModel):
@@ -1661,9 +1663,11 @@ async def jwt_start_bot(body: BotStartRequestV2, current_user=Depends(get_curren
         if not matched:
             raise HTTPException(status_code=400, detail=f"Exchange '{body.exchange_label}' not found in your connections.")
     # balance_to_use overrides initial_capital when provided
-    capital = body.balance_to_use or body.initial_capital or user.default_capital or 1000.0
+    capital = body.balance_to_use or body.initial_capital or user.default_capital or 200.0
     if capital <= 0:
-        capital = user.default_capital or 1000.0
+        capital = user.default_capital or 200.0
+    if capital < 200.0:
+        raise HTTPException(status_code=400, detail="Minimum capital required is $200 USDT to start the bot.")
     # Always live — paper trading is disabled
     if (user.balance_usdt or 0) < capital:
         raise HTTPException(status_code=400, detail=f"Insufficient balance. Need ${capital:,.2f} USDT.")
@@ -1694,6 +1698,8 @@ async def jwt_start_bot(body: BotStartRequestV2, current_user=Depends(get_curren
         bot_name=body.bot_name,
         binance_api_key=binance_api_key,
         binance_secret=binance_secret,
+        leverage=body.leverage,
+        sl_usdt=body.sl_usdt,
     )
     return {"status": "success", "message": result, "bot_status": manager.get_status()}
 
@@ -3595,6 +3601,21 @@ async def get_active_ad(db: Session = Depends(get_db)):
         "link_url": ad.link_url,
         "created_at": ad.created_at.isoformat() if ad.created_at else None,
     }
+
+
+@router.get("/ads/active-all")
+async def get_all_active_ads(db: Session = Depends(get_db)):
+    """Return all active ads for cycling display."""
+    ads = db.query(Ad).filter(Ad.is_active == True).order_by(Ad.created_at.desc()).all()
+    return [
+        {
+            "id": a.id,
+            "title": a.title,
+            "image_base64": a.image_base64,
+            "link_url": a.link_url,
+        }
+        for a in ads
+    ]
 
 
 @router.get("/admin/ads", dependencies=[Depends(require_admin)])

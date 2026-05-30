@@ -73,16 +73,19 @@ function fmt(n: number, d = 2) {
   return n.toLocaleString('en-US', { minimumFractionDigits: d, maximumFractionDigits: d })
 }
 
+const MIN_CAPITAL = 200
+
 const EMPTY_PARAMS = {
   ticker: 'BTC-USD',
   route: '__balance__',
-  initial_capital: 1000,
+  initial_capital: 200,
   risk_per_trade_pct: 100,
   max_drawdown_pct: 25,
   strategy: 'finlux' as 'sma' | 'finlux' | 'auto' | 'live',
   take_profit_pct: 40,
   stop_loss_pct: 20,
-  leverage: 20,
+  leverage: 200,
+  sl_usdt: 100,
   direction: 'auto' as 'auto' | 'buy' | 'sell',
   bot_name: '',
 }
@@ -293,6 +296,10 @@ export default function BotsPage() {
   }, [fetchData, status.running])
 
   const handleStart = async () => {
+    if (params.initial_capital < MIN_CAPITAL) {
+      toast.error(`Minimum capital is $${MIN_CAPITAL} USDT.`)
+      return
+    }
     const usingBalance = params.route === '__balance__'
     const balance      = (user as unknown as { balance_usdt?: number })?.balance_usdt ?? 0
     if (usingBalance && balance < params.initial_capital) {
@@ -323,6 +330,8 @@ export default function BotsPage() {
         take_profit_pct:    params.take_profit_pct,
         direction:          params.direction,
         bot_name:           params.bot_name || undefined,
+        leverage:           params.leverage,
+        sl_usdt:            params.sl_usdt,
       })
       setStatus(s => ({ ...s, running: true }))
       toast.success(res.data?.message || 'Bot started successfully')
@@ -579,9 +588,12 @@ export default function BotsPage() {
                 Capital (USDT) &nbsp;
                 <span className="text-[#4a5568]">Balance: ${((user as unknown as { balance_usdt?: number })?.balance_usdt ?? 0).toLocaleString('en-US', { maximumFractionDigits: 2 })}</span>
               </label>
-              <input type="number" min={10} step={100} value={params.initial_capital}
+              <input type="number" min={MIN_CAPITAL} step={100} value={params.initial_capital}
                 onChange={e => setParams(p => ({ ...p, initial_capital: parseFloat(e.target.value) || 0 }))}
-                className="w-full bg-[#0b0e11] border border-[#2b3139] focus:border-[#f0b90b] rounded-xl px-3 py-2.5 text-sm font-mono text-[#eaecef] focus:outline-none transition" />
+                className={`w-full bg-[#0b0e11] border rounded-xl px-3 py-2.5 text-sm font-mono text-[#eaecef] focus:outline-none transition ${params.initial_capital < MIN_CAPITAL ? 'border-[#f6465d] focus:border-[#f6465d]' : 'border-[#2b3139] focus:border-[#f0b90b]'}`} />
+              {params.initial_capital < MIN_CAPITAL && (
+                <p className="text-[10px] text-[#f6465d] mt-1">Minimum capital is ${MIN_CAPITAL} USDT</p>
+              )}
             </div>
 
             {/* Take Profit */}

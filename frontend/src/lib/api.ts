@@ -125,17 +125,21 @@ export const startBot = (params: {
   take_profit_pct?: number
   direction?: string
   bot_name?: string
+  leverage?: number
+  sl_usdt?: number
 }) => api.post('/bots/start', {
   ticker:             params.ticker            ?? 'BTC-USD',
   paper:              params.paper             ?? false,
-  initial_capital:    params.initial_capital   ?? 1000,
+  initial_capital:    params.initial_capital   ?? 200,
   risk_per_trade_pct: params.risk_per_trade_pct ?? 1.0,
   max_drawdown_pct:   params.max_drawdown_pct  ?? 10.0,
   exchange_label:     params.exchange_label,
-  strategy:           params.strategy          ?? 'sma',
+  strategy:           params.strategy          ?? 'finlux',
   take_profit_pct:    params.take_profit_pct   ?? 4.0,
   direction:          params.direction         ?? 'auto',
   bot_name:           params.bot_name,
+  leverage:           params.leverage          ?? 200,
+  sl_usdt:            params.sl_usdt           ?? 100,
 })
 export const stopBot = (botId = 'ALL') => api.post(`/bots/stop?ticker=${encodeURIComponent(botId)}`)
 export const closeBotPosition = (bot_id: string) => api.post('/bots/close-position', { bot_id })
@@ -291,6 +295,7 @@ export const adminResetReferralCode = (userId: number) =>
 
 // Ads
 export const getActiveAd = () => api.get('/ads/active')
+export const getAllActiveAds = () => api.get('/ads/active-all')
 export const adminGetAds = () => api.get('/admin/ads')
 export const adminCreateAd = (data: { title: string; image_base64?: string; link_url?: string; is_active?: boolean }) =>
   api.post('/admin/ads', data)

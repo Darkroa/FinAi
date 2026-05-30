@@ -1,8 +1,8 @@
 import { useEffect, useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuthStore } from '../store/authStore';
-import { getEvents, getBotStatus, getTodayPnl, getBotTrades } from '../lib/api';
-import { useTickerPrices, useLivePricesMap } from '../hooks/useTickerPrices';
+import { getEvents, getBotStatus, getTodayPnl, finEventListBots } from '../lib/api';
+import { useTickerPrices } from '../hooks/useTickerPrices';
 import {
   TrendingUp,
   TrendingDown,
@@ -29,32 +29,20 @@ function getGreeting() {
   return 'Good Evening';
 }
 
-interface TradeLog {
-  id: number;
-  ticker: string;
-  action: string;
-  price: number;
-  qty: number;
-  pnl: number | null;
-  created_at: string;
-  exchange: string;
-}
 
 export default function DashboardPage() {
   const navigate = useNavigate();
   const { user } = useAuthStore();
   const tickerItems = useTickerPrices(60000);
-  const { map: priceMap, refetch: refetchPrices } = useLivePricesMap(60000);
 
   const [events, setEvents] = useState<
     { id: number; description: string; event_type: string; tickers_affected: string[]; created_at: string }[]
   >([]);
   const [botRunning, setBotRunning] = useState(false);
+  const [finEventRunning, setFinEventRunning] = useState(false);
   const [hideBalance, setHideBalance] = useState(false);
   const [btcToggle, setBtcToggle] = useState<'BTC' | 'ETH'>('BTC');
   const [todayPnl, setTodayPnl] = useState(0);
-  const [, setTodayPct] = useState(0);
-  const [trades, setTrades] = useState<TradeLog[]>([]);
   const [unrealizedPnl, setUnrealizedPnl] = useState(0);
   const [openPositions, setOpenPositions] = useState(0);
 
@@ -74,69 +62,40 @@ export default function DashboardPage() {
 
   const btcEquiv = displayPrice > 0 ? (balance / displayPrice).toFixed(6) : '—';
 
-  // Compute unrealized P&L
-  useEffect(() => {
-    if (trades.length === 0 || Object.keys(priceMap).length === 0) return;
-
-    const positions: Record<string, { qty: number; avgPrice: number; totalCost: number }> = {};
-
-    for (const t of trades) {
-      const sym = t.ticker?.replace('-', '/').replace('USD', 'USDT') ?? '';
-      if (!sym) continue;
-
-      if (!positions[sym]) {
-        positions[sym] = { qty: 0, avgPrice: 0, totalCost: 0 };
-      }
-
-      if (t.action?.toUpperCase() === 'BUY') {
-        positions[sym].totalCost += (t.price ?? 0) * (t.qty ?? 0);
-        positions[sym].qty += t.qty ?? 0;
-      } else {
-        positions[sym].qty -= t.qty ?? 0;
-        if (positions[sym].qty < 0) positions[sym].qty = 0;
-      }
-
-      if (positions[sym].qty > 0) {
-        positions[sym].avgPrice = positions[sym].totalCost / positions[sym].qty;
-      }
-    }
-
-    let totalUnrealized = 0;
-    let openCount = 0;
-
-    for (const [sym, pos] of Object.entries(positions)) {
-      if (pos.qty <= 0) continue;
-      const current = priceMap[sym]?.usd ?? priceMap[sym.replace('/USDT', '')]?.usd ?? 0;
-      if (current === 0) continue;
-
-      totalUnrealized += (current - pos.avgPrice) * pos.qty;
-      openCount++;
-    }
-
-    setUnrealizedPnl(totalUnrealized);
-    setOpenPositions(openCount);
-  }, [trades, priceMap]);
-
   const fetchData = useCallback(async () => {
     try {
-      const [eventsRes, botRes, pnlRes, tradesRes] = await Promise.all([
+      const [eventsRes, botRes, pnlRes, finEventRes] = await Promise.all([
         getEvents(5),
         getBotStatus(),
         getTodayPnl(),
-        getBotTrades(100),
+        finEventListBots().catch(() => ({ data: { bots: [] } })),
       ]);
 
       setEvents(Array.isArray(eventsRes.data) ? eventsRes.data : eventsRes.data?.events ?? []);
       setBotRunning(botRes.data?.running ?? false);
       setTodayPnl(pnlRes.data?.today_pnl ?? 0);
-      setTodayPct(pnlRes.data?.today_pct ?? 0);
-      setTrades(Array.isArray(tradesRes.data) ? tradesRes.data : tradesRes.data?.trades ?? []);
+
+      // Unrealized P&L + open positions from bot status (accurate with leverage)
+      const bots: Record<string, { position: number; unrealized_pnl: number }> =
+        botRes.data?.bots ?? {};
+      let totalUnrealized = 0;
+      let openCount = 0;
+      for (const bot of Object.values(bots)) {
+        if (bot.position > 0) {
+          totalUnrealized += bot.unrealized_pnl ?? 0;
+          openCount++;
+        }
+      }
+      setUnrealizedPnl(totalUnrealized);
+      setOpenPositions(openCount);
+
+      // FinEvent running status
+      const feBots: { running: boolean }[] = finEventRes.data?.bots ?? [];
+      setFinEventRunning(Array.isArray(feBots) && feBots.some((b) => b.running));
     } catch (err) {
       console.error('Error fetching dashboard data:', err);
     }
-
-    refetchPrices();
-  }, [refetchPrices]);
+  }, []);
 
   useEffect(() => {
     fetchData();
@@ -286,7 +245,7 @@ export default function DashboardPage() {
                 <p className="text-xs font-semibold text-[#eaecef]">
                   {openPositions} Open Position{openPositions !== 1 ? 's' : ''}
                 </p>
-                <p className="text-[10px] text-[#848e9c]">Unrealized P&L vs current market</p>
+                <p className="text-[10px] text-[#848e9c]">All open bot positions</p>
               </div>
             </div>
             <div className="text-right">
@@ -298,7 +257,7 @@ export default function DashboardPage() {
                 {unrealizedPnl >= 0 ? '+' : ''}${Math.abs(unrealizedPnl).toFixed(2).replace(/\B(?=(\d{3})+(?!\d))/g, ",")}
               </p>
               <button
-                onClick={() => navigate('/app/trade')}
+                onClick={() => navigate('/app/bots')}
                 className="text-[10px] text-[#f0b90b] hover:text-[#eaecef] transition flex items-center gap-0.5 ml-auto"
               >
                 View <ArrowRight size={8} />
@@ -317,12 +276,20 @@ export default function DashboardPage() {
             <span className="text-sm font-semibold">News</span>
           </button>
 
-          <button onClick={() => navigate('/app/bots')} className="bg-[#161a1e] border border-[#2b3139] rounded-xl p-6 flex flex-col items-center justify-center">
-            <div className={`w-14 h-14 rounded-full flex items-center justify-center mb-3 ${botRunning ? 'bg-[#0ecb81]/10' : 'bg-[#2b3139]'}`}>
-              <Bot size={28} className={botRunning ? 'text-[#0ecb81]' : 'text-[#848e9c]'} />
+          <button onClick={() => navigate('/app/bots')} className="bg-[#161a1e] border border-[#2b3139] rounded-xl p-4 flex flex-col items-center justify-center gap-1">
+            <div className={`w-10 h-10 rounded-full flex items-center justify-center mb-1 ${botRunning ? 'bg-[#0ecb81]/10' : 'bg-[#2b3139]'}`}>
+              <Bot size={22} className={botRunning ? 'text-[#0ecb81]' : 'text-[#848e9c]'} />
             </div>
-            <span className="text-sm font-semibold">AI Bot</span>
-            <span className={`text-xs mt-1 ${botRunning ? 'text-[#0ecb81]' : 'text-[#848e9c]'}`}>{botRunning ? 'Live' : 'Offline'}</span>
+            <span className="text-sm font-bold text-[#eaecef]">FIN BOT</span>
+            <div className="w-full flex items-center justify-between px-0.5">
+              <span className="text-[9px] text-[#848e9c]">FinT Bot</span>
+              <span className={`text-[9px] font-semibold ${botRunning ? 'text-[#0ecb81]' : 'text-[#848e9c]'}`}>{botRunning ? 'Live' : 'Offline'}</span>
+            </div>
+            <div className="w-full h-px bg-[#2b3139]" />
+            <div className="w-full flex items-center justify-between px-0.5">
+              <span className="text-[9px] text-[#848e9c]">FinEvent</span>
+              <span className={`text-[9px] font-semibold ${finEventRunning ? 'text-[#0ecb81]' : 'text-[#848e9c]'}`}>{finEventRunning ? 'Live' : 'Offline'}</span>
+            </div>
           </button>
           
           <button onClick={() => navigate('/app/trade')} className="bg-[#161a1e] border border-[#2b3139] rounded-xl p-6 flex flex-col items-center justify-center">
