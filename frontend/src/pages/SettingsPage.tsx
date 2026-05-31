@@ -53,11 +53,13 @@ export default function SettingsPage() {
   // Load notification preferences from user store
   useEffect(() => {
     if (user?.notification_preferences) {
-      const prefs = user.notification_preferences as Record<string, unknown>;
-      setNotifs(prefs as unknown as NotifPrefs);
+      const prefs = user.notification_preferences;
+
+      setNotifs(prefs as NotifPrefs);
+
       setTradeAlerts({
-        trade_open_alert:  !!(prefs.trade_open_alert),
-        trade_close_alert: !!(prefs.trade_close_alert),
+        trade_open_alert: !!(prefs as any).trade_open_alert,
+        trade_close_alert: !!(prefs as any).trade_close_alert,
       });
     }
   }, [user]);

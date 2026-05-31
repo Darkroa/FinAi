@@ -44,7 +44,7 @@ export default function AboutPage() {
   const navigate = useNavigate()
   const [testimonials, setTestimonials] = useState<Testimonial[]>(STATIC_TESTIMONIALS)
   const [activeIdx, setActiveIdx] = useState(0)
-  const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
+  useState(false)
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
   useEffect(() => {

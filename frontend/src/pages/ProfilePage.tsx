@@ -7,7 +7,7 @@ import {
   connectExchange, disconnectExchange,
   changePassword, setTransferPin, requestDeleteAccount, saveWebhookSettings,
   generateWhatsAppCode, disconnectWhatsApp, generateTelegramCode,
-  getReferralStats, updateNotificationPreferences
+  getReferralStats, 
 } from '../lib/api'
 import toast from 'react-hot-toast'
 import {
@@ -80,7 +80,7 @@ export default function ProfilePage() {
   const [subPage, setSubPage] = useState<SubPage>(null)
 
   const tier = TIERS[user?.account_tier ?? 0] ?? TIERS[0]
-  const prefs = (user?.notification_preferences as Record<string, unknown>) || {}
+  const prefs = (user?.notification_preferences as Record<string, any>) ?? {};
   const waVerified   = prefs.whatsapp_verified === true
   const tgVerified   = prefs.telegram_verified === true
   const emailVerified = user?.is_mail_verified === true
@@ -1130,55 +1130,6 @@ function FinApiTab({ user, setUser }: { user: UserProfile | null; setUser: (u: a
 }
 
 
-/* ─────────────────────── TRADE ALERT TOGGLES ─────────────────────── */
-function TradeAlertToggles({ user }: { user: UserProfile | null }) {
-  const prefs = (user?.notification_preferences as unknown as Record<string, unknown>) || {}
-  const [tradeOpen, setTradeOpen]   = useState<boolean>(prefs.trade_open_alert   === true)
-  const [tradeClose, setTradeClose] = useState<boolean>(prefs.trade_close_alert  === true)
-  const [saving, setSaving] = useState(false)
-
-  const toggle = async (key: 'trade_open_alert' | 'trade_close_alert', val: boolean) => {
-    if (key === 'trade_open_alert') setTradeOpen(val)
-    else setTradeClose(val)
-    setSaving(true)
-    try {
-      await updateNotificationPreferences({ [key]: val })
-      toast.success('Alert preference saved')
-    } catch { toast.error('Failed to save preference') }
-    finally { setSaving(false) }
-  }
-
-  return (
-    <div className="bg-[#161a1e] border border-[#2b3139] rounded-xl overflow-hidden">
-      <div className="flex items-center gap-2 px-4 py-3 border-b border-[#2b3139] bg-[#1a1f25]">
-        <Zap size={13} className="text-[#f0b90b]" />
-        <span className="text-xs font-semibold text-[#eaecef]">Trade Alerts</span>
-        <span className="ml-auto text-[10px] text-[#848e9c]">via Telegram · WhatsApp · In-app</span>
-      </div>
-      <div className="p-4 space-y-3">
-        {[
-          { label: 'Trade Opened', sub: 'Notify when a bot opens a new position', val: tradeOpen, key: 'trade_open_alert' as const },
-          { label: 'Trade Closed', sub: 'Notify when a bot closes a position', val: tradeClose, key: 'trade_close_alert' as const },
-        ].map(item => (
-          <div key={item.key} className="flex items-center justify-between gap-4">
-            <div>
-              <p className="text-sm text-[#eaecef] font-medium">{item.label}</p>
-              <p className="text-xs text-[#848e9c]">{item.sub}</p>
-            </div>
-            <button
-              onClick={() => toggle(item.key, !item.val)}
-              disabled={saving}
-              className={`relative w-10 h-5 rounded-full transition-colors flex-shrink-0 ${item.val ? 'bg-[#f0b90b]' : 'bg-[#2b3139]'}`}
-            >
-              <span className={`absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-transform ${item.val ? 'translate-x-5' : 'translate-x-0.5'}`} />
-            </button>
-          </div>
-        ))}
-        <p className="text-[10px] text-[#4a5568] pt-1">Off by default. Connect Telegram or WhatsApp in the Notifications tab to receive alerts.</p>
-      </div>
-    </div>
-  )
-}
 
 /* ─────────────────────────── SECURITY TAB ─────────────────────────── */
 function SecurityTab({ user }: { user: UserProfile | null }) {
