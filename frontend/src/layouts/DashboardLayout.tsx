@@ -87,10 +87,10 @@ export default function DashboardLayout() {
         <div className="fixed inset-0 z-40 bg-black/60" onClick={() => setNavOpen(false)} />
       )}
 
-      {/* Nav drawer — slides from RIGHT */}
+      {/* Nav drawer — slides from LEFT */}
       <aside className={cn(
-        'fixed top-0 right-0 h-full z-50 bg-[#161a1e] border-l border-[#2b3139] flex flex-col transition-transform duration-200 w-64',
-        navOpen ? 'translate-x-0' : 'translate-x-full'
+        'fixed top-0 left-0 h-full z-50 bg-[#161a1e] border-r border-[#2b3139] flex flex-col transition-transform duration-200 w-64',
+        navOpen ? 'translate-x-0' : '-translate-x-full'
       )}>
         {/* Drawer header — user details instead of logo */}
         <div className="h-20 flex items-center px-4 border-b border-[#2b3139] flex-shrink-0 gap-3">
