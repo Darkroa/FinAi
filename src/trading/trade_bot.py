@@ -128,7 +128,9 @@ class TradingBotInstance:
                  bot_id: str = None,
                  bot_name: str = None,
                  leverage: float = 200.0,
-                 sl_usdt: float = 100.0):
+                 sl_usdt: float = 100.0,
+                 stop_loss_pct: float = 50.0,
+                 lot_size: float = 1.0):
         self.ticker           = ticker.upper()
         self.paper            = paper
         self.user_id          = user_id
@@ -159,6 +161,8 @@ class TradingBotInstance:
 
         self.leverage         = float(leverage)
         self.sl_usdt          = float(sl_usdt)
+        self.stop_loss_pct    = float(stop_loss_pct)
+        self.lot_size         = max(1.0, float(lot_size or 1))
         self.open_margin      = 0.0
         self.trail_high       = 0.0
 
@@ -241,6 +245,9 @@ class TradingBotInstance:
             "take_profit_pct":      self.take_profit_pct,
             "leverage":             self.leverage,
             "sl_usdt":              self.sl_usdt,
+            "stop_loss_pct":        self.stop_loss_pct,
+            "lot_size":             self.lot_size,
+            "open_margin":          round(self.open_margin, 2),
             "mode":                 "LIVE" if not self.paper else "PAPER",
             "balance":              round(self.capital, 2),
             "portfolio_value":      round(portfolio_value, 2),
@@ -448,23 +455,45 @@ class TradingBotInstance:
                     self.stop()
                     break
 
-                # ── Risk management: dollar SL + trailing stop ─────────────
+                # ── Risk management: pct-based SL/TP + trailing stop ───────
                 risk_closed = False
                 if self.position > 0:
                     if price > self.trail_high:
                         self.trail_high = price
                     unrealized = (price - self.entry_price) * self.position
-                    if unrealized <= -self.sl_usdt:
+                    # Percentage-based SL/TP on margin used
+                    sl_thresh = -(self.open_margin * self.stop_loss_pct / 100) if self.open_margin > 0 else -self.sl_usdt
+                    tp_thresh = (self.open_margin * self.take_profit_pct / 100) if self.open_margin > 0 else float("inf")
+                    if unrealized <= sl_thresh:
                         self._close_position(price, "STOP_LOSS")
                         risk_closed = True
-                    elif (self.trail_high > self.entry_price and
+                    elif unrealized >= tp_thresh:
+                        self._close_position(price, "TAKE_PROFIT")
+                        risk_closed = True
+                    elif (self.trail_high > self.entry_price * 1.005 and
                           price < self.trail_high * (1 - 1.5 / 100)):
                         self._close_position(price, "TRAILING_STOP")
                         risk_closed = True
 
                 if not risk_closed:
                     # ── Dispatch to strategy ──────────────────────────────────
-                    if self.strategy == "finlux":
+                    # ── Live strategy: open immediately, hold until TP/SL ─────
+                    if self.strategy == "live":
+                        if self.position <= 0 and self.direction in ("auto", "buy"):
+                            margin_usdt = min(self.capital * self.risk_per_trade_pct / 100 * self.lot_size, self.capital * 0.95)
+                            notional_usdt = margin_usdt * self.leverage
+                            exec_price = self._volatility_fill_price("BUY", price)
+                            qty = notional_usdt / exec_price
+                            if margin_usdt >= 1.0 and qty > 0:
+                                self._open_position(qty, exec_price, "LIVE_BUY", margin_usdt)
+                        elif self.position <= 0 and self.direction == "sell":
+                            margin_usdt = min(self.capital * self.risk_per_trade_pct / 100 * self.lot_size, self.capital * 0.95)
+                            notional_usdt = margin_usdt * self.leverage
+                            exec_price = self._volatility_fill_price("SELL", price)
+                            qty = notional_usdt / exec_price
+                            if margin_usdt >= 1.0 and qty > 0:
+                                self._open_position(qty, exec_price, "LIVE_SELL", margin_usdt)
+                    elif self.strategy == "finlux":
                         signal = self._step_finlux(price)
 
                         # Update signal state for UI
@@ -476,7 +505,7 @@ class TradingBotInstance:
                             self.signal_state = "NEUTRAL"
 
                         if signal == "BUY" and self.position <= 0 and self.direction in ("auto", "buy"):
-                            margin_usdt = self.capital * (self.risk_per_trade_pct / 100)
+                            margin_usdt = min(self.capital * (self.risk_per_trade_pct / 100) * self.lot_size, self.capital * 0.95)
                             notional_usdt = margin_usdt * self.leverage
                             exec_price = self._volatility_fill_price("BUY", price)
                             qty = notional_usdt / exec_price
@@ -505,7 +534,7 @@ class TradingBotInstance:
                         self.signal_state = "BULLISH" if price_above_sma else "BEARISH"
 
                         if bullish_cross and self.position <= 0 and self.direction in ("auto", "buy"):
-                            margin_usdt = self.capital * (self.risk_per_trade_pct / 100)
+                            margin_usdt = min(self.capital * (self.risk_per_trade_pct / 100) * self.lot_size, self.capital * 0.95)
                             notional_usdt = margin_usdt * self.leverage
                             exec_price = self._volatility_fill_price("BUY", price)
                             qty = notional_usdt / exec_price
@@ -758,7 +787,9 @@ class UserBotManager:
                   binance_api_key: Optional[str] = None,
                   binance_secret:  Optional[str] = None,
                   leverage: float = 200.0,
-                  sl_usdt: float = 100.0) -> str:
+                  sl_usdt: float = 100.0,
+                  stop_loss_pct: float = 50.0,
+                  lot_size: float = 1.0) -> str:
         # Derive a stable bot_id from the name, or generate a unique one
         if bot_name and bot_name.strip():
             bot_id = bot_name.strip().replace(" ", "_").lower()
@@ -782,6 +813,8 @@ class UserBotManager:
             bot_name=bot_name or f"Bot-{ticker.upper()}",
             leverage=leverage,
             sl_usdt=sl_usdt,
+            stop_loss_pct=stop_loss_pct,
+            lot_size=lot_size,
         )
         if binance_api_key and binance_secret:
             bot.binance_api_key = binance_api_key
@@ -792,12 +825,12 @@ class UserBotManager:
         logger.info(
             f"User {self.user_email} started {'paper' if paper else 'LIVE'} bot '{bot_id}' "
             f"on {ticker} | strategy={strategy} | capital=${initial_capital} "
-            f"lev={leverage}x sl=${sl_usdt} risk={risk_per_trade_pct}% dd={max_drawdown_pct}%"
+            f"lev={leverage}x sl={stop_loss_pct}% tp={take_profit_pct}% risk={risk_per_trade_pct}% dd={max_drawdown_pct}%"
         )
         return (
             f"✅ Bot '{bot_id}' started on {ticker} ({'Paper' if paper else 'LIVE'}) | "
             f"Strategy: {strategy.upper()} | Capital: ${initial_capital:,.2f} | "
-            f"Leverage: {leverage:.0f}x | SL: ${sl_usdt:.0f} | Broker: {broker}"
+            f"Leverage: {leverage:.0f}x | SL: {stop_loss_pct:.0f}% | TP: {take_profit_pct:.0f}% | Broker: {broker}"
         )
 
     def stop_bot(self, bot_id: str = "ALL") -> str:

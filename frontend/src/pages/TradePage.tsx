@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
 import {
-  ArrowUpDown, TrendingUp, TrendingDown, ChevronDown,
+  ArrowUpDown, TrendingUp, TrendingDown, ChevronDown, ChevronUp,
   Wifi, WifiOff, BarChart2, Activity, Link2, RefreshCw,
   Clock, CheckCircle2, X, Target, AlertTriangle, ZoomIn, ZoomOut, ArrowRight,
 } from 'lucide-react'
@@ -22,7 +22,32 @@ const PAIRS = [
   'AAPL', 'TSLA', 'NVDA', 'MSFT', 'SPY',
 ]
 const TF    = ['1m', '5m', '15m', '1h', '4h', '1D']
-type ChartMode = 'line' | 'candle'
+type ChartMode = 'line' | 'candle' | 'tv'
+
+const TV_SYMBOLS: Record<string, string> = {
+  'BTC/USDT':  'BINANCE:BTCUSDT',
+  'ETH/USDT':  'BINANCE:ETHUSDT',
+  'BNB/USDT':  'BINANCE:BNBUSDT',
+  'SOL/USDT':  'BINANCE:SOLUSDT',
+  'XRP/USDT':  'BINANCE:XRPUSDT',
+  'DOGE/USDT': 'BINANCE:DOGEUSDT',
+  'ADA/USDT':  'BINANCE:ADAUSDT',
+  'AVAX/USDT': 'BINANCE:AVAXUSDT',
+  'LINK/USDT': 'BINANCE:LINKUSDT',
+  'DOT/USDT':  'BINANCE:DOTUSDT',
+  'UNI/USDT':  'BINANCE:UNIUSDT',
+  'MATIC/USDT':'BINANCE:MATICUSDT',
+  'LTC/USDT':  'BINANCE:LTCUSDT',
+  'XLM/USDT':  'BINANCE:XLMUSDT',
+  'XAU/USD':   'TVC:GOLD',
+  'XAG/USD':   'TVC:SILVER',
+  'OIL/WTI':   'TVC:USOIL',
+  'AAPL':      'NASDAQ:AAPL',
+  'TSLA':      'NASDAQ:TSLA',
+  'NVDA':      'NASDAQ:NVDA',
+  'MSFT':      'NASDAQ:MSFT',
+  'SPY':       'AMEX:SPY',
+}
 
 const FALLBACKS: Record<string, { price: number; change: number }> = {
   'BTC/USDT':   { price: 97000, change: 2.4  },
@@ -217,6 +242,7 @@ export default function TradePage() {
   const [openPositions, setOpenPos] = useState<OpenPosition[]>([])
   const [histLoading, setHistLoad]= useState(false)
   const [closingId, setClosingId] = useState<number | null>(null)
+  const [orderBookCollapsed, setOrderBookCollapsed] = useState(false)
 
   const exchanges: ExchangeConn[] =
     (user as unknown as { exchange_connections?: ExchangeConn[] })?.exchange_connections ?? []
@@ -495,10 +521,24 @@ export default function TradePage() {
                 className={`flex items-center gap-1 text-xs px-2.5 py-1.5 rounded-md font-medium transition ${chartMode === 'candle' ? 'bg-[#2b3139] text-[#eaecef]' : 'text-[#848e9c] hover:text-[#eaecef]'}`}>
                 <BarChart2 size={11} /> Candle
               </button>
+              <button onClick={() => setChartMode('tv')}
+                className={`flex items-center gap-1 text-xs px-2.5 py-1.5 rounded-md font-medium transition ${chartMode === 'tv' ? 'bg-[#f0b90b] text-black' : 'text-[#848e9c] hover:text-[#eaecef]'}`}>
+                📈 TV
+              </button>
             </div>
           </div>
 
-          {chartMode === 'line' ? (
+          {chartMode === 'tv' ? (
+            <iframe
+              key={pair}
+              src={`https://s.tradingview.com/widgetembed/?symbol=${TV_SYMBOLS[pair] ?? 'BINANCE:BTCUSDT'}&interval=60&theme=dark&style=1&locale=en&toolbar_bg=%230b0e11&withdateranges=1&hide_side_toolbar=0&allow_symbol_change=0&save_image=0`}
+              width="100%"
+              height="320"
+              style={{ border: 'none', borderRadius: 8 }}
+              allowFullScreen
+              title="TradingView Chart"
+            />
+          ) : chartMode === 'line' ? (
             <ResponsiveContainer width="100%" height={260}>
               <AreaChart data={lineData} margin={{ left: 0, right: 4, top: 4, bottom: 0 }}>
                 <defs>
@@ -781,35 +821,46 @@ export default function TradePage() {
 
           {/* Order book */}
           <div className="bg-[#161a1e] border border-[#2b3139] rounded-xl p-4">
-            <p className="text-xs font-semibold text-[#848e9c] mb-3 flex items-center gap-1.5">
-              <ArrowUpDown size={11} /> Order Book
-            </p>
-            <div className="flex justify-between text-[10px] text-[#4a5568] mb-2 px-0.5">
-              <span>Price (USDT)</span><span>Size ({asset})</span>
+            <div className="flex items-center justify-between mb-3">
+              <p className="text-xs font-semibold text-[#848e9c] flex items-center gap-1.5">
+                <ArrowUpDown size={11} /> Order Book
+              </p>
+              <button onClick={() => setOrderBookCollapsed(v => !v)}
+                className="flex items-center gap-0.5 text-[10px] px-2 py-1 rounded-lg bg-[#0b0e11] border border-[#2b3139] text-[#848e9c] hover:text-[#eaecef] transition">
+                {orderBookCollapsed ? <ChevronDown size={10} /> : <ChevronUp size={10} />}
+                {orderBookCollapsed ? 'Expand' : 'Collapse'}
+              </button>
             </div>
-            <div className="space-y-1">
-              {orderBook.asks.slice(0,5).reverse().map((a, i) => (
-                <div key={i} className="relative flex justify-between text-[11px] px-0.5 py-0.5">
-                  <div className="absolute inset-0 right-0 bg-[#f6465d]/8 rounded" style={{ width: `${Math.min(a.size/2*100,100)}%`, marginLeft: 'auto' }} />
-                  <span className="text-[#f6465d] font-mono relative">${a.price.toLocaleString('en-US',{maximumFractionDigits:2})}</span>
-                  <span className="text-[#848e9c] font-mono relative">{a.size.toFixed(4)}</span>
+            {!orderBookCollapsed && (
+              <>
+                <div className="flex justify-between text-[10px] text-[#4a5568] mb-2 px-0.5">
+                  <span>Price (USDT)</span><span>Size ({asset})</span>
                 </div>
-              ))}
-              <div className="py-2 text-center text-sm font-bold font-mono text-[#eaecef] bg-[#0b0e11] rounded-lg my-1">
-                ${livePrice > 0 ? livePrice.toLocaleString('en-US',{maximumFractionDigits:2}) : '—'}
-              </div>
-              {orderBook.bids.slice(0,5).map((b, i) => (
-                <div key={i} className="relative flex justify-between text-[11px] px-0.5 py-0.5">
-                  <div className="absolute inset-0 bg-[#0ecb81]/8 rounded" style={{ width: `${Math.min(b.size/2*100,100)}%` }} />
-                  <span className="text-[#0ecb81] font-mono relative">${b.price.toLocaleString('en-US',{maximumFractionDigits:2})}</span>
-                  <span className="text-[#848e9c] font-mono relative">{b.size.toFixed(4)}</span>
+                <div className="space-y-1">
+                  {orderBook.asks.slice(0,5).reverse().map((a, i) => (
+                    <div key={i} className="relative flex justify-between text-[11px] px-0.5 py-0.5">
+                      <div className="absolute inset-0 right-0 bg-[#f6465d]/8 rounded" style={{ width: `${Math.min(a.size/2*100,100)}%`, marginLeft: 'auto' }} />
+                      <span className="text-[#f6465d] font-mono relative">${a.price.toLocaleString('en-US',{maximumFractionDigits:2})}</span>
+                      <span className="text-[#848e9c] font-mono relative">{a.size.toFixed(4)}</span>
+                    </div>
+                  ))}
+                  <div className="py-2 text-center text-sm font-bold font-mono text-[#eaecef] bg-[#0b0e11] rounded-lg my-1">
+                    ${livePrice > 0 ? livePrice.toLocaleString('en-US',{maximumFractionDigits:2}) : '—'}
+                  </div>
+                  {orderBook.bids.slice(0,5).map((b, i) => (
+                    <div key={i} className="relative flex justify-between text-[11px] px-0.5 py-0.5">
+                      <div className="absolute inset-0 bg-[#0ecb81]/8 rounded" style={{ width: `${Math.min(b.size/2*100,100)}%` }} />
+                      <span className="text-[#0ecb81] font-mono relative">${b.price.toLocaleString('en-US',{maximumFractionDigits:2})}</span>
+                      <span className="text-[#848e9c] font-mono relative">{b.size.toFixed(4)}</span>
+                    </div>
+                  ))}
                 </div>
-              ))}
-            </div>
-            <div className="flex items-center justify-between text-[10px] text-[#848e9c] mt-3 pt-2 border-t border-[#2b3139]">
-              <span className="text-[#f6465d]">Asks: {orderBook.asks.reduce((s,a)=>s+a.size,0).toFixed(3)}</span>
-              <span className="text-[#0ecb81]">Bids: {orderBook.bids.reduce((s,b)=>s+b.size,0).toFixed(3)}</span>
-            </div>
+                <div className="flex items-center justify-between text-[10px] text-[#848e9c] mt-3 pt-2 border-t border-[#2b3139]">
+                  <span className="text-[#f6465d]">Asks: {orderBook.asks.reduce((s,a)=>s+a.size,0).toFixed(3)}</span>
+                  <span className="text-[#0ecb81]">Bids: {orderBook.bids.reduce((s,b)=>s+b.size,0).toFixed(3)}</span>
+                </div>
+              </>
+            )}
           </div>
         </div>
       </div>

@@ -190,6 +190,8 @@ class BotStartRequestV2(BaseModel):
     bot_name: Optional[str] = None
     leverage: float = 200.0
     sl_usdt: float = 100.0
+    stop_loss_pct: float = 50.0
+    lot_size: float = 1.0
 
 
 class BotClosePositionRequest(BaseModel):
@@ -1700,6 +1702,8 @@ async def jwt_start_bot(body: BotStartRequestV2, current_user=Depends(get_curren
         binance_secret=binance_secret,
         leverage=body.leverage,
         sl_usdt=body.sl_usdt,
+        stop_loss_pct=body.stop_loss_pct,
+        lot_size=body.lot_size,
     )
     return {"status": "success", "message": result, "bot_status": manager.get_status()}
 

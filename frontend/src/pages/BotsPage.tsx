@@ -32,6 +32,10 @@ interface BotDetail {
   strategy: string
   direction: string
   take_profit_pct: number
+  stop_loss_pct: number
+  leverage: number
+  lot_size: number
+  open_margin: number
   mode: string
   balance: number
   portfolio_value: number
@@ -469,7 +473,7 @@ export default function BotsPage() {
             </button>
           )}
           <button onClick={() => { setFeCollapsed(false); setShowFePanel(s => !s) }}
-            className="flex items-center gap-1.5 text-xs bg-[#627eea]/10 hover:bg-[#627eea]/20 border border-[#627eea]/30 text-[#627eea] px-3 py-1.5 rounded-lg transition">
+            className="flex items-center gap-1.5 text-xs bg-[#f0b90b]/10 hover:bg-[#f0b90b]/20 border border-[#f0b90b]/30 text-[#f0b90b] px-3 py-1.5 rounded-lg transition">
             <Brain size={11} /> FinEventAI Bots
           </button>
           {atBotLimit ? (
@@ -844,7 +848,7 @@ export default function BotsPage() {
                         <span className={`text-xs font-bold px-2 py-1 rounded-lg ${bot.signal === 'BULLISH' ? 'bg-[#0ecb81]/10 text-[#0ecb81]' : bot.signal === 'BEARISH' ? 'bg-[#f6465d]/10 text-[#f6465d]' : 'bg-[#2b3139] text-[#848e9c]'}`}>
                           {bot.signal}
                         </span>
-                        <p className="text-[10px] text-[#848e9c] mt-1">TP: +{bot.take_profit_pct}% · SL: -3%</p>
+                        <p className="text-[10px] text-[#848e9c] mt-1">TP: +{bot.take_profit_pct}% · SL: -{bot.stop_loss_pct ?? 50}% · {(bot.leverage ?? 200)}x lev</p>
                       </div>
                     </div>
 
@@ -887,6 +891,22 @@ export default function BotsPage() {
                         <div className="flex justify-between text-xs">
                           <span className="text-[#848e9c]">Qty</span>
                           <span className="font-mono text-[#f0b90b]">{bot.position.toFixed(6)} {bot.ticker.replace('-USD','')}</span>
+                        </div>
+                        <div className="flex justify-between text-xs">
+                          <span className="text-[#848e9c]">Leverage</span>
+                          <span className="font-mono text-[#eaecef]">{(bot.leverage ?? 200).toFixed(0)}x</span>
+                        </div>
+                        <div className="flex justify-between text-xs">
+                          <span className="text-[#848e9c]">Margin Used</span>
+                          <span className="font-mono text-[#eaecef]">${(bot.open_margin ?? 0).toFixed(2)}</span>
+                        </div>
+                        <div className="flex justify-between text-xs">
+                          <span className="text-[#0ecb81]">TP Target</span>
+                          <span className="font-mono text-[#0ecb81]">+${((bot.open_margin ?? 0) * (bot.take_profit_pct ?? 50) / 100).toFixed(2)} (+{bot.take_profit_pct ?? 50}%)</span>
+                        </div>
+                        <div className="flex justify-between text-xs">
+                          <span className="text-[#f6465d]">SL Target</span>
+                          <span className="font-mono text-[#f6465d]">-${((bot.open_margin ?? 0) * (bot.stop_loss_pct ?? 30) / 100).toFixed(2)} (-{bot.stop_loss_pct ?? 30}%)</span>
                         </div>
                         <div className="flex justify-between text-xs">
                           <span className="text-[#848e9c]">Unrealized P&L</span>
@@ -935,14 +955,14 @@ export default function BotsPage() {
           onClick={() => setFeCollapsed(c => !c)}
         >
           <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-xl bg-[#627eea]/10 flex items-center justify-center">
-              <Brain size={18} className="text-[#627eea]" />
+            <div className="w-9 h-9 rounded-xl bg-[#f0b90b]/10 flex items-center justify-center">
+              <Brain size={18} className="text-[#f0b90b]" />
             </div>
             <div>
               <p className="text-sm font-bold text-[#eaecef]">FinEventAI Bots</p>
               <p className="text-xs text-[#848e9c]">Multiple bots trading on high-impact financial news events</p>
             </div>
-            <span className="text-[10px] px-2 py-0.5 rounded-full font-medium bg-[#627eea]/10 text-[#627eea]">
+            <span className="text-[10px] px-2 py-0.5 rounded-full font-medium bg-[#f0b90b]/10 text-[#f0b90b]">
               {feBots.filter(b => b.running).length} running / {feMaxBots} slots
             </span>
           </div>
@@ -998,43 +1018,43 @@ export default function BotsPage() {
             {/* Config panel for new bot */}
             {showFePanel && (
               <div className="px-5 py-5 space-y-4 border-t border-[#2b3139]">
-                <p className="text-xs font-semibold text-[#627eea]">Configure New FinEventAI Bot</p>
+                <p className="text-xs font-semibold text-[#f0b90b]">Configure New FinEventAI Bot</p>
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
                   <div>
                     <label className="text-xs text-[#848e9c] mb-1.5 block">Bot Name</label>
                     <input value={feParams.bot_name} onChange={e => setFeParams(p => ({ ...p, bot_name: e.target.value }))}
                       placeholder={`Bot ${feBots.length + 1}`}
-                      className="w-full bg-[#0b0e11] border border-[#2b3139] rounded-xl px-3 py-2.5 text-sm text-[#eaecef] focus:outline-none focus:border-[#627eea]" />
+                      className="w-full bg-[#0b0e11] border border-[#2b3139] rounded-xl px-3 py-2.5 text-sm text-[#eaecef] focus:outline-none focus:border-[#f0b90b]" />
                   </div>
                   <div>
                     <label className="text-xs text-[#848e9c] mb-1.5 block">Min Impact Score (1–10)</label>
                     <input type="number" min={1} max={10} value={feParams.min_impact_score}
                       onChange={e => setFeParams(p => ({ ...p, min_impact_score: Number(e.target.value) }))}
-                      className="w-full bg-[#0b0e11] border border-[#2b3139] rounded-xl px-3 py-2.5 text-sm text-[#eaecef] focus:outline-none focus:border-[#627eea]" />
+                      className="w-full bg-[#0b0e11] border border-[#2b3139] rounded-xl px-3 py-2.5 text-sm text-[#eaecef] focus:outline-none focus:border-[#f0b90b]" />
                   </div>
                   <div>
                     <label className="text-xs text-[#848e9c] mb-1.5 block">Capital Per Trade (USDT)</label>
                     <input type="number" min={10} value={feParams.capital_per_trade}
                       onChange={e => setFeParams(p => ({ ...p, capital_per_trade: Number(e.target.value) }))}
-                      className="w-full bg-[#0b0e11] border border-[#2b3139] rounded-xl px-3 py-2.5 text-sm text-[#eaecef] focus:outline-none focus:border-[#627eea]" />
+                      className="w-full bg-[#0b0e11] border border-[#2b3139] rounded-xl px-3 py-2.5 text-sm text-[#eaecef] focus:outline-none focus:border-[#f0b90b]" />
                   </div>
                   <div>
                     <label className="text-xs text-[#848e9c] mb-1.5 block">Max Trades / Day</label>
                     <input type="number" min={1} max={100} value={feParams.max_trades_per_day}
                       onChange={e => setFeParams(p => ({ ...p, max_trades_per_day: Number(e.target.value) }))}
-                      className="w-full bg-[#0b0e11] border border-[#2b3139] rounded-xl px-3 py-2.5 text-sm text-[#eaecef] focus:outline-none focus:border-[#627eea]" />
+                      className="w-full bg-[#0b0e11] border border-[#2b3139] rounded-xl px-3 py-2.5 text-sm text-[#eaecef] focus:outline-none focus:border-[#f0b90b]" />
                   </div>
                   <div>
                     <label className="text-xs text-[#848e9c] mb-1.5 block">Tickers (comma-separated)</label>
                     <input value={feTickerInput} onChange={e => setFeTickerInput(e.target.value)}
                       placeholder="BTC-USD,ETH-USD,SOL-USD"
-                      className="w-full bg-[#0b0e11] border border-[#2b3139] rounded-xl px-3 py-2.5 text-sm text-[#eaecef] font-mono focus:outline-none focus:border-[#627eea]" />
+                      className="w-full bg-[#0b0e11] border border-[#2b3139] rounded-xl px-3 py-2.5 text-sm text-[#eaecef] font-mono focus:outline-none focus:border-[#f0b90b]" />
                   </div>
                   <div>
                     <label className="text-xs text-[#848e9c] mb-1.5 block">Sentiment Filter</label>
                     <select value={feParams.sentiment_filter}
                       onChange={e => setFeParams(p => ({ ...p, sentiment_filter: e.target.value }))}
-                      className="w-full bg-[#0b0e11] border border-[#2b3139] rounded-xl px-3 py-2.5 text-sm text-[#eaecef] focus:outline-none focus:border-[#627eea]">
+                      className="w-full bg-[#0b0e11] border border-[#2b3139] rounded-xl px-3 py-2.5 text-sm text-[#eaecef] focus:outline-none focus:border-[#f0b90b]">
                       <option value="both">Both (Bullish + Bearish)</option>
                       <option value="bullish">Bullish only (BUY)</option>
                       <option value="bearish">Bearish only (SELL)</option>
@@ -1043,7 +1063,7 @@ export default function BotsPage() {
                 </div>
                 <div className="flex items-center gap-3 pt-1">
                   <button onClick={handleFeStart} disabled={feLoading}
-                    className="flex items-center gap-2 px-6 py-2.5 bg-[#627eea] hover:bg-[#5568cc] disabled:opacity-60 text-white rounded-xl text-sm font-semibold transition">
+                    className="flex items-center gap-2 px-6 py-2.5 bg-[#f0b90b] hover:bg-[#d9a60b] disabled:opacity-60 text-black rounded-xl text-sm font-semibold transition">
                     {feLoading ? <RefreshCw size={13} className="animate-spin" /> : <Play size={13} />}
                     {feLoading ? 'Starting…' : 'Launch Bot'}
                   </button>
@@ -1075,8 +1095,8 @@ export default function BotsPage() {
             {/* Empty state */}
             {feBots.length === 0 && feTrades.length === 0 && !showFePanel && (
               <div className="py-10 text-center border-t border-[#2b3139]">
-                <div className="w-16 h-16 rounded-full bg-[#627eea]/10 border border-[#627eea]/20 flex items-center justify-center mx-auto mb-3">
-                  <Brain size={26} className="text-[#627eea]" />
+                <div className="w-16 h-16 rounded-full bg-[#f0b90b]/10 border border-[#f0b90b]/20 flex items-center justify-center mx-auto mb-3">
+                  <Brain size={26} className="text-[#f0b90b]" />
                 </div>
                 {feMaxBots === 0 ? (
                   <>
@@ -1088,7 +1108,7 @@ export default function BotsPage() {
                     <p className="text-sm text-[#848e9c] font-semibold">No FinEventAI bots running</p>
                     <p className="text-xs text-[#4a5568] mt-1">Your plan allows {feMaxBots} bot{feMaxBots !== 1 ? 's' : ''}</p>
                     <button onClick={() => { setShowFePanel(true); setFeCollapsed(false) }}
-                      className="mt-4 inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-[#627eea]/10 hover:bg-[#627eea]/20 border border-[#627eea]/30 text-[#627eea] text-sm font-semibold transition">
+                      className="mt-4 inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-[#f0b90b]/10 hover:bg-[#f0b90b]/20 border border-[#f0b90b]/30 text-[#f0b90b] text-sm font-semibold transition">
                       <Plus size={13} /> Add Bot
                     </button>
                   </>
