@@ -14,7 +14,8 @@ import {
   User, Camera, Shield, CheckCircle, Clock, XCircle,
   Mail, Lock, Key, Zap, Plus, Trash2, Eye, EyeOff,
   Copy, AlertCircle, Star, Send, MessageCircle, LogOut, ChevronDown,
-  Wifi, RefreshCw, Gift, Share2, Users as UsersIcon, TrendingUp
+  Wifi, RefreshCw, Gift, Share2, Users as UsersIcon, TrendingUp,
+  ChevronLeft, ChevronRight, Settings,
 } from 'lucide-react'
 
 const TIERS = [
@@ -34,7 +35,7 @@ const EXCHANGES = [
 ]
 
 interface ApiKey { id: number; key_name: string; purpose: string; created_at: string; expires_at: string; is_active: boolean; last_used_at: string }
-type Tab = 'personal' | 'finapi' | 'security' | 'referral'
+type SubPage = 'personal' | 'finapi' | 'security' | 'referral' | null
 
 const inp = 'w-full bg-[#0b0e11] border border-[#2b3139] rounded-lg px-3 py-2.5 text-sm text-[#eaecef] placeholder-[#4a5568] focus:outline-none focus:border-[#f0b90b] transition disabled:opacity-50 disabled:cursor-not-allowed'
 
@@ -58,33 +59,127 @@ function SectionHeader({ label }: { label: string }) {
   )
 }
 
-export default function ProfilePage() {
-  const { user, setUser } = useAuthStore()
-  const [tab, setTab] = useState<Tab>('personal')
-
+function SubPageWrapper({ title, onBack, children }: { title: string; onBack: () => void; children: React.ReactNode }) {
   return (
     <div className="space-y-4 max-w-2xl">
-      <h1 className="text-xl font-bold text-[#eaecef]">My Profile</h1>
+      <div className="flex items-center gap-3">
+        <button onClick={onBack}
+          className="w-9 h-9 rounded-xl bg-[#161a1e] border border-[#2b3139] flex items-center justify-center text-[#848e9c] hover:text-[#eaecef] transition flex-shrink-0">
+          <ChevronLeft size={16} />
+        </button>
+        <h1 className="text-xl font-bold text-[#eaecef]">{title}</h1>
+      </div>
+      {children}
+    </div>
+  )
+}
 
-      {/* Tab bar */}
-      <div className="flex gap-1 bg-[#161a1e] border border-[#2b3139] rounded-xl p-1">
+export default function ProfilePage() {
+  const { user, setUser } = useAuthStore()
+  const navigate = useNavigate()
+  const [subPage, setSubPage] = useState<SubPage>(null)
+
+  const tier = TIERS[user?.account_tier ?? 0] ?? TIERS[0]
+  const prefs = (user?.notification_preferences as Record<string, unknown>) || {}
+  const waVerified   = prefs.whatsapp_verified === true
+  const tgVerified   = prefs.telegram_verified === true
+  const emailVerified = user?.is_mail_verified === true
+  const kycApproved  = user?.kyc_status === 'approved'
+  const kycSubmitted = user?.kyc_status === 'submitted'
+
+  if (subPage === 'personal') return (
+    <SubPageWrapper title="Personal Information" onBack={() => setSubPage(null)}>
+      <PersonalTab user={user} setUser={setUser} />
+    </SubPageWrapper>
+  )
+  if (subPage === 'finapi') return (
+    <SubPageWrapper title="FinAPI" onBack={() => setSubPage(null)}>
+      <FinApiTab user={user} setUser={setUser} />
+    </SubPageWrapper>
+  )
+  if (subPage === 'security') return (
+    <SubPageWrapper title="Security" onBack={() => setSubPage(null)}>
+      <SecurityTab user={user} />
+    </SubPageWrapper>
+  )
+  if (subPage === 'referral') return (
+    <SubPageWrapper title="Referral" onBack={() => setSubPage(null)}>
+      <ReferralTab />
+    </SubPageWrapper>
+  )
+
+  const firstName = user?.first_name || user?.email?.split('@')[0] || 'User'
+  const lastName  = user?.last_name || ''
+  const initial   = firstName[0]?.toUpperCase() ?? 'U'
+
+  return (
+    <div className="max-w-md mx-auto space-y-3">
+
+      {/* ── Profile card ── */}
+      <div className="bg-[#161a1e] border border-[#2b3139] rounded-2xl p-6 flex flex-col items-center gap-3">
+        {/* Photo */}
+        <div className="w-20 h-20 rounded-full bg-[#f0b90b] flex items-center justify-center text-black font-bold text-2xl overflow-hidden">
+          {user?.profile_photo
+            ? <img src={user.profile_photo} alt="" className="w-full h-full object-cover" />
+            : initial
+          }
+        </div>
+
+        {/* Name + email */}
+        <div className="text-center">
+          <p className="text-base font-bold text-[#eaecef]">{firstName}{lastName ? ` ${lastName}` : ''}</p>
+          <p className="text-xs text-[#848e9c] mt-0.5">{user?.email}</p>
+        </div>
+
+        {/* Tier badge — just label, no limits text */}
+        <span className={`text-xs font-bold px-4 py-1.5 rounded-full border ${tier.bg} ${tier.color} ${tier.border}`}>
+          {tier.label}
+        </span>
+
+        {/* Channel status icons — inline row */}
+        <div className="flex items-center gap-5 mt-1">
+          <div className={`flex flex-col items-center gap-1 ${emailVerified ? 'text-[#0ecb81]' : 'text-[#848e9c]'}`}>
+            <Mail size={18} />
+            <span className="text-[9px] font-medium">Email</span>
+          </div>
+          <div className={`flex flex-col items-center gap-1 ${waVerified ? 'text-[#25D366]' : 'text-[#848e9c]'}`}>
+            <MessageCircle size={18} />
+            <span className="text-[9px] font-medium">WhatsApp</span>
+          </div>
+          <div className={`flex flex-col items-center gap-1 ${tgVerified ? 'text-[#229ED9]' : 'text-[#848e9c]'}`}>
+            <Send size={18} />
+            <span className="text-[9px] font-medium">Telegram</span>
+          </div>
+          <div className={`flex flex-col items-center gap-1 ${kycApproved ? 'text-[#0ecb81]' : kycSubmitted ? 'text-[#f0b90b]' : 'text-[#848e9c]'}`}>
+            <Shield size={18} />
+            <span className="text-[9px] font-medium">KYC</span>
+          </div>
+        </div>
+      </div>
+
+      {/* ── Navigation list ── */}
+      <div className="bg-[#161a1e] border border-[#2b3139] rounded-2xl overflow-hidden divide-y divide-[#2b3139]">
         {([
-          ['personal', 'Personal', User],
-          ['finapi',   'FinAPI',   Key],
-          ['security', 'Security', Shield],
-          ['referral', 'Referral', Gift],
-        ] as const).map(([id, label, Icon]) => (
-          <button key={id} onClick={() => setTab(id as Tab)}
-            className={`flex-1 flex items-center justify-center gap-1.5 py-2 rounded-lg text-xs font-semibold transition-all ${tab === id ? 'bg-[#f0b90b] text-black shadow-md' : 'text-[#848e9c] hover:text-[#eaecef]'}`}>
-            <Icon size={13}/>{label}
+          { label: 'Personal Information', sub: 'Update details & profile photo', page: 'personal' as SubPage, icon: User },
+          { label: 'FinAPI',               sub: 'API keys & exchange connections', page: 'finapi'   as SubPage, icon: Key },
+          { label: 'Referral',             sub: 'Invite friends & earn rewards',  page: 'referral' as SubPage, icon: Gift },
+          { label: 'Settings',             sub: 'Notifications & preferences',    page: null,                  icon: Settings,  action: () => navigate('/app/settings') },
+          { label: 'Security',             sub: 'Password, PIN & safety',         page: 'security' as SubPage, icon: Shield },
+        ] as const).map(item => (
+          <button key={item.label}
+            onClick={() => 'action' in item && item.action ? item.action() : setSubPage(item.page!)}
+            className="w-full flex items-center gap-4 px-5 py-4 hover:bg-[#1e2329] transition text-left">
+            <div className="w-9 h-9 rounded-xl bg-[#0b0e11] flex items-center justify-center flex-shrink-0">
+              <item.icon size={16} className="text-[#f0b90b]" />
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-semibold text-[#eaecef]">{item.label}</p>
+              <p className="text-xs text-[#848e9c]">{item.sub}</p>
+            </div>
+            <ChevronRight size={16} className="text-[#848e9c] flex-shrink-0" />
           </button>
         ))}
       </div>
-
-      {tab === 'personal' && <PersonalTab user={user} setUser={setUser} />}
-      {tab === 'finapi'   && <FinApiTab   user={user} setUser={setUser} />}
-      {tab === 'security' && <SecurityTab user={user} />}
-      {tab === 'referral' && <ReferralTab />}
     </div>
   )
 }
@@ -1098,13 +1193,6 @@ function SecurityTab({ user }: { user: UserProfile | null }) {
   const [deleting, setDeleting]     = useState(false)
   const [showDelConfirm, setShowDelConfirm] = useState(false)
 
-  const prefs = (user?.notification_preferences as unknown as Record<string, unknown>) || {}
-  const waVerified = prefs.whatsapp_verified === true
-  const waPhone = (prefs.whatsapp_number as string) || ''
-  const tgVerified = prefs.telegram_verified === true
-  const tgName = (prefs.telegram_first_name as string) || ''
-  const emailVerified = user?.is_mail_verified === true
-
   const handleChangePw = async (e: React.FormEvent) => {
     e.preventDefault()
     if (newPw !== confirmPw) return toast.error('Passwords do not match')
@@ -1146,52 +1234,6 @@ function SecurityTab({ user }: { user: UserProfile | null }) {
 
   return (
     <div className="space-y-4">
-
-      {/* Connection Status Overview */}
-      <div className="bg-[#161a1e] border border-[#2b3139] rounded-xl overflow-hidden">
-        <div className="flex items-center gap-2 px-4 py-3 border-b border-[#2b3139] bg-[#1a1f25]">
-          <Wifi size={13} className="text-[#f0b90b]" />
-          <span className="text-xs font-semibold text-[#eaecef]">Notification Channels</span>
-        </div>
-        <div className="p-4 grid grid-cols-3 gap-3">
-          {/* Email */}
-          <div className={`flex flex-col items-center gap-2 rounded-xl p-3 border ${emailVerified ? 'border-[#0ecb81]/30 bg-[#0ecb81]/5' : 'border-[#2b3139]'}`}>
-            <div className={`w-8 h-8 rounded-full flex items-center justify-center ${emailVerified ? 'bg-[#0ecb81]/10' : 'bg-[#2b3139]'}`}>
-              <Mail size={14} className={emailVerified ? 'text-[#0ecb81]' : 'text-[#848e9c]'} />
-            </div>
-            <span className="text-[10px] font-semibold text-[#848e9c]">Email</span>
-            <span className={`text-[9px] font-bold flex items-center gap-1 ${emailVerified ? 'text-[#0ecb81]' : 'text-[#848e9c]'}`}>
-              <span className={`w-1.5 h-1.5 rounded-full inline-block ${emailVerified ? 'bg-[#0ecb81]' : 'bg-[#848e9c]'}`} />
-              {emailVerified ? 'Verified' : 'Not verified'}
-            </span>
-          </div>
-          {/* WhatsApp */}
-          <div className={`flex flex-col items-center gap-2 rounded-xl p-3 border ${waVerified ? 'border-[#25D366]/30 bg-[#25D366]/5' : 'border-[#2b3139]'}`}>
-            <div className={`w-8 h-8 rounded-full flex items-center justify-center ${waVerified ? 'bg-[#25D366]/10' : 'bg-[#2b3139]'}`}>
-              <MessageCircle size={14} className={waVerified ? 'text-[#25D366]' : 'text-[#848e9c]'} />
-            </div>
-            <span className="text-[10px] font-semibold text-[#848e9c]">WhatsApp</span>
-            <span className={`text-[9px] font-bold flex items-center gap-1 ${waVerified ? 'text-[#25D366]' : 'text-[#848e9c]'}`}>
-              <span className={`w-1.5 h-1.5 rounded-full inline-block ${waVerified ? 'bg-[#25D366]' : 'bg-[#848e9c]'}`} />
-              {waVerified ? (waPhone.slice(-4) ? `···${waPhone.slice(-4)}` : 'Connected') : 'Not linked'}
-            </span>
-          </div>
-          {/* Telegram */}
-          <div className={`flex flex-col items-center gap-2 rounded-xl p-3 border ${tgVerified ? 'border-[#229ED9]/30 bg-[#229ED9]/5' : 'border-[#2b3139]'}`}>
-            <div className={`w-8 h-8 rounded-full flex items-center justify-center ${tgVerified ? 'bg-[#229ED9]/10' : 'bg-[#2b3139]'}`}>
-              <Send size={14} className={tgVerified ? 'text-[#229ED9]' : 'text-[#848e9c]'} />
-            </div>
-            <span className="text-[10px] font-semibold text-[#848e9c]">Telegram</span>
-            <span className={`text-[9px] font-bold flex items-center gap-1 ${tgVerified ? 'text-[#229ED9]' : 'text-[#848e9c]'}`}>
-              <span className={`w-1.5 h-1.5 rounded-full inline-block ${tgVerified ? 'bg-[#229ED9]' : 'bg-[#848e9c]'}`} />
-              {tgVerified ? tgName || 'Connected' : 'Not linked'}
-            </span>
-          </div>
-        </div>
-      </div>
-
-      {/* Trade Alert Toggles */}
-      <TradeAlertToggles user={user} />
 
       {/* Change Password */}
       <form onSubmit={handleChangePw} className="bg-[#161a1e] border border-[#2b3139] rounded-xl overflow-hidden">

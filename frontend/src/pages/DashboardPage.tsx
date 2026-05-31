@@ -15,11 +15,12 @@ import {
   EyeOff,
   ArrowRight,
   DollarSign,
-  Send,
-  Users,
-  Server,
-  Package,
-  BarChart2,        // Fixed: was missing
+  Lightbulb,
+  Receipt,
+  Bell,
+  CalendarDays,
+  MoreHorizontal,
+  BarChart2,
 } from 'lucide-react';
 
 function getGreeting() {
@@ -359,20 +360,21 @@ export default function DashboardPage() {
       {/* Quick Actions */}
       <div>
         <p className="text-xs font-bold text-[#eaecef] mb-3">Quick Actions</p>
-        <div className="grid grid-cols-4 gap-2">
+        <div className="grid grid-cols-5 gap-2">
           {[
-            { label: 'Rent VPS', icon: Server, path: '/app/wallet?tab=vps' },
-            { label: 'Buy Asset', icon: Package, path: '/app/wallet?tab=asset' },
-            { label: 'Send', icon: Send, path: '/app/wallet?tab=p2p' },
-            { label: 'P2P', icon: Users, path: '/app/wallet?tab=p2p' },
+            { label: 'Signals',  icon: Lightbulb,     path: '/app/recommendations' },
+            { label: 'History',  icon: Receipt,        path: '/app/transactions' },
+            { label: 'Alert',    icon: Bell,           path: '/app/alerts' },
+            { label: 'Calendar', icon: CalendarDays,   path: '/app/calendar' },
+            { label: 'More',     icon: MoreHorizontal, path: '/app/wallet' },
           ].map(({ label, icon: Icon, path }) => (
             <button
               key={label}
               onClick={() => navigate(path)}
-              className="bg-[#161a1e] border border-[#2b3139] rounded-xl py-4 flex flex-col items-center justify-center gap-1 hover:bg-[#1e2329]"
+              className="bg-[#161a1e] border border-[#2b3139] rounded-xl py-4 flex flex-col items-center justify-center gap-1.5 hover:bg-[#1e2329] transition"
             >
-              <Icon size={20} className="text-[#f0b90b]" />
-              <span className="text-[10px] text-[#848e9c] text-center">{label}</span>
+              <Icon size={18} className="text-[#f0b90b]" />
+              <span className="text-[9px] text-[#848e9c] text-center font-medium">{label}</span>
             </button>
           ))}
         </div>

@@ -2,12 +2,17 @@ import { useState, useEffect } from 'react';
 import { useAuthStore } from '../store/authStore';
 import { updateNotificationPreferences } from '../lib/api';
 import toast from 'react-hot-toast';
-import { Bell, Mail, MessageCircle, Send, Zap, Shield, Globe, Info, Check } from 'lucide-react';
+import { Bell, Mail, MessageCircle, Send, Zap, Shield, Globe, Info, Check, Activity } from 'lucide-react';
 
 interface NotifPrefs {
   email: boolean;
   whatsapp: boolean;
   telegram: boolean;
+}
+
+interface TradeAlertPrefs {
+  trade_open_alert: boolean;
+  trade_close_alert: boolean;
 }
 
 interface AppPrefs {
@@ -35,6 +40,8 @@ export default function SettingsPage() {
     telegram: false,
   });
   const [saving, setSaving] = useState(false);
+  const [tradeAlerts, setTradeAlerts] = useState<TradeAlertPrefs>({ trade_open_alert: false, trade_close_alert: false });
+  const [savingAlerts, setSavingAlerts] = useState(false);
 
   const [appPrefs, setAppPrefs] = useState<AppPrefs>(loadAppPrefs);
   const [prefsSaved, setPrefsSaved] = useState(false);
@@ -46,9 +53,31 @@ export default function SettingsPage() {
   // Load notification preferences from user store
   useEffect(() => {
     if (user?.notification_preferences) {
-      setNotifs(user.notification_preferences as NotifPrefs);
+      const prefs = user.notification_preferences as Record<string, unknown>;
+      setNotifs(prefs as unknown as NotifPrefs);
+      setTradeAlerts({
+        trade_open_alert:  !!(prefs.trade_open_alert),
+        trade_close_alert: !!(prefs.trade_close_alert),
+      });
     }
   }, [user]);
+
+  const handleSaveTradeAlerts = async () => {
+    setSavingAlerts(true);
+    try {
+      const res = await updateNotificationPreferences(tradeAlerts as unknown as Record<string, unknown>);
+      if (res.data) setUser(res.data);
+      toast.success('Trade alert preferences saved');
+    } catch {
+      toast.error('Failed to save trade alert preferences');
+    } finally {
+      setSavingAlerts(false);
+    }
+  };
+
+  const toggleTradeAlert = (key: keyof TradeAlertPrefs) => {
+    setTradeAlerts(prev => ({ ...prev, [key]: !prev[key] }));
+  };
 
   const notifItems = [
     {
@@ -173,6 +202,47 @@ export default function SettingsPage() {
             className="bg-[#f0b90b] hover:bg-[#d4a30a] disabled:opacity-60 text-black font-semibold px-6 py-2.5 rounded-xl text-sm transition w-full sm:w-auto"
           >
             {saving ? 'Saving…' : 'Save Preferences'}
+          </button>
+        </div>
+      </div>
+
+      {/* Trade Alerts */}
+      <div className="bg-[#161a1e] border border-[#2b3139] rounded-xl overflow-hidden">
+        <div className="flex items-center gap-2.5 px-5 py-4 border-b border-[#2b3139]">
+          <div className="w-7 h-7 rounded-lg bg-[#f0b90b]/10 flex items-center justify-center">
+            <Activity size={14} className="text-[#f0b90b]" />
+          </div>
+          <div>
+            <h2 className="text-sm font-semibold text-[#eaecef]">Trade Alerts</h2>
+            <p className="text-[10px] text-[#848e9c]">Notify via Telegram · WhatsApp · In-app (off by default)</p>
+          </div>
+        </div>
+        <div className="divide-y divide-[#2b3139]/60">
+          {([
+            { key: 'trade_open_alert'  as const, label: 'Trade Opened', desc: 'Notify when a bot opens a new position' },
+            { key: 'trade_close_alert' as const, label: 'Trade Closed', desc: 'Notify when a bot closes a position' },
+          ] as const).map(item => (
+            <div key={item.key} className="flex items-center gap-4 px-5 py-4">
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-medium text-[#eaecef]">{item.label}</p>
+                <p className="text-xs text-[#848e9c] leading-relaxed mt-0.5">{item.desc}</p>
+              </div>
+              <button
+                onClick={() => toggleTradeAlert(item.key)}
+                className={`relative w-11 h-6 rounded-full transition-all duration-200 flex-shrink-0 ${tradeAlerts[item.key] ? 'bg-[#f0b90b]' : 'bg-[#2b3139]'}`}
+              >
+                <span className={`absolute top-0.5 w-5 h-5 rounded-full bg-white shadow transition-transform duration-200 ${tradeAlerts[item.key] ? 'translate-x-5' : 'translate-x-0.5'}`} />
+              </button>
+            </div>
+          ))}
+        </div>
+        <div className="px-5 py-4 border-t border-[#2b3139] bg-[#0b0e11]/30">
+          <button
+            onClick={handleSaveTradeAlerts}
+            disabled={savingAlerts}
+            className="bg-[#f0b90b] hover:bg-[#d4a30a] disabled:opacity-60 text-black font-semibold px-6 py-2.5 rounded-xl text-sm transition w-full sm:w-auto"
+          >
+            {savingAlerts ? 'Saving…' : 'Save Trade Alerts'}
           </button>
         </div>
       </div>

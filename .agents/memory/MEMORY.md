@@ -1,0 +1,2 @@
+- [DashboardLayout architecture](dashboard-layout.md) — right-side nav drawer (profile pic opens it), no desktop sidebar, bottom 5-button nav with elevated center FinBot button.
+- [ProfilePage card-nav pattern](profile-page-pattern.md) — main view is a card-based list; each row sets subPage state; SubPageWrapper adds back-button; no tab bar.
