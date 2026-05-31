@@ -162,7 +162,7 @@ class TradingBotInstance:
         self.leverage         = float(leverage)
         self.sl_usdt          = float(sl_usdt)
         self.stop_loss_pct    = float(stop_loss_pct)
-        self.lot_size         = max(1.0, float(lot_size or 1))
+        self.lot_size         = max(0.01, float(lot_size) if lot_size is not None else 1.0)
         self.open_margin      = 0.0
         self.trail_high       = 0.0
 

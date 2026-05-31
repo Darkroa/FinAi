@@ -13,13 +13,6 @@ import { getUserNotifications, markAllNotificationsRead } from '../lib/api'
 import { useLivePrices } from '../hooks/useLivePrices'
 import AdPopup from '../components/AdPopup'
 
-function getGreeting() {
-  const h = new Date().getHours()
-  if (h < 12) return 'Good Morning'
-  if (h < 17) return 'Good Afternoon'
-  return 'Good Evening'
-}
-
 const TIER_META = [
   { label: 'Unverified', color: 'text-[#848e9c]' },
   { label: 'Tier 1',     color: 'text-[#f0b90b]' },
@@ -84,7 +77,6 @@ export default function DashboardLayout() {
   const handleLogout = () => { logout(); navigate('/login') }
 
   const unread    = notifications.filter(n => !n.is_read).length
-  const firstName = user?.first_name || user?.email?.split('@')[0] || 'Trader'
   const tier      = TIER_META[user?.account_tier ?? 0] ?? TIER_META[0]
 
   return (
@@ -100,14 +92,22 @@ export default function DashboardLayout() {
         'fixed top-0 right-0 h-full z-50 bg-[#161a1e] border-l border-[#2b3139] flex flex-col transition-transform duration-200 w-64',
         navOpen ? 'translate-x-0' : 'translate-x-full'
       )}>
-        <div className="h-16 flex items-center px-5 border-b border-[#2b3139] flex-shrink-0">
-          <div className="flex items-center gap-2">
-            <div className="w-8 h-8 rounded-lg bg-[#f0b90b] flex items-center justify-center">
-              <Zap size={16} className="text-black" />
-            </div>
-            <span className="text-[#f0b90b] font-bold text-lg tracking-tight">FinAi</span>
+        {/* Drawer header — user details instead of logo */}
+        <div className="h-20 flex items-center px-4 border-b border-[#2b3139] flex-shrink-0 gap-3">
+          <div className="w-10 h-10 rounded-full overflow-hidden border-2 border-[#f0b90b]/40 flex-shrink-0">
+            {user?.profile_photo
+              ? <img src={user.profile_photo} alt="" className="w-full h-full object-cover" />
+              : <div className="w-full h-full bg-[#f0b90b] flex items-center justify-center text-black font-bold text-sm">
+                  {user?.email?.[0]?.toUpperCase() ?? 'U'}
+                </div>
+            }
           </div>
-          <button onClick={() => setNavOpen(false)} className="ml-auto text-[#848e9c] hover:text-[#eaecef]">
+          <div className="flex-1 min-w-0">
+            <p className="text-[#eaecef] text-sm font-semibold truncate">{user?.full_name || user?.first_name || user?.email?.split('@')[0]}</p>
+            <p className="text-[10px] text-[#848e9c] truncate">{user?.email}</p>
+            <p className={`text-[10px] font-semibold ${tier.color}`}>{tier.label}</p>
+          </div>
+          <button onClick={() => setNavOpen(false)} className="ml-auto text-[#848e9c] hover:text-[#eaecef] flex-shrink-0">
             <X size={18} />
           </button>
         </div>
@@ -134,15 +134,6 @@ export default function DashboardLayout() {
         </nav>
 
         <div className="p-3 border-t border-[#2b3139] flex-shrink-0">
-          <div className="flex items-center gap-2.5 px-2 py-2 rounded-xl bg-[#0b0e11] mb-1">
-            <div className="w-8 h-8 rounded-full bg-[#f0b90b] flex items-center justify-center text-black font-bold text-sm flex-shrink-0 overflow-hidden">
-              {user?.profile_photo ? <img src={user.profile_photo} className="w-full h-full object-cover" alt="" /> : user?.email?.[0]?.toUpperCase() ?? 'U'}
-            </div>
-            <div className="flex-1 min-w-0">
-              <p className="text-[#eaecef] text-xs font-medium truncate">{user?.full_name || user?.email}</p>
-              <p className={`text-[10px] ${tier.color}`}>{tier.label}</p>
-            </div>
-          </div>
           <button onClick={handleLogout}
             className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs text-[#848e9c] hover:text-[#f6465d] hover:bg-[#f6465d]/10 transition-all">
             <LogOut size={13} /> Sign Out
@@ -155,25 +146,33 @@ export default function DashboardLayout() {
 
         {/* ───── HEADER ───── */}
         <header className="bg-[#161a1e] border-b border-[#2b3139] flex-shrink-0">
+          <div className="flex items-center justify-between px-4 py-3 gap-3">
 
-          {/* Main row */}
-          <div className="flex items-center justify-between px-4 pt-4 pb-3 gap-3">
+            {/* LEFT — Profile pic (opens nav drawer) */}
+            <button onClick={() => setNavOpen(v => !v)}
+              className="w-11 h-11 rounded-full overflow-hidden border-2 border-[#f0b90b]/30 hover:border-[#f0b90b] flex-shrink-0 transition">
+              {user?.profile_photo
+                ? <img src={user.profile_photo} alt="" className="w-full h-full object-cover" />
+                : <div className="w-full h-full bg-[#f0b90b] flex items-center justify-center text-black font-bold">{user?.email?.[0]?.toUpperCase() ?? 'U'}</div>
+              }
+            </button>
 
-            {/* LEFT — AI Chat + greeting */}
-            <div className="flex items-center gap-3 min-w-0">
-              <button onClick={() => navigate('/app/chat')}
-                className="w-12 h-12 rounded-full bg-[#f0b90b]/10 border border-[#f0b90b]/20 flex items-center justify-center flex-shrink-0 hover:bg-[#f0b90b]/20 transition">
-                <MessageCircle size={22} className="text-[#f0b90b]" />
-              </button>
-              <div className="min-w-0">
-                <p className="text-xs text-[#848e9c] leading-none mb-0.5">{getGreeting()},</p>
-                <p className="text-sm font-bold text-[#eaecef] leading-tight truncate">{firstName}</p>
-                <p className={`text-[10px] font-semibold leading-none mt-0.5 ${tier.color}`}>{tier.label}</p>
+            {/* CENTER — FinAi logo */}
+            <div className="flex items-center gap-2">
+              <div className="w-7 h-7 rounded-lg bg-[#f0b90b] flex items-center justify-center">
+                <Zap size={14} className="text-black" />
               </div>
+              <span className="text-[#f0b90b] font-bold text-base tracking-tight">FinAi</span>
             </div>
 
-            {/* RIGHT — Notification + Brightness + Balance + Profile pic */}
+            {/* RIGHT — Chat + Bell + Brightness */}
             <div className="flex items-center gap-2 flex-shrink-0">
+
+              {/* Brightness toggle */}
+              <button onClick={() => setLightMode(v => !v)}
+                className="w-9 h-9 rounded-full bg-[#0b0e11] hover:bg-[#2b3139] flex items-center justify-center transition">
+                {lightMode ? <Moon size={15} className="text-[#848e9c]" /> : <Sun size={15} className="text-[#848e9c]" />}
+              </button>
 
               {/* Notification */}
               <div className="relative" ref={notifRef}>
@@ -216,40 +215,12 @@ export default function DashboardLayout() {
                 )}
               </div>
 
-              {/* Brightness toggle */}
-              <button onClick={() => setLightMode(v => !v)}
-                className="w-9 h-9 rounded-full bg-[#0b0e11] hover:bg-[#2b3139] flex items-center justify-center transition">
-                {lightMode ? <Moon size={15} className="text-[#848e9c]" /> : <Sun size={15} className="text-[#848e9c]" />}
-              </button>
-
-              {/* Balance chip */}
-              <div className="hidden sm:flex items-center gap-1.5 bg-[#0b0e11] border border-[#2b3139] rounded-xl px-3 py-2">
-                <span className="text-xs font-mono text-[#eaecef]">${(user?.balance_usdt ?? 0).toLocaleString('en-US', { minimumFractionDigits: 2 })}</span>
-              </div>
-
-              {/* Profile pic → opens nav drawer */}
-              <button onClick={() => setNavOpen(v => !v)}
-                className="w-11 h-11 rounded-full overflow-hidden border-2 border-[#f0b90b]/30 hover:border-[#f0b90b] flex-shrink-0 transition">
-                {user?.profile_photo
-                  ? <img src={user.profile_photo} alt="" className="w-full h-full object-cover" />
-                  : <div className="w-full h-full bg-[#f0b90b] flex items-center justify-center text-black font-bold">{user?.email?.[0]?.toUpperCase() ?? 'U'}</div>
-                }
+              {/* AI Chat button */}
+              <button onClick={() => navigate('/app/chat')}
+                className="w-9 h-9 rounded-full bg-[#f0b90b]/10 border border-[#f0b90b]/20 flex items-center justify-center flex-shrink-0 hover:bg-[#f0b90b]/20 transition">
+                <MessageCircle size={17} className="text-[#f0b90b]" />
               </button>
             </div>
-          </div>
-
-          {/* Subscription status row */}
-          <div className="px-4 pb-3 flex items-center justify-between">
-            <div className="flex items-center gap-1.5">
-              <Crown size={11} className="text-[#f0b90b]" />
-              <span className={`text-[11px] font-semibold ${tier.color}`}>{tier.label}</span>
-              <span className="w-1 h-1 rounded-full bg-[#4a5568]" />
-              <span className="text-[11px] text-[#848e9c] font-mono">${(user?.balance_usdt ?? 0).toLocaleString('en-US', { minimumFractionDigits: 2 })} USDT</span>
-            </div>
-            <button onClick={() => navigate('/app/pricing')}
-              className="flex items-center gap-0.5 text-[11px] text-[#f0b90b] hover:underline">
-              Upgrade <ChevronRight size={10} />
-            </button>
           </div>
         </header>
 

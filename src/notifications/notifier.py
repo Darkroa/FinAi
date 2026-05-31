@@ -1,67 +1,120 @@
 import os
+import resend
 from datetime import datetime
-from twilio.rest import Client
-from telegram import Bot
-from slack_sdk import WebClient
-import smtplib
-from email.mime.text import MIMEText
 from loguru import logger
+
+try:
+    from twilio.rest import Client as TwilioClient
+    _HAS_TWILIO = True
+except ImportError:
+    _HAS_TWILIO = False
+
+try:
+    from telegram import Bot as TelegramBot
+    _HAS_TELEGRAM = True
+except ImportError:
+    _HAS_TELEGRAM = False
+
+try:
+    from slack_sdk import WebClient as SlackWebClient
+    _HAS_SLACK = True
+except ImportError:
+    _HAS_SLACK = False
+
 
 class Notifier:
     def __init__(self):
-        # Twilio for WhatsApp
-        self.twilio_client = Client(os.getenv("TWILIO_ACCOUNT_SID"), os.getenv("TWILIO_AUTH_TOKEN")) if os.getenv("TWILIO_ACCOUNT_SID") else None
-        self.whatsapp_from = f"whatsapp:{os.getenv('TWILIO_WHATSAPP_NUMBER')}"  # e.g. +14155238886
-        self.whatsapp_to = os.getenv("WHATSAPP_TO_NUMBER")  # your number with country code
+        # Twilio for WhatsApp / SMS
+        sid = os.getenv("TWILIO_ACCOUNT_SID", "")
+        token = os.getenv("TWILIO_AUTH_TOKEN", "")
+        if _HAS_TWILIO and sid and token:
+            self.twilio_client = TwilioClient(sid, token)
+        else:
+            self.twilio_client = None
+        self.whatsapp_from = f"whatsapp:{os.getenv('TWILIO_WHATSAPP_NUMBER', '')}"
+        self.whatsapp_to = os.getenv("WHATSAPP_TO_NUMBER", "")
 
         # Telegram
-        self.telegram_bot = Bot(token=os.getenv("TELEGRAM_BOT_TOKEN")) if os.getenv("TELEGRAM_BOT_TOKEN") else None
-        self.telegram_chat_id = os.getenv("TELEGRAM_CHAT_ID")
+        tg_token = os.getenv("TELEGRAM_BOT_TOKEN", "")
+        if _HAS_TELEGRAM and tg_token:
+            self.telegram_bot = TelegramBot(token=tg_token)
+        else:
+            self.telegram_bot = None
+        self.telegram_chat_id = os.getenv("TELEGRAM_CHAT_ID", "")
+        self.telegram_admin_chat_id = os.getenv("TELEGRAM_ADMIN_CHAT_ID", "")
 
-        # Slack
-        self.slack_client = WebClient(token=os.getenv("SLACK_BOT_TOKEN")) if os.getenv("SLACK_BOT_TOKEN") else None
+        # Slack (optional)
+        slack_token = os.getenv("SLACK_BOT_TOKEN", "")
+        if _HAS_SLACK and slack_token:
+            self.slack_client = SlackWebClient(token=slack_token)
+        else:
+            self.slack_client = None
         self.slack_channel = os.getenv("SLACK_CHANNEL", "#trading-alerts")
 
-        # Email
-        self.email_sender = os.getenv("EMAIL_SENDER")
-        self.email_password = os.getenv("EMAIL_PASSWORD")
-        self.email_to = os.getenv("EMAIL_TO")
+        # Resend (email) — from FinAi
+        resend_key = os.getenv("RESEND_API_KEY", "")
+        if resend_key:
+            resend.api_key = resend_key
+        self.resend_api_key = resend_key
+        self.email_from = "FinAi <onboarding@resend.dev>"
+        self.email_to = os.getenv("EMAIL_TO", "")
 
     def send_trade_alert(self, trade: dict):
-        message = f"""
-🚨 FinEventAI Trade Alert @ {trade['time'].strftime('%Y-%m-%d %H:%M')}
-Action: {trade['action']} {trade.get('qty', '')} {trade.get('ticker', 'UNKNOWN')}
-Price: ${trade['price']:.2f}
-P&L: ${trade.get('pnl', 0):.2f}
-Reason: {trade.get('reason', 'Signal')}
-Portfolio: ${trade.get('portfolio_value', 0):.2f}
-        """.strip()
-
-        self._send_all(message, f"Trade: {trade['action']} {trade.get('ticker')}")
+        message = (
+            f"🚨 FinAi Trade Alert @ {trade['time'].strftime('%Y-%m-%d %H:%M')}\n"
+            f"Action: {trade['action']} {trade.get('qty', '')} {trade.get('ticker', 'UNKNOWN')}\n"
+            f"Price: ${trade['price']:.2f}\n"
+            f"P&L: ${trade.get('pnl', 0):.2f}\n"
+            f"Reason: {trade.get('reason', 'Signal')}\n"
+            f"Portfolio: ${trade.get('portfolio_value', 0):.2f}"
+        )
+        self._send_all(message, f"FinAi Trade: {trade['action']} {trade.get('ticker')}")
 
     def send_event_alert(self, event):
-        message = f"""
-📰 New Financial Event Detected
-Type: {event.event_type}
-Title: {event.title}
-Impact: {event.impact_score}/10 | Sentiment: {event.sentiment}
-Short-term: {event.short_term_impact}
-        """.strip()
-        self._send_all(message, "New Event Detected")
+        message = (
+            f"📰 New Financial Event Detected\n"
+            f"Type: {event.event_type}\n"
+            f"Title: {event.title}\n"
+            f"Impact: {event.impact_score}/10 | Sentiment: {event.sentiment}\n"
+            f"Short-term: {event.short_term_impact}"
+        )
+        self._send_all(message, "FinAi — New Event Detected")
 
     def send_forecast_alert(self, analysis):
-        message = f"""
-📈 Trendline Forecast
-Ticker: {analysis.ticker}
-State: {analysis.trend_state}
-Current: ${analysis.current_price:.2f} → Predicted: ${analysis.predicted_price:.2f}
-Confidence: {analysis.confidence:.0%}
-{analysis.prediction_text}
-        """.strip()
-        self._send_all(message, f"Forecast: {analysis.ticker} {analysis.trend_state}")
+        message = (
+            f"📈 Trendline Forecast\n"
+            f"Ticker: {analysis.ticker}\n"
+            f"State: {analysis.trend_state}\n"
+            f"Current: ${analysis.current_price:.2f} → Predicted: ${analysis.predicted_price:.2f}\n"
+            f"Confidence: {analysis.confidence:.0%}\n"
+            f"{analysis.prediction_text}"
+        )
+        self._send_all(message, f"FinAi Forecast: {analysis.ticker} {analysis.trend_state}")
 
-    def _send_all(self, message: str, subject: str = "FinEventAI Alert"):
-        # WhatsApp
+    def send_admin_alert(self, message: str, subject: str = "FinAi Admin Alert"):
+        """Send notification specifically to admin Telegram chat + email."""
+        if self.telegram_bot and self.telegram_admin_chat_id:
+            try:
+                import asyncio
+                loop = asyncio.new_event_loop()
+                loop.run_until_complete(
+                    self.telegram_bot.send_message(
+                        chat_id=self.telegram_admin_chat_id,
+                        text=message
+                    )
+                )
+                loop.close()
+            except Exception as e:
+                logger.error(f"Admin Telegram failed: {e}")
+        self._send_email(message, subject)
+
+    def _send_all(self, message: str, subject: str = "FinAi Alert"):
+        self._send_whatsapp(message)
+        self._send_telegram(message)
+        self._send_slack(message)
+        self._send_email(message, subject)
+
+    def _send_whatsapp(self, message: str):
         if self.twilio_client and self.whatsapp_to:
             try:
                 self.twilio_client.messages.create(
@@ -72,39 +125,51 @@ Confidence: {analysis.confidence:.0%}
             except Exception as e:
                 logger.error(f"WhatsApp failed: {e}")
 
-        # Telegram
+    def _send_telegram(self, message: str):
         if self.telegram_bot and self.telegram_chat_id:
             try:
-                self.telegram_bot.send_message(chat_id=self.telegram_chat_id, text=message)
+                import asyncio
+                loop = asyncio.new_event_loop()
+                loop.run_until_complete(
+                    self.telegram_bot.send_message(
+                        chat_id=self.telegram_chat_id,
+                        text=message
+                    )
+                )
+                loop.close()
             except Exception as e:
                 logger.error(f"Telegram failed: {e}")
 
-        # Slack
+    def _send_slack(self, message: str):
         if self.slack_client:
             try:
                 self.slack_client.chat_postMessage(channel=self.slack_channel, text=message)
             except Exception as e:
                 logger.error(f"Slack failed: {e}")
 
-        # Email
-        if self.email_sender and self.email_to:
-            try:
-                msg = MIMEText(message)
-                msg['Subject'] = subject
-                msg['From'] = self.email_sender
-                msg['To'] = self.email_to
-                with smtplib.SMTP_SSL("smtp.gmail.com", 465) as server:
-                    server.login(self.email_sender, self.email_password)
-                    server.send_message(msg)
-            except Exception as e:
-                logger.error(f"Email failed: {e}")
-    
+    def _send_email(self, message: str, subject: str = "FinAi Alert"):
+        if not self.resend_api_key or not self.email_to:
+            return
+        try:
+            resend.Emails.send({
+                "from": self.email_from,
+                "to": [self.email_to],
+                "subject": subject,
+                "text": message,
+                "html": f"<pre style='font-family:sans-serif;white-space:pre-wrap'>{message}</pre>",
+            })
+        except Exception as e:
+            logger.error(f"Email (Resend) failed: {e}")
+
     def send_daily_summary(self, bot_status_list: list):
         if not bot_status_list:
             return
-        summary = "📊 FinEventAI Daily Portfolio Summary\n\n"
+        summary = "📊 FinAi Daily Portfolio Summary\n\n"
         for status in bot_status_list:
-            summary += f"{status['ticker']}: ${status['portfolio_value']:.2f} | DD: {status['current_drawdown_pct']}% | Pos: {status['position']}\n"
-        
+            summary += (
+                f"{status['ticker']}: ${status['portfolio_value']:.2f} "
+                f"| DD: {status['current_drawdown_pct']}% "
+                f"| Pos: {status['position']}\n"
+            )
         summary += f"\nGenerated at: {datetime.now().strftime('%Y-%m-%d %H:%M')}"
-        self._send_all(summary, "Daily Portfolio Summary")
+        self._send_all(summary, "FinAi — Daily Portfolio Summary")
