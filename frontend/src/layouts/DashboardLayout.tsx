@@ -3,14 +3,14 @@ import { Outlet, NavLink, useNavigate } from 'react-router-dom'
 import { useAuthStore } from '../store/authStore'
 import {
   TrendingUp, BarChart2, Wallet,
-  ShieldCheck, LogOut, Zap, Bell, Bot,
+  ShieldCheck, LogOut, Bell, Bot,
   X, User, MessageSquare,
   Sun, Moon, Crown, BellRing, Newspaper, MessageCircle,
-  Home, ChevronRight, Settings,
+  Home, Settings,
 } from 'lucide-react'
 import { cn } from '../lib/utils'
 import { getUserNotifications, markAllNotificationsRead } from '../lib/api'
-import { useLivePrices } from '../hooks/useLivePrices'
+
 import AdPopup from '../components/AdPopup'
 
 const TIER_META = [
@@ -157,14 +157,6 @@ export default function DashboardLayout() {
               }
             </button>
 
-            {/* CENTER — FinAi logo */}
-            <div className="flex items-center gap-2">
-              <div className="w-7 h-7 rounded-lg bg-[#f0b90b] flex items-center justify-center">
-                <Zap size={14} className="text-black" />
-              </div>
-              <span className="text-[#f0b90b] font-bold text-base tracking-tight">FinAi</span>
-            </div>
-
             {/* RIGHT — Chat + Bell + Brightness */}
             <div className="flex items-center gap-2 flex-shrink-0">
 
@@ -223,11 +215,6 @@ export default function DashboardLayout() {
             </div>
           </div>
         </header>
-
-        {/* Live ticker strip */}
-        <div className="bg-[#0b0e11] border-b border-[#2b3139] overflow-hidden flex-shrink-0">
-          <LiveTickerBar />
-        </div>
 
         {/* Page content */}
         <main className="flex-1 overflow-y-auto pb-24">
@@ -327,29 +314,3 @@ export default function DashboardLayout() {
   )
 }
 
-function LiveTickerBar() {
-  const { btcPrice, btcChange, ethPrice, ethChange, loading } = useLivePrices(60000)
-  const STATIC = [
-    { symbol: 'AAPL', price: 192.35, change: 0.9 },
-    { symbol: 'NVDA', price: 875,    change: 3.1 },
-  ]
-  const tickers = [
-    { symbol: 'BTC', price: btcPrice ?? 67432, change: btcChange ?? 2.4, live: !loading && btcPrice !== null },
-    { symbol: 'ETH', price: ethPrice ?? 3521,  change: ethChange ?? 1.8, live: !loading && ethPrice !== null },
-    ...STATIC.map(t => ({ ...t, live: false })),
-  ]
-  return (
-    <div className="flex items-center gap-4 px-4 py-1.5 overflow-hidden">
-      {tickers.map(t => (
-        <div key={t.symbol} className="flex items-center gap-1 text-xs whitespace-nowrap">
-          <span className="text-[#848e9c]">{t.symbol}</span>
-          <span className="text-[#eaecef] font-mono">${t.price.toLocaleString('en-US', { maximumFractionDigits: 0 })}</span>
-          <span className={t.change >= 0 ? 'text-[#0ecb81]' : 'text-[#f6465d]'}>
-            {t.change >= 0 ? '▲' : '▼'}{Math.abs(t.change).toFixed(1)}%
-          </span>
-          {t.live && <span className="w-1 h-1 rounded-full bg-[#0ecb81] animate-pulse" />}
-        </div>
-      ))}
-    </div>
-  )
-}

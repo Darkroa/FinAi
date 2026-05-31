@@ -23,14 +23,6 @@ import {
   BarChart2,
 } from 'lucide-react';
 
-function getGreeting() {
-  const h = new Date().getHours();
-  if (h < 12) return 'Good Morning';
-  if (h < 17) return 'Good Afternoon';
-  return 'Good Evening';
-}
-
-
 export default function DashboardPage() {
   const navigate = useNavigate();
   const { user } = useAuthStore();
@@ -128,8 +120,6 @@ export default function DashboardPage() {
     return () => clearInterval(interval);
   }, [fetchData]);
 
-  const firstName = user?.first_name || user?.email?.split('@')[0] || 'Trader';
-
   return (
     <div className="space-y-4">
     {/* Hero Balance Header */}
@@ -147,28 +137,21 @@ export default function DashboardPage() {
         }}
       />
 
-      <div className="relative p-5">
-        {/* Header with greeting and eye icon */}
-        <div className="flex items-center justify-between mb-5">
-          <div>
-            <p className="text-xs text-[#848e9c] font-medium">{getGreeting()},</p>
-            <p className="text-base font-bold text-[#eaecef] leading-tight">{firstName}</p>
-          </div>
-
-          <button
-            onClick={() => setHideBalance((h) => !h)}
-            className="w-8 h-8 rounded-full bg-[#0b0e11]/60 flex items-center justify-center text-[#848e9c] hover:text-[#eaecef] transition border border-[#2b3139]/60"
-          >
-            {hideBalance ? <EyeOff size={13} /> : <Eye size={13} />}
-          </button>
-        </div>
-
+      <div className="relative p-6">
         {/* Balance Section */}
-        <div className="mb-2">
-          <p className="text-[8px] font-semibold uppercase tracking-widest text-[#848e9c] mb-2">
-            Total Balance
-          </p>
-          <p className="text-3xl font-extrabold font-mono text-[#eaecef] leading-none tracking-tight">
+        <div className="mb-3">
+          <div className="flex items-center justify-between mb-3">
+            <p className="text-[9px] font-semibold uppercase tracking-widest text-[#848e9c]">
+              Total Balance
+            </p>
+            <button
+              onClick={() => setHideBalance((h) => !h)}
+              className="w-8 h-8 rounded-full bg-[#0b0e11]/60 flex items-center justify-center text-[#848e9c] hover:text-[#eaecef] transition border border-[#2b3139]/60"
+            >
+              {hideBalance ? <EyeOff size={13} /> : <Eye size={13} />}
+            </button>
+          </div>
+          <p className="text-4xl font-extrabold font-mono text-[#eaecef] leading-none tracking-tight">
             {hideBalance ? '••••••' : `$${balance.toLocaleString('en-US', { minimumFractionDigits: 2 })}`}
           </p>
         </div>
