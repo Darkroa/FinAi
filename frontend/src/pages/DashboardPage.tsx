@@ -362,26 +362,6 @@ export default function DashboardPage() {
           ))}
         </div>
       </div>
-      {/* ─── LIVE MARKET SNAPSHOT ─── */}
-      <section className="py-12 sm:py-16 bg-[#0d1014]">
-        <div className="max-w-5xl mx-auto px-4 sm:px-6">
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-            {tickerItems.slice(0, 4).map(t => (
-              <div key={t.symbol}
-                className="bg-[#161a1e] border border-[#2b3139] hover:border-[#f0b90b]/25 rounded-xl p-4 transition-all">
-                <div className="flex items-center justify-between mb-2">
-                  <p className="text-xs text-[#848e9c] font-medium">{t.symbol}</p>
-                  {t.live && <span className="w-1.5 h-1.5 rounded-full bg-[#0ecb81] animate-pulse" />}
-                </div>
-                <p className="text-base font-bold font-mono text-[#eaecef]">{t.price}</p>
-                <p className={`text-xs font-semibold mt-1 ${t.up ? 'text-[#0ecb81]' : 'text-[#f6465d]'}`}>
-                  {t.change} <span className="text-[#4a5568] font-normal">24h</span>
-                </p>
-              </div>
-            ))}
-          </div>
-        </div>
-      </section>
       
       {/* AI Events */}
       <div>

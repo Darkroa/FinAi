@@ -13,6 +13,16 @@ import { getUserNotifications, markAllNotificationsRead } from '../lib/api'
 
 import AdPopup from '../components/AdPopup'
 
+const getGreeting = (): string => {
+  const hour = new Date().getHours();
+
+  if (hour < 5) return "Good Early Morning";
+  if (hour < 12) return "Good Morning";
+  if (hour < 17) return "Good Afternoon";
+  if (hour < 22) return "Good Evening";
+  return "Good Night";
+};
+
 const TIER_META = [
   { label: 'Unverified', color: 'text-[#848e9c]' },
   { label: 'Tier 1',     color: 'text-[#f0b90b]' },
@@ -149,13 +159,40 @@ export default function DashboardLayout() {
           <div className="flex items-center justify-between px-4 py-3 gap-3">
 
             {/* LEFT — Profile pic (opens nav drawer) */}
-            <button onClick={() => setNavOpen(v => !v)}
-              className="w-11 h-11 rounded-full overflow-hidden border-2 border-[#f0b90b]/30 hover:border-[#f0b90b] flex-shrink-0 transition">
-              {user?.profile_photo
-                ? <img src={user.profile_photo} alt="" className="w-full h-full object-cover" />
-                : <div className="w-full h-full bg-[#f0b90b] flex items-center justify-center text-black font-bold">{user?.email?.[0]?.toUpperCase() ?? 'U'}</div>
-              }
-            </button>
+            <div className="flex items-center gap-4">
+              {/* Your existing Profile Button */}
+              <button 
+                onClick={() => setNavOpen(v => !v)}
+                className="w-11 h-11 rounded-full overflow-hidden border-2 border-[#f0b90b]/30 hover:border-[#f0b90b] flex-shrink-0 transition"
+              >
+                {user?.profile_photo
+                  ? <img src={user.profile_photo} alt="" className="w-full h-full object-cover" />
+                  : <div className="w-full h-full bg-[#f0b90b] flex items-center justify-center text-black font-bold">
+                      {user?.email?.[0]?.toUpperCase() ?? 'U'}
+                    </div>
+                }
+              </button>
+              {/* Greeting Section - Opposite the Profile Icon */}
+                  
+                    <div className="flex flex-col items-left">   
+                      {/* 👋 Hi + Name Line */}
+                      <div className="flex items-left ">
+                        <span className="text-white font-medium opacity-95 text-[9px] tracking-wide">Hi,  </span>
+                        <span className="text-white text-1xl text-[8px] font-semibold">{user?.first_name || user?.email?.split('@')[0] || 'User'}
+                        </span>
+                      </div>
+
+                      {/* Greeting Below - Small & Faded */}
+                      <span className="text-[#f0b90b] text-xs font-medium opacity-75  tracking-wide">
+                        {getGreeting()}
+                      </span>
+
+                    </div>
+              </div>
+           
+              
+          
+            
 
             {/* RIGHT — Chat + Bell + Brightness */}
             <div className="flex items-center gap-2 flex-shrink-0">

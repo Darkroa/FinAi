@@ -3779,3 +3779,4 @@ async def admin_delete_testimonial(testimonial_id: int, db: Session = Depends(ge
     db.delete(t)
     db.commit()
     return {"message": "Testimonial deleted"}
+

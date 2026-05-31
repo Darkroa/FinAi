@@ -89,6 +89,7 @@ else:
 # ===================== Startup & Shutdown Events =====================
 @app.on_event("startup")
 async def startup_event():
+    
     # DB schema
     Base.metadata.create_all(bind=engine)
     from sqlalchemy import text as _text
