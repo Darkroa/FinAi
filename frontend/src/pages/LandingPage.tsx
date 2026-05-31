@@ -115,10 +115,12 @@ export default function LandingPage() {
           </div>
 
           <nav className="hidden md:flex items-center gap-6">
-            {['Features', 'Markets', 'Pricing'].map(n => (
+            {(['Features', 'Markets', 'Pricing'] as const).map(n => (
               <a key={n} href={`#${n.toLowerCase()}`}
                 className="text-sm text-[#848e9c] hover:text-[#eaecef] transition font-medium">{n}</a>
             ))}
+            <button onClick={() => navigate('/about')}
+              className="text-sm text-[#848e9c] hover:text-[#eaecef] transition font-medium">About</button>
           </nav>
 
           <button onClick={() => setMobileMenuOpen(v => !v)}
@@ -398,11 +400,13 @@ export default function LandingPage() {
             </div>
             <span className="text-[#f0b90b] font-bold text-sm">FinAi</span>
           </div>
-          <div className="flex items-center gap-6">
-            {['Features', 'Markets', 'Pricing'].map(n => (
+          <div className="flex flex-wrap items-center gap-5">
+            {(['Features', 'Markets', 'Pricing'] as const).map(n => (
               <a key={n} href={`#${n.toLowerCase()}`}
                 className="text-xs text-[#4a5568] hover:text-[#848e9c] transition">{n}</a>
             ))}
+            <button onClick={() => navigate('/about')} className="text-xs text-[#4a5568] hover:text-[#848e9c] transition">About</button>
+            <button onClick={() => navigate('/terms')} className="text-xs text-[#4a5568] hover:text-[#848e9c] transition">Terms</button>
           </div>
           <p className="text-xs text-[#4a5568]">
             © {new Date().getFullYear()} FinAi · Not financial advice

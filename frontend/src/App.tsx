@@ -2,6 +2,8 @@ import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-route
 import { Toaster } from 'react-hot-toast'
 import { useEffect, useRef } from 'react'
 import LandingPage from './pages/LandingPage'
+import AboutPage from './pages/AboutPage'
+import TermsPage from './pages/TermsPage'
 import LoginPage from './pages/LoginPage'
 import DashboardPage from './pages/DashboardPage'
 import MarketsPage from './pages/MarketsPage'
@@ -55,13 +57,32 @@ export default function App() {
     <BrowserRouter>
       <VisitorBeacon />
       <Toaster
-        position="top-right"
+        position="bottom-right"
+        gutter={8}
         toastOptions={{
-          style: { background: '#1e2329', color: '#eaecef', border: '1px solid #2b3139' },
+          duration: 3500,
+          style: {
+            borderRadius: '12px',
+            padding: '12px 16px',
+            fontSize: '13px',
+            fontWeight: '500',
+            boxShadow: '0 8px 32px rgba(0,0,0,0.5)',
+            maxWidth: '380px',
+          },
+          success: {
+            style: { background: '#166534', color: '#fff', border: '1px solid #15803d' },
+            iconTheme: { primary: '#fff', secondary: '#166534' },
+          },
+          error: {
+            style: { background: '#7f1d1d', color: '#fff', border: '1px solid #b91c1c' },
+            iconTheme: { primary: '#fff', secondary: '#7f1d1d' },
+          },
         }}
       />
       <Routes>
         <Route path="/" element={<LandingPage />} />
+        <Route path="/about" element={<AboutPage />} />
+        <Route path="/terms" element={<TermsPage />} />
         <Route path="/login" element={<LoginPage />} />
         <Route
           path="/app"

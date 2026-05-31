@@ -20,7 +20,7 @@ from src.auth.dependencies import get_current_user, require_admin
 from src.database.models import (
     User, APIKey, Transaction, UserMoney, Event,
     Notification, WalletConfig, SupportTicket, SupportMessage, TradeLog, PriceAlert,
-    SubscriptionRequest, Ad
+    SubscriptionRequest, Ad, Testimonial
 )
 
 # ===================== Pydantic Schemas =====================
@@ -3695,3 +3695,83 @@ async def admin_reset_referral_code(user_id: int, db: Session = Depends(get_db))
         "referral_code": u.referral_code,
         "referral_link": f"https://{domain}/login?ref={u.referral_code}" if domain else None,
     }
+
+
+# ===================== Testimonials =====================
+
+class TestimonialCreate(BaseModel):
+    name: str
+    role: Optional[str] = None
+    content: str
+    rating: int = 5
+    avatar_initials: Optional[str] = None
+    avatar_color: Optional[str] = None
+
+@router.get("/testimonials")
+async def list_testimonials(db: Session = Depends(get_db)):
+    """Public endpoint — returns active testimonials for the About page."""
+    items = (
+        db.query(Testimonial)
+        .filter(Testimonial.is_active == True)
+        .order_by(Testimonial.created_at.asc())
+        .all()
+    )
+    return [
+        {
+            "id": t.id,
+            "name": t.name,
+            "role": t.role,
+            "content": t.content,
+            "rating": t.rating,
+            "avatar_initials": t.avatar_initials,
+            "avatar_color": t.avatar_color,
+        }
+        for t in items
+    ]
+
+@router.post("/admin/testimonials", dependencies=[Depends(require_admin)])
+async def admin_create_testimonial(body: TestimonialCreate, db: Session = Depends(get_db)):
+    t = Testimonial(
+        name=body.name,
+        role=body.role,
+        content=body.content,
+        rating=max(1, min(5, body.rating)),
+        avatar_initials=body.avatar_initials or body.name[:2].upper(),
+        avatar_color=body.avatar_color or "#f0b90b",
+    )
+    db.add(t)
+    db.commit()
+    db.refresh(t)
+    return {"id": t.id, "name": t.name, "message": "Testimonial created"}
+
+@router.put("/admin/testimonials/{testimonial_id}", dependencies=[Depends(require_admin)])
+async def admin_update_testimonial(testimonial_id: int, body: TestimonialCreate, db: Session = Depends(get_db)):
+    t = db.query(Testimonial).filter(Testimonial.id == testimonial_id).first()
+    if not t:
+        raise HTTPException(status_code=404, detail="Testimonial not found")
+    t.name = body.name
+    t.role = body.role
+    t.content = body.content
+    t.rating = max(1, min(5, body.rating))
+    t.avatar_initials = body.avatar_initials or body.name[:2].upper()
+    t.avatar_color = body.avatar_color or "#f0b90b"
+    db.commit()
+    return {"id": t.id, "name": t.name, "message": "Testimonial updated"}
+
+@router.patch("/admin/testimonials/{testimonial_id}/toggle", dependencies=[Depends(require_admin)])
+async def admin_toggle_testimonial(testimonial_id: int, db: Session = Depends(get_db)):
+    t = db.query(Testimonial).filter(Testimonial.id == testimonial_id).first()
+    if not t:
+        raise HTTPException(status_code=404, detail="Testimonial not found")
+    t.is_active = not t.is_active
+    db.commit()
+    return {"id": t.id, "is_active": t.is_active}
+
+@router.delete("/admin/testimonials/{testimonial_id}", dependencies=[Depends(require_admin)])
+async def admin_delete_testimonial(testimonial_id: int, db: Session = Depends(get_db)):
+    t = db.query(Testimonial).filter(Testimonial.id == testimonial_id).first()
+    if not t:
+        raise HTTPException(status_code=404, detail="Testimonial not found")
+    db.delete(t)
+    db.commit()
+    return {"message": "Testimonial deleted"}

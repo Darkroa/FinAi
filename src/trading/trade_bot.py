@@ -572,7 +572,7 @@ class TradingBotInstance:
             self.capital += max(proceeds, 0.0)
 
             if not self.paper:
-                self._update_user_balance(pnl)  # credit/debit only the P&L delta
+                self._update_user_balance(proceeds)  # return margin + P&L to user balance
 
             trade = {
                 "time":   datetime.now(),

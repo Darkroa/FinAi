@@ -11,7 +11,7 @@ import {
   Bot, Play, Square, RefreshCw, TrendingUp, Activity, Zap, Brain,
   Save, ChevronDown, BarChart2, Lock, KeyRound, ArrowRight,
   TrendingDown, DollarSign, Cpu, Plus, X, Target, ArrowUpDown,
-  ChevronUp, Crown,
+  ChevronUp, Crown, Calculator,
 } from 'lucide-react'
 import {
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip,
@@ -84,7 +84,7 @@ const EMPTY_PARAMS = {
   strategy: 'finlux' as 'sma' | 'finlux' | 'auto' | 'live',
   take_profit_pct: 50,
   stop_loss_pct: 30,
-  leverage: 100,
+  leverage: 200,
   sl_usdt: 100,
   direction: 'auto' as 'auto' | 'buy' | 'sell',
   bot_name: '',
@@ -208,6 +208,13 @@ export default function BotsPage() {
       }))
     }
   }, [user])
+
+  // When strategy switches to 'live', auto-set direction away from 'auto'
+  useEffect(() => {
+    if (params.strategy === 'live' && params.direction === 'auto') {
+      setParams(p => ({ ...p, direction: 'buy' }))
+    }
+  }, [params.strategy])
 
   // ── FinEventAI multi-bot handlers ─────────────────────────────────────────
   const fetchFeStatus = useCallback(async () => {
@@ -555,13 +562,19 @@ export default function BotsPage() {
             <div>
               <label className="text-xs text-[#848e9c] mb-1.5 block">Bot Direction</label>
               <div className="flex gap-1 bg-[#0b0e11] p-1 rounded-xl border border-[#2b3139]">
-                {([['auto', 'Auto', ArrowUpDown], ['buy', 'Buy Only', TrendingUp], ['sell', 'Sell Only', TrendingDown]] as const).map(([val, lbl, Icon]) => (
-                  <button key={val} onClick={() => setParams(p => ({ ...p, direction: val }))}
+                {(params.strategy === 'live'
+                  ? [['buy', 'Buy Only', TrendingUp], ['sell', 'Sell Only', TrendingDown]] as const
+                  : [['auto', 'Auto', ArrowUpDown], ['buy', 'Buy Only', TrendingUp], ['sell', 'Sell Only', TrendingDown]] as const
+                ).map(([val, lbl, Icon]) => (
+                  <button key={val} onClick={() => setParams(p => ({ ...p, direction: val as typeof p.direction }))}
                     className={`flex-1 flex items-center justify-center gap-1 py-2 rounded-lg text-xs font-semibold transition ${params.direction === val ? val === 'buy' ? 'bg-[#0ecb81] text-black' : val === 'sell' ? 'bg-[#f6465d] text-white' : 'bg-[#f0b90b] text-black' : 'text-[#848e9c] hover:text-[#eaecef]'}`}>
                     <Icon size={10} />{lbl}
                   </button>
                 ))}
               </div>
+              {params.strategy === 'live' && (
+                <p className="text-[10px] text-[#f0b90b] mt-1">Live mode: choose Buy or Sell direction</p>
+              )}
             </div>
 
             {/* Route */}
@@ -666,14 +679,43 @@ export default function BotsPage() {
             {/* Max drawdown */}
             <div>
               <label className="text-xs text-[#848e9c] mb-1.5 block">
-                Max Drawdown Stop: <span className="text-[#f6465d] font-semibold">{params.max_drawdown_pct}%</span>
+                Max Drawdown Stop (%)
               </label>
-              <input type="range" min={1} max={50} step={1} value={params.max_drawdown_pct}
-                onChange={e => setParams(p => ({ ...p, max_drawdown_pct: parseFloat(e.target.value) }))}
-                className="w-full accent-[#f6465d]" />
-              <div className="flex justify-between text-[10px] text-[#4a5568] mt-1">
-                <span>1%</span><span>Stop bot at this loss</span><span>50%</span>
-              </div>
+              <input type="number" min={1} max={50} step={1} value={params.max_drawdown_pct}
+                onChange={e => setParams(p => ({ ...p, max_drawdown_pct: Math.min(50, Math.max(1, parseFloat(e.target.value) || 1)) }))}
+                className="w-full bg-[#0b0e11] border border-[#2b3139] focus:border-[#f6465d] rounded-xl px-3 py-2.5 text-sm font-mono text-[#f6465d] focus:outline-none transition" />
+              <p className="text-[10px] text-[#4a5568] mt-1">Stop bot when portfolio drops <span className="text-[#f6465d]">{params.max_drawdown_pct}%</span> — Range: 1% – 50%</p>
+            </div>
+
+            {/* Margin Calculator */}
+            <div className="sm:col-span-2 lg:col-span-3">
+              {(() => {
+                const reqMargin = (params.lot_size * 100_000) / Math.max(params.leverage, 1)
+                const ok = params.initial_capital >= reqMargin
+                return (
+                  <div className={`flex items-center gap-3 p-3 rounded-xl border ${ok ? 'bg-[#0ecb81]/5 border-[#0ecb81]/20' : 'bg-[#f6465d]/5 border-[#f6465d]/20'}`}>
+                    <div className={`w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 ${ok ? 'bg-[#0ecb81]/10' : 'bg-[#f6465d]/10'}`}>
+                      <Calculator size={14} className={ok ? 'text-[#0ecb81]' : 'text-[#f6465d]'} />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-[10px] text-[#848e9c] mb-0.5">Live Margin Required</p>
+                      <div className="flex flex-wrap items-center gap-x-4 gap-y-0.5">
+                        <span className={`text-sm font-bold font-mono ${ok ? 'text-[#0ecb81]' : 'text-[#f6465d]'}`}>
+                          ${reqMargin.toLocaleString('en-US', { maximumFractionDigits: 2 })}
+                        </span>
+                        <span className="text-[10px] text-[#4a5568]">
+                          {params.lot_size} lot × 100,000 ÷ 1:{params.leverage} = ${reqMargin.toFixed(2)}
+                        </span>
+                        {!ok && <span className="text-[10px] text-[#f6465d] font-semibold">⚠ Increase capital or reduce lot size</span>}
+                      </div>
+                    </div>
+                    <div className="text-right flex-shrink-0">
+                      <p className="text-[10px] text-[#4a5568]">Capital</p>
+                      <p className={`text-sm font-bold font-mono ${ok ? 'text-[#eaecef]' : 'text-[#f6465d]'}`}>${params.initial_capital.toLocaleString()}</p>
+                    </div>
+                  </div>
+                )
+              })()}
             </div>
 
             {/* Summary + start */}
@@ -908,15 +950,17 @@ export default function BotsPage() {
             <button onClick={fetchFeStatus} className="p-2 rounded-lg text-[#848e9c] hover:text-[#eaecef] hover:bg-[#2b3139] transition">
               <RefreshCw size={13} />
             </button>
-            {feMaxBots > 0 && feBots.filter(b => b.running).length < feMaxBots && (
-              <button onClick={() => { setShowFePanel(s => !s); setFeCollapsed(false) }}
-                className="flex items-center gap-2 px-4 py-2 rounded-xl bg-[#627eea]/10 hover:bg-[#627eea]/20 border border-[#627eea]/30 text-[#627eea] text-xs font-semibold transition">
-                <Play size={11} /> {showFePanel ? 'Cancel' : 'Add Bot'}
+            {feMaxBots > 0 && feBots.some(b => b.running) && showFePanel && (
+              <button onClick={() => setShowFePanel(false)}
+                className="p-2 rounded-lg text-[#848e9c] hover:text-[#eaecef] hover:bg-[#2b3139] transition">
+                <X size={13} />
               </button>
             )}
-            <button onClick={() => setFeCollapsed(c => !c)} className="p-2 rounded-lg text-[#848e9c] hover:text-[#eaecef] hover:bg-[#2b3139] transition">
-              {feCollapsed ? <ChevronDown size={14} /> : <ChevronUp size={14} />}
-            </button>
+            {feBots.some(b => b.running) && (
+              <button onClick={() => setFeCollapsed(c => !c)} className="p-2 rounded-lg text-[#848e9c] hover:text-[#eaecef] hover:bg-[#2b3139] transition">
+                {feCollapsed ? <ChevronDown size={14} /> : <ChevronUp size={14} />}
+              </button>
+            )}
           </div>
         </div>
 
@@ -1030,17 +1074,23 @@ export default function BotsPage() {
 
             {/* Empty state */}
             {feBots.length === 0 && feTrades.length === 0 && !showFePanel && (
-              <div className="py-8 text-center border-t border-[#2b3139]">
-                <Brain size={28} className="text-[#2b3139] mx-auto mb-2" />
+              <div className="py-10 text-center border-t border-[#2b3139]">
+                <div className="w-16 h-16 rounded-full bg-[#627eea]/10 border border-[#627eea]/20 flex items-center justify-center mx-auto mb-3">
+                  <Brain size={26} className="text-[#627eea]" />
+                </div>
                 {feMaxBots === 0 ? (
                   <>
-                    <p className="text-sm text-[#848e9c]">FinEventAI bots require a Pro subscription or higher</p>
-                    <p className="text-xs text-[#4a5568] mt-0.5">Upgrade your plan to unlock up to 50 bots</p>
+                    <p className="text-sm text-[#848e9c] font-semibold">FinEventAI bots require a Pro plan or higher</p>
+                    <p className="text-xs text-[#4a5568] mt-1">Upgrade your plan to unlock up to 50 bots</p>
                   </>
                 ) : (
                   <>
-                    <p className="text-sm text-[#848e9c]">No FinEventAI bots running</p>
-                    <p className="text-xs text-[#4a5568] mt-0.5">Your plan allows {feMaxBots} bot{feMaxBots !== 1 ? 's' : ''} · click "Add Bot" to get started</p>
+                    <p className="text-sm text-[#848e9c] font-semibold">No FinEventAI bots running</p>
+                    <p className="text-xs text-[#4a5568] mt-1">Your plan allows {feMaxBots} bot{feMaxBots !== 1 ? 's' : ''}</p>
+                    <button onClick={() => { setShowFePanel(true); setFeCollapsed(false) }}
+                      className="mt-4 inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-[#627eea]/10 hover:bg-[#627eea]/20 border border-[#627eea]/30 text-[#627eea] text-sm font-semibold transition">
+                      <Plus size={13} /> Add Bot
+                    </button>
                   </>
                 )}
               </div>

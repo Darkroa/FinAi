@@ -1,7 +1,7 @@
 import { useEffect, useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuthStore } from '../store/authStore';
-import { getEvents, getBotStatus, getTodayPnl, finEventListBots } from '../lib/api';
+import { getEvents, getBotStatus, getTodayPnl, finEventListBots, getBotTrades } from '../lib/api';
 import { useTickerPrices } from '../hooks/useTickerPrices';
 import {
   TrendingUp,
@@ -47,6 +47,8 @@ export default function DashboardPage() {
   const [openPositions, setOpenPositions] = useState(0);
   const [portfolioValue, setPortfolioValue] = useState(0);
   const [activeBotCount, setActiveBotCount] = useState(0);
+  const [newsCount, setNewsCount] = useState(0);
+  const [tradeCount, setTradeCount] = useState(0);
 
   const balance = user?.balance_usdt ?? 0;
 
@@ -100,6 +102,20 @@ export default function DashboardPage() {
       // FinEvent running status
       const feBots: { running: boolean }[] = finEventRes.data?.bots ?? [];
       setFinEventRunning(Array.isArray(feBots) && feBots.some((b) => b.running));
+
+      // News count + trade count
+      try {
+        const [newsRes, tradesRes] = await Promise.allSettled([
+          fetch('/api/public/news').then(r => r.json()),
+          getBotTrades(200),
+        ]);
+        if (newsRes.status === 'fulfilled' && Array.isArray(newsRes.value)) {
+          setNewsCount(newsRes.value.length);
+        }
+        if (tradesRes.status === 'fulfilled') {
+          setTradeCount(tradesRes.value.data?.trades?.length ?? 0);
+        }
+      } catch { /* silent */ }
     } catch (err) {
       console.error('Error fetching dashboard data:', err);
     }
@@ -295,9 +311,14 @@ export default function DashboardPage() {
       <div>
         <p className="text-xs font-bold text-[#eaecef] mb-3">Activity Center</p>
         <div className="grid grid-cols-3 gap-2">
-          <button onClick={() => navigate('/app/news')} className="bg-[#161a1e] border border-[#2b3139] rounded-xl p-6 flex flex-col items-center justify-center">
+          <button onClick={() => navigate('/app/news')} className="bg-[#161a1e] border border-[#2b3139] rounded-xl p-6 flex flex-col items-center justify-center relative">
             <Newspaper size={28} className="text-[#f0b90b] mb-2" />
             <span className="text-sm font-semibold">News</span>
+            {newsCount > 0 && (
+              <span className="absolute top-2 right-2 min-w-[18px] h-[18px] bg-[#f0b90b] text-black text-[9px] font-bold rounded-full flex items-center justify-center px-1">
+                {newsCount > 99 ? '99+' : newsCount}
+              </span>
+            )}
           </button>
 
           <button onClick={() => navigate('/app/bots')} className="bg-[#161a1e] border border-[#2b3139] rounded-xl p-4 flex flex-col items-center justify-center gap-1">
@@ -322,9 +343,14 @@ export default function DashboardPage() {
             </div>
           </button>
           
-          <button onClick={() => navigate('/app/trade')} className="bg-[#161a1e] border border-[#2b3139] rounded-xl p-6 flex flex-col items-center justify-center">
+          <button onClick={() => navigate('/app/trade')} className="bg-[#161a1e] border border-[#2b3139] rounded-xl p-6 flex flex-col items-center justify-center relative">
             <Activity size={28} className="text-[#eaecef] mb-2" />
             <span className="text-sm font-semibold">Trade</span>
+            {tradeCount > 0 && (
+              <span className="absolute top-2 right-2 min-w-[18px] h-[18px] bg-[#627eea] text-white text-[9px] font-bold rounded-full flex items-center justify-center px-1">
+                {tradeCount > 99 ? '99+' : tradeCount}
+              </span>
+            )}
           </button>
         </div>
       </div>

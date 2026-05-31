@@ -336,6 +336,21 @@ class Ad(Base):
     creator = relationship("User", foreign_keys=[created_by])
 
 
+class Testimonial(Base):
+    """Admin-managed user reviews / Trustpilot-style ratings shown on the About page."""
+    __tablename__ = "testimonials"
+
+    id              = Column(Integer, primary_key=True, index=True)
+    name            = Column(String(100), nullable=False)
+    role            = Column(String(150), nullable=True)
+    content         = Column(Text, nullable=False)
+    rating          = Column(Integer, default=5)           # 1–5 stars
+    avatar_initials = Column(String(5), nullable=True)
+    avatar_color    = Column(String(20), nullable=True)
+    is_active       = Column(Boolean, default=True)
+    created_at      = Column(DateTime, default=datetime.utcnow)
+
+
 class Bonus(Base):
     """Admin-created bonus campaigns (referral, tier achievement, manual grants)"""
     __tablename__ = "bonuses"

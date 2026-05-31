@@ -10,7 +10,6 @@ import {
 import { cn } from '../lib/utils'
 import { getUserNotifications, markAllNotificationsRead } from '../lib/api'
 import { useLivePrices } from '../hooks/useLivePrices'
-import FloatingAI from '../components/FloatingAI'
 import AdPopup from '../components/AdPopup'
 
 const navItems = [
@@ -290,7 +289,7 @@ export default function DashboardLayout() {
       </div>
 
       {/* Floating AI button */}
-      <FloatingAI />
+
 
       {/* In-app Ad popup */}
       <AdPopup />

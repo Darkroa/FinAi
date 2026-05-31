@@ -306,6 +306,13 @@ export const adminCreateAd = (data: { title: string; image_base64?: string; link
 export const adminToggleAd = (id: number) => api.patch(`/admin/ads/${id}/toggle`)
 export const adminDeleteAd = (id: number) => api.delete(`/admin/ads/${id}`)
 
+// Testimonials
+export const adminGetTestimonials = () => api.get('/testimonials')
+export const adminCreateTestimonial = (data: { name: string; role?: string; content: string; rating: number; avatar_initials?: string; avatar_color?: string }) => api.post('/admin/testimonials', data)
+export const adminUpdateTestimonial = (id: number, data: { name: string; role?: string; content: string; rating: number; avatar_initials?: string; avatar_color?: string }) => api.put(`/admin/testimonials/${id}`, data)
+export const adminToggleTestimonial = (id: number) => api.patch(`/admin/testimonials/${id}/toggle`)
+export const adminDeleteTestimonial = (id: number) => api.delete(`/admin/testimonials/${id}`)
+
 // VPS Plans & Asset Products (public)
 export const getVpsPlans = () => api.get('/wallet/vps-plans')
 export const getAssetProducts = () => api.get('/wallet/asset-products')

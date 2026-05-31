@@ -64,13 +64,13 @@ export default function LoginPage() {
     <div className="min-h-screen bg-[#0b0e11] flex flex-col items-center justify-center px-4 py-10">
 
       {/* Logo */}
-      <div className="flex flex-col items-center mb-8">
-        <div className="w-16 h-16 rounded-2xl bg-[#f0b90b] flex items-center justify-center mb-4 shadow-lg shadow-[#f0b90b]/30">
+      <button onClick={() => navigate('/')} className="flex flex-col items-center mb-8 group">
+        <div className="w-16 h-16 rounded-2xl bg-[#f0b90b] group-hover:bg-[#d4a30a] flex items-center justify-center mb-4 shadow-lg shadow-[#f0b90b]/30 transition-colors">
           <Zap size={32} className="text-black" />
         </div>
-        <h1 className="text-2xl font-extrabold text-[#eaecef] tracking-tight">FinAi</h1>
+        <h1 className="text-2xl font-extrabold text-[#eaecef] tracking-tight group-hover:text-[#f0b90b] transition-colors">FinAi</h1>
         <p className="text-[#848e9c] text-xs mt-1">AI-Powered Trading Platform</p>
-      </div>
+      </button>
 
       {/* Card */}
       <div className="w-full max-w-sm bg-[#161a1e] border border-[#2b3139] rounded-2xl p-6 shadow-2xl">
@@ -168,6 +168,20 @@ export default function LoginPage() {
                 </p>
               )}
             </div>
+          )}
+
+          {mode === 'signup' && (
+            <label className="flex items-start gap-2 cursor-pointer">
+              <input type="checkbox" required className="mt-0.5 accent-[#f0b90b] flex-shrink-0" />
+              <span className="text-xs text-[#848e9c] leading-relaxed">
+                I agree to the{' '}
+                <button type="button" onClick={() => window.open('/terms', '_blank')}
+                  className="text-[#f0b90b] hover:text-[#d4a30a] underline transition">
+                  Terms & Conditions
+                </button>
+                {' '}and Privacy Policy
+              </span>
+            </label>
           )}
 
           <button type="submit" disabled={loading}

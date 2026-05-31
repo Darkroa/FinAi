@@ -20,7 +20,9 @@ def get_llm(model: str = "grok", temperature: float = 0.6, **kwargs):
             logger.warning("GROK_API_KEY not found → falling back to GPT")
             return get_llm("gpt", temperature, **kwargs)
 
-    openai_key = os.getenv("OPENAI_API_KEY") or "placeholder"
+    openai_key = os.getenv("OPENAI_API_KEY")
+    if not openai_key:
+        raise ValueError("No AI API keys configured. Fin is temporarily unavailable.")
     return ChatOpenAI(
         model="gpt-4o-mini",
         temperature=temperature,

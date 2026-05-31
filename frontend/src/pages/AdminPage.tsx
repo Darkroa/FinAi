@@ -10,6 +10,7 @@ import {
   adminGetAds, adminCreateAd, adminToggleAd, adminDeleteAd,
   adminSaveVpsPlans, adminSaveAssetProducts, adminSavePricingPlans,
   getVpsPlans, getAssetProducts, getPricingPlans,
+  adminGetTestimonials, adminCreateTestimonial, adminUpdateTestimonial, adminToggleTestimonial, adminDeleteTestimonial,
 } from '../lib/api'
 import { AdminLiveVisitors } from '../components/AdminLiveVisitors'
 import toast from 'react-hot-toast'
@@ -18,10 +19,10 @@ import {
   Key, MessageSquare, Activity, Wallet, Save, RefreshCw,
   Edit3, CreditCard, Eye, Gift, Trash2, ToggleLeft, ToggleRight,
   Share2, Copy, RotateCcw, Megaphone, Image, Plus, Link2, ExternalLink,
-  Server, ShoppingBag, Package, DollarSign, X,
+  Server, ShoppingBag, Package, DollarSign, X, Star,
 } from 'lucide-react'
 
-type Tab = 'users' | 'transactions' | 'notifications' | 'wallet-config' | 'api-users' | 'support' | 'health' | 'subscriptions' | 'visitors' | 'bonuses' | 'referrals' | 'ads' | 'products'
+type Tab = 'users' | 'transactions' | 'notifications' | 'wallet-config' | 'api-users' | 'support' | 'health' | 'subscriptions' | 'visitors' | 'bonuses' | 'referrals' | 'ads' | 'products' | 'testimonials'
 
 interface VpsPlan { id: number; name: string; price: number; specs: string }
 interface AssetProduct { id: number; name: string; price: number; icon: string }
@@ -61,6 +62,12 @@ export default function AdminPage() {
   const [adImageName, setAdImageName] = useState('')
   const [adLoading, setAdLoading] = useState(false)
   const [viewProofTx, setViewProofTx] = useState<any>(null)
+
+  // Testimonials
+  const [testimonials, setTestimonials] = useState<any[]>([])
+  const [testimonialForm, setTestimonialForm] = useState({ name: '', role: '', content: '', rating: 5, avatar_color: '#f0b90b' })
+  const [editingTestimonial, setEditingTestimonial] = useState<any>(null)
+  const [testimonialLoading, setTestimonialLoading] = useState(false)
 
   // Products management
   const [vpsPlans, setVpsPlans] = useState<VpsPlan[]>([])
@@ -138,6 +145,10 @@ export default function AdminPage() {
     if (t === 'ads') {
       const res = await adminGetAds().catch(() => null)
       if (res) setAds(Array.isArray(res.data) ? res.data : [])
+    }
+    if (t === 'testimonials') {
+      const res = await adminGetTestimonials().catch(() => null)
+      if (res) setTestimonials(Array.isArray(res.data) ? res.data : [])
     }
     if (t === 'products') {
       setProductsLoading(true)
@@ -264,6 +275,7 @@ export default function AdminPage() {
     { id: 'health', label: 'Health', icon: Activity },
     { id: 'visitors', label: 'Live Visitors', icon: Eye },
     { id: 'ads', label: 'Ads', icon: Megaphone },
+    { id: 'testimonials', label: 'Reviews', icon: Star },
   ] as const
 
   const inp = 'w-full bg-[#0b0e11] border border-[#2b3139] rounded-xl px-3 py-2 text-sm text-[#eaecef] placeholder-[#4a5568] focus:outline-none focus:border-[#f0b90b] transition'
@@ -1666,6 +1678,153 @@ export default function AdminPage() {
           )}
         </div>
       )}
+
+      {/* TESTIMONIALS MANAGEMENT */}
+      {tab === 'testimonials' && (
+        <div className="space-y-4">
+          {/* Create / Edit form */}
+          <div className="bg-[#161a1e] border border-[#2b3139] rounded-xl p-5">
+            <h2 className="text-sm font-semibold text-[#eaecef] mb-4 flex items-center gap-2">
+              <Plus size={14} className="text-[#f0b90b]" />
+              {editingTestimonial ? 'Edit Review' : 'Add New Review'}
+            </h2>
+            <div className="space-y-3">
+              <div className="grid sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="text-xs text-[#848e9c] mb-1.5 block">Name *</label>
+                  <input value={testimonialForm.name}
+                    onChange={e => setTestimonialForm(f => ({ ...f, name: e.target.value }))}
+                    placeholder="e.g. Sarah M." className={inp} />
+                </div>
+                <div>
+                  <label className="text-xs text-[#848e9c] mb-1.5 block">Role / Location</label>
+                  <input value={testimonialForm.role}
+                    onChange={e => setTestimonialForm(f => ({ ...f, role: e.target.value }))}
+                    placeholder="e.g. Day Trader · London" className={inp} />
+                </div>
+              </div>
+              <div>
+                <label className="text-xs text-[#848e9c] mb-1.5 block">Review Content *</label>
+                <textarea rows={3} value={testimonialForm.content}
+                  onChange={e => setTestimonialForm(f => ({ ...f, content: e.target.value }))}
+                  placeholder="Write the testimonial content..." className={`${inp} resize-none`} />
+              </div>
+              <div className="grid sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="text-xs text-[#848e9c] mb-1.5 block">Rating (1–5 stars)</label>
+                  <div className="flex gap-1">
+                    {[1,2,3,4,5].map(s => (
+                      <button key={s} type="button" onClick={() => setTestimonialForm(f => ({ ...f, rating: s }))}>
+                        <Star size={20} className={s <= testimonialForm.rating ? 'text-[#f0b90b] fill-[#f0b90b]' : 'text-[#2b3139]'} />
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                <div>
+                  <label className="text-xs text-[#848e9c] mb-1.5 block">Avatar Color</label>
+                  <div className="flex gap-2 flex-wrap">
+                    {['#f0b90b','#627eea','#0ecb81','#f6465d','#a78bfa','#06b6d4'].map(c => (
+                      <button key={c} type="button" onClick={() => setTestimonialForm(f => ({ ...f, avatar_color: c }))}
+                        className={`w-7 h-7 rounded-full transition ${testimonialForm.avatar_color === c ? 'ring-2 ring-[#eaecef] ring-offset-1 ring-offset-[#0b0e11]' : ''}`}
+                        style={{ background: c }} />
+                    ))}
+                  </div>
+                </div>
+              </div>
+              <div className="flex gap-2 pt-1">
+                <button
+                  onClick={async () => {
+                    if (!testimonialForm.name.trim() || !testimonialForm.content.trim()) return toast.error('Name and content required')
+                    setTestimonialLoading(true)
+                    try {
+                      const data = {
+                        name: testimonialForm.name,
+                        role: testimonialForm.role || undefined,
+                        content: testimonialForm.content,
+                        rating: testimonialForm.rating,
+                        avatar_color: testimonialForm.avatar_color,
+                        avatar_initials: testimonialForm.name.slice(0,2).toUpperCase(),
+                      }
+                      if (editingTestimonial) {
+                        await adminUpdateTestimonial(editingTestimonial.id, data)
+                        toast.success('Review updated')
+                        setTestimonials(ts => ts.map(t => t.id === editingTestimonial.id ? { ...t, ...data } : t))
+                        setEditingTestimonial(null)
+                      } else {
+                        const res = await adminCreateTestimonial(data)
+                        toast.success('Review added')
+                        setTestimonials(ts => [...ts, { ...data, id: res.data.id, is_active: true }])
+                      }
+                      setTestimonialForm({ name: '', role: '', content: '', rating: 5, avatar_color: '#f0b90b' })
+                    } catch { toast.error('Failed to save review') }
+                    finally { setTestimonialLoading(false) }
+                  }}
+                  className="flex items-center gap-1.5 bg-[#f0b90b] hover:bg-[#d4a30a] disabled:opacity-60 text-black font-bold text-xs px-4 py-2 rounded-xl transition">
+                  {testimonialLoading ? 'Saving…' : editingTestimonial ? 'Save Changes' : 'Add Review'}
+                </button>
+                {editingTestimonial && (
+                  <button onClick={() => { setEditingTestimonial(null); setTestimonialForm({ name: '', role: '', content: '', rating: 5, avatar_color: '#f0b90b' }) }}
+                    className="text-xs border border-[#2b3139] text-[#848e9c] hover:text-[#eaecef] px-4 py-2 rounded-xl transition">
+                    Cancel
+                  </button>
+                )}
+              </div>
+            </div>
+          </div>
+
+          {/* Reviews list */}
+          <div className="bg-[#161a1e] border border-[#2b3139] rounded-xl p-5">
+            <h2 className="text-sm font-semibold text-[#eaecef] mb-4">All Reviews ({testimonials.length})</h2>
+            {testimonials.length === 0 ? (
+              <p className="text-sm text-[#848e9c] text-center py-6">No reviews yet. Add the first one above.</p>
+            ) : (
+              <div className="space-y-3">
+                {testimonials.map(t => (
+                  <div key={t.id} className={`border rounded-xl p-4 ${t.is_active ? 'border-[#2b3139]' : 'border-[#2b3139] opacity-50'}`}>
+                    <div className="flex items-start gap-3">
+                      <div className="w-9 h-9 rounded-full flex items-center justify-center text-black text-xs font-bold flex-shrink-0"
+                        style={{ background: t.avatar_color || '#f0b90b' }}>
+                        {(t.avatar_initials || t.name?.slice(0,2) || '??').toUpperCase()}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 mb-1 flex-wrap">
+                          <span className="text-sm font-semibold text-[#eaecef]">{t.name}</span>
+                          {t.role && <span className="text-xs text-[#848e9c]">{t.role}</span>}
+                          <div className="flex gap-0.5 ml-auto">
+                            {[1,2,3,4,5].map(s => <Star key={s} size={10} className={s <= t.rating ? 'text-[#f0b90b] fill-[#f0b90b]' : 'text-[#2b3139]'} />)}
+                          </div>
+                        </div>
+                        <p className="text-xs text-[#848e9c] leading-relaxed">{t.content}</p>
+                      </div>
+                      <div className="flex gap-1 flex-shrink-0 ml-2">
+                        <button title="Edit" onClick={() => { setEditingTestimonial(t); setTestimonialForm({ name: t.name, role: t.role || '', content: t.content, rating: t.rating, avatar_color: t.avatar_color || '#f0b90b' }) }}
+                          className="p-1.5 rounded-lg text-[#848e9c] hover:text-[#f0b90b] hover:bg-[#2b3139] transition">
+                          <Edit3 size={12} />
+                        </button>
+                        <button title={t.is_active ? 'Deactivate' : 'Activate'} onClick={async () => {
+                          await adminToggleTestimonial(t.id).catch(() => null)
+                          setTestimonials(ts => ts.map(x => x.id === t.id ? { ...x, is_active: !x.is_active } : x))
+                        }} className="p-1.5 rounded-lg text-[#848e9c] hover:text-[#f0b90b] hover:bg-[#2b3139] transition">
+                          {t.is_active ? <ToggleRight size={12} className="text-[#0ecb81]" /> : <ToggleLeft size={12} />}
+                        </button>
+                        <button title="Delete" onClick={async () => {
+                          if (!confirm('Delete this review?')) return
+                          await adminDeleteTestimonial(t.id).catch(() => null)
+                          setTestimonials(ts => ts.filter(x => x.id !== t.id))
+                          toast.success('Review deleted')
+                        }} className="p-1.5 rounded-lg text-[#848e9c] hover:text-[#f6465d] hover:bg-[#2b3139] transition">
+                          <Trash2 size={12} />
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
     </div>
   )
 }
