@@ -1,4 +1,4 @@
-import React from 'react';
+import React from 'react';   // ← This line now "reads" the value
 import VideoTemplate from '../components/video/VideoTemplate';
 
 export default function VideoPage() {
