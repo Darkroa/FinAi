@@ -2,10 +2,11 @@ import { useNavigate } from 'react-router-dom'
 import {
   Zap, TrendingUp, Shield, BarChart2, Bot, Globe,
   ArrowRight, Activity, Lock, Cpu, Check, Menu, X,
-  Star, Crown, Infinity
+  Star, Crown, Infinity, Maximize2, Download
 } from 'lucide-react'
 import { useState } from 'react'
 import { useTickerPrices } from '../hooks/useTickerPrices'
+import VideoTemplate from '../components/video/VideoTemplate'
 
 const features = [
   { icon: Bot,        title: 'AI-Powered Bots',   desc: 'Automated strategies driven by Grok AI that react to live market events in real-time.' },
@@ -368,6 +369,51 @@ export default function LandingPage() {
               </p>
             </div>
           </div>
+        </div>
+      </section>
+
+      {/* ─── VIDEO PREVIEW ─── */}
+      <section className="py-14 sm:py-20 bg-[#0b0e11]">
+        <div className="max-w-5xl mx-auto px-4 sm:px-6">
+          <div className="text-center mb-8">
+            <p className="text-xs text-[#f0b90b] font-bold tracking-widest uppercase mb-3">Platform Preview</p>
+            <h2 className="text-2xl sm:text-3xl font-bold text-[#eaecef] mb-3">See FinAi in action</h2>
+            <p className="text-[#848e9c] text-sm">A cinematic walkthrough of everything the platform offers.</p>
+          </div>
+
+          {/* 16:9 video container */}
+          <div className="relative w-full rounded-2xl overflow-hidden border border-[#2b3139] shadow-2xl shadow-black/60"
+            style={{ aspectRatio: '16/9' }}>
+            <VideoTemplate />
+          </div>
+
+          {/* Buttons */}
+          <div className="flex items-center justify-center gap-3 mt-6">
+            <button
+              onClick={() => window.open('/video', '_blank', 'noopener')}
+              className="inline-flex items-center gap-2 bg-[#1e2329] hover:bg-[#2b3139] border border-[#2b3139] hover:border-[#3c4451] text-[#eaecef] font-semibold px-5 py-2.5 rounded-xl text-sm transition-all"
+            >
+              <Maximize2 size={14} />
+              Full Screen
+            </button>
+            <button
+              onClick={() => {
+                const w = window.open('/video', '_blank', 'width=1280,height=720,toolbar=no,menubar=no,scrollbars=no,resizable=yes')
+                if (w) {
+                  setTimeout(() => {
+                    try { w.document.title = 'FinAi — Download Video' } catch {}
+                  }, 500)
+                }
+              }}
+              className="inline-flex items-center gap-2 bg-[#f0b90b] hover:bg-[#d4a30a] text-black font-bold px-5 py-2.5 rounded-xl text-sm transition-all shadow-lg shadow-[#f0b90b]/20"
+            >
+              <Download size={14} />
+              Download
+            </button>
+          </div>
+          <p className="text-center text-[#848e9c] text-xs mt-3">
+            Opens the video full-screen — use your OS screen recorder (Win+G / Cmd+Shift+5) to save as MP4.
+          </p>
         </div>
       </section>
 
