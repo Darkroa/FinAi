@@ -20,7 +20,7 @@ type LiveData = {
 }
 
 function countryFlag(raw: string | null): { flag: string; name: string } {
-  if (!raw) return { flag: "🌐", name: "Unknown" }
+  if (!raw) return { flag: "—", name: "Unknown" }
   const [code, ...nameParts] = raw.split("|")
   const name = nameParts.join("|") || code || "Unknown"
   const flag =
@@ -30,7 +30,7 @@ function countryFlag(raw: string | null): { flag: string; name: string } {
           .replace(/./g, (c) =>
             String.fromCodePoint((c.codePointAt(0) ?? 65) + 127397)
           )
-      : "🌐"
+      : "—"
   return { flag, name }
 }
 

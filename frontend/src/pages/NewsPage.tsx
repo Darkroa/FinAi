@@ -219,7 +219,7 @@ export default function NewsPage() {
                       <span className={`text-[10px] font-semibold capitalize ${sentimentColor(item.sentiment)}`}>{item.sentiment}</span>
                     )}
                     {item.impact_score !== undefined && item.impact_score > 6 && (
-                      <span className="text-[10px] font-bold text-[#f6465d] bg-[#f6465d]/10 px-2 py-0.5 rounded">⚡ High Impact</span>
+                      <span className="text-[10px] font-bold text-[#f6465d] bg-[#f6465d]/10 px-2 py-0.5 rounded">High Impact</span>
                     )}
                   </div>
                   <span className="text-[10px] text-[#4a5568] whitespace-nowrap flex-shrink-0">{timeAgo(item.published_at)}</span>

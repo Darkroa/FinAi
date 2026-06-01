@@ -29,7 +29,7 @@ const METHODS = [
   { key: 'crypto_btc',  label: 'Bitcoin (BTC)',   cfgKey: 'btc_address',  icon: '₿', color: 'text-[#f7931a]', bg: 'bg-[#f7931a]/10', border: 'border-[#f7931a]/20' },
   { key: 'crypto_eth',  label: 'Ethereum (ETH)',   cfgKey: 'eth_address',  icon: 'Ξ', color: 'text-[#627eea]', bg: 'bg-[#627eea]/10', border: 'border-[#627eea]/20' },
   { key: 'crypto_usdt', label: 'USDT (TRC-20)',    cfgKey: 'usdt_trc20',   icon: '₮', color: 'text-[#26a17b]', bg: 'bg-[#26a17b]/10', border: 'border-[#26a17b]/20' },
-  { key: 'bank',        label: 'Bank Transfer',    cfgKey: 'bank_account', icon: '🏦', color: 'text-[#848e9c]', bg: 'bg-[#848e9c]/10', border: 'border-[#848e9c]/20' },
+  { key: 'bank',        label: 'Bank Transfer',    cfgKey: 'bank_account', icon: 'B',  color: 'text-[#848e9c]', bg: 'bg-[#848e9c]/10', border: 'border-[#848e9c]/20' },
 ]
 
 const DEFAULT_VPS: VpsPlan[] = [

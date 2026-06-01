@@ -545,8 +545,8 @@ export default function BotsPage() {
                 {([
                   ['sma',    'SMA'],
                   ['finlux', 'FinLux'],
-                  ['auto',   '🤖 AUTO'],
-                  ['live',   '⚡ LIVE'],
+                  ['auto',   'AUTO'],
+                  ['live',   'LIVE'],
                 ] as const).map(([s, label]) => (
                   <button key={s} onClick={() => setParams(p => ({ ...p, strategy: s }))}
                     className={`py-2 rounded-lg text-xs font-semibold transition ${params.strategy === s ? 'bg-[#f0b90b] text-black' : 'text-[#848e9c] hover:text-[#eaecef]'}`}>

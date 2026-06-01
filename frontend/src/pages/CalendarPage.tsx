@@ -84,7 +84,7 @@ export default function CalendarPage() {
           if (!sessionStorage.getItem(key)) {
             sessionStorage.setItem(key, '1')
             const minLeft = Math.ceil(diffMs / 60_000)
-            new Notification('⚡ High Priority Task', {
+            new Notification('High Priority Task', {
               body: diffMs > 0
                 ? `${task.title} — due in ${minLeft} min`
                 : `${task.title} — due NOW`,

@@ -181,9 +181,9 @@ export default function MarketsPage() {
     return '$' + p.toLocaleString('en-US', { minimumFractionDigits: 4, maximumFractionDigits: 6 })
   }
 
-  const catIcon = (cat: string) => {
-    if (cat === 'metals') return '⟡'
-    if (cat === 'stocks') return '◈'
+  const catLabel = (cat: string) => {
+    if (cat === 'metals') return 'M'
+    if (cat === 'stocks') return 'S'
     return cat[0].toUpperCase()
   }
 
@@ -192,7 +192,7 @@ export default function MarketsPage() {
     { key: 'crypto',  label: 'Crypto'      },
     { key: 'metals',  label: 'Metals'      },
     { key: 'stocks',  label: 'Stocks'      },
-    { key: 'heatmap', label: '📊 Heat Map'  },
+    { key: 'heatmap', label: 'Heat Map'    },
   ]
 
   return (
@@ -252,7 +252,7 @@ export default function MarketsPage() {
               <div key={m.symbol} className="bg-[#161a1e] border border-[#2b3139] hover:border-[#f0b90b]/30 rounded-2xl p-4 transition-all cursor-pointer" onClick={() => navigate('/app/trade')}>
                 <div className="flex items-center justify-between mb-3">
                   <div className="w-9 h-9 rounded-full bg-[#f0b90b]/10 flex items-center justify-center text-xs font-bold text-[#f0b90b]">
-                    {catIcon(m.cat)}
+                    {catLabel(m.cat)}
                   </div>
                   <span className={`text-xs font-bold flex items-center gap-0.5 ${m.change >= 0 ? 'text-[#0ecb81]' : 'text-[#f6465d]'}`}>
                     {m.change >= 0 ? <TrendingUp size={10} /> : <TrendingDown size={10} />}
@@ -293,7 +293,7 @@ export default function MarketsPage() {
                   <div className="flex items-center gap-3">
                     <span className="text-xs text-[#4a5568] w-4 text-center">{i + 1}</span>
                     <div className="w-8 h-8 rounded-full bg-[#f0b90b]/10 flex items-center justify-center text-xs font-bold text-[#f0b90b] flex-shrink-0">
-                      {catIcon(m.cat)}
+                      {catLabel(m.cat)}
                     </div>
                     <div>
                       <p className="text-sm font-semibold text-[#eaecef]">{m.symbol}</p>
@@ -349,7 +349,7 @@ export default function MarketsPage() {
                       <td className="px-5 py-4">
                         <div className="flex items-center gap-3">
                           <div className="w-8 h-8 rounded-full bg-[#f0b90b]/10 flex items-center justify-center text-xs font-bold text-[#f0b90b] flex-shrink-0">
-                            {catIcon(m.cat)}
+                            {catLabel(m.cat)}
                           </div>
                           <div>
                             <div className="flex items-center gap-1.5">

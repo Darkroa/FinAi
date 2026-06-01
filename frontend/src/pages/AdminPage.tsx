@@ -567,7 +567,7 @@ export default function AdminPage() {
                     className="w-full h-full object-cover"
                   />
                 ) : (
-                  <span className="text-2xl">🏦</span>
+                  <span className="text-2xl text-[#848e9c]">B</span>
                 )}
               </div>
               <div className="flex-1 space-y-2">
@@ -611,7 +611,7 @@ export default function AdminPage() {
           {/* Bank details */}
           <div className="bg-[#161a1e] border border-[#2b3139] rounded-xl p-5">
             <h2 className="text-sm font-semibold text-[#eaecef] mb-4 flex items-center gap-2">
-              <span className="text-[#848e9c]">🏦</span> Bank Transfer Details
+              Bank Transfer Details
             </h2>
             <div className="space-y-3">
               {[
