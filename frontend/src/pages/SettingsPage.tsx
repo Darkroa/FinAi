@@ -112,8 +112,8 @@ export default function SettingsPage() {
       const prefs = user.notification_preferences;
       setNotifs(prefs as NotifPrefs);
       setTradeAlerts({
-        trade_open_alert: !!(prefs as Record<string, unknown>).trade_open_alert,
-        trade_close_alert: !!(prefs as Record<string, unknown>).trade_close_alert,
+        trade_open_alert: !!((prefs as unknown as Record<string, unknown>).trade_open_alert),
+        trade_close_alert: !!((prefs as unknown as Record<string, unknown>).trade_close_alert),
       });
     }
   }, [user]);

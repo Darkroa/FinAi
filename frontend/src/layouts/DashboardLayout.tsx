@@ -31,6 +31,7 @@ const TIER_META = [
 ]
 
 const sideNavItems = [
+  { to: '/app/dashboard',     icon: Home,          label: 'Dashboard' },
   { to: '/app/wallet',        icon: Wallet,        label: 'Wallet' },
   { to: '/app/chat',          icon: MessageCircle, label: 'Chat Fin' },
   { to: '/app/news',          icon: Newspaper,     label: 'News' },
