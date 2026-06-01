@@ -177,13 +177,13 @@ export default function DashboardLayout() {
                     <div className="flex flex-col items-left">   
                       {/* 👋 Hi + Name Line */}
                       <div className="flex items-left ">
-                        <span className="text-white font-medium opacity-95 text-[9px] tracking-wide">Hi,  </span>
-                        <span className="text-white text-1xl text-[8px] font-semibold">{user?.first_name || user?.email?.split('@')[0] || 'User'}
+                        <span className="text-white font-medium opacity-95 text-[10px] tracking-wide">Hi,  </span>
+                        <span className="text-white text-1xl text-[10px] font-semibold">{user?.first_name || user?.email?.split('@')[0] || 'User'}
                         </span>
                       </div>
 
                       {/* Greeting Below - Small & Faded */}
-                      <span className="text-[#f0b90b] text-xs font-medium opacity-75  tracking-wide">
+                      <span className="text-[#f0b90b] text-xs font-medium opacity-75  text-[8px] tracking-wide">
                         {getGreeting()}
                       </span>
 
