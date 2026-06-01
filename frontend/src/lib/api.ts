@@ -205,8 +205,8 @@ export const getTelegramChatId = (token: string) =>
   api.get(`/users/telegram-chatid?token=${encodeURIComponent(token)}`)
 
 // Notification preferences
-export const updateNotificationPreferences = (prefs: { email?: boolean; whatsapp?: boolean; telegram?: boolean }) =>
-  api.post('/users/update-profile', { notification_preferences: prefs })
+export const updateNotificationPreferences = (prefs: Record<string, unknown>) =>
+  api.post('/users/notification-preferences', prefs)
 
 // Health
 export const getHealth = () => api.get('/health')

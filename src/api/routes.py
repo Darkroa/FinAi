@@ -162,6 +162,15 @@ class TradeExecuteRequest(BaseModel):
     leverage: Optional[float] = 1.0
     lot_size: Optional[float] = None
 
+class NotificationPrefsUpdate(BaseModel):
+    # Channel toggles
+    email: Optional[bool] = None
+    whatsapp: Optional[bool] = None
+    telegram: Optional[bool] = None
+    # Trade alert toggles
+    trade_open_alert: Optional[bool] = None
+    trade_close_alert: Optional[bool] = None
+
 class WhatsAppCodeRequest(BaseModel):
     phone: str
 
@@ -486,6 +495,25 @@ async def update_profile(data: KYCUpdate, current_user=Depends(get_current_user)
     # Update full_name
     parts = [user.first_name, user.middle_name, user.last_name]
     user.full_name = " ".join(p for p in parts if p)
+    db.commit()
+    db.refresh(user)
+    return _user_dict(user)
+
+
+@router.post("/users/notification-preferences")
+async def update_notification_preferences(
+    data: NotificationPrefsUpdate,
+    current_user=Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    user = db.query(User).filter(User.email == current_user["email"]).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    # Merge only the fields that were explicitly sent — never wipe unrelated keys
+    prefs = dict(user.notification_preferences or {})
+    update = data.model_dump(exclude_unset=True)
+    prefs.update(update)
+    user.notification_preferences = prefs
     db.commit()
     db.refresh(user)
     return _user_dict(user)
