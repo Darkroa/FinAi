@@ -5,6 +5,8 @@ import { getEvents, getBotStatus, getTodayPnl, finEventListBots, getBotTrades } 
 
 import { useTickerPrices } from '../hooks/useTickerPrices';
 import { useHotData } from '../hooks/useHotData';
+import { useLanguage } from '../contexts/LanguageContext';
+import { formatCurrency } from '../lib/i18n';
 import {
   TrendingUp,
   TrendingDown,
@@ -28,6 +30,7 @@ import {
 export default function DashboardPage() {
   const navigate = useNavigate();
   const { user } = useAuthStore();
+  const { currency } = useLanguage();
   const tickerItems = useTickerPrices(60000);
   useHotData();
 
@@ -155,7 +158,7 @@ export default function DashboardPage() {
             </button>
           </div>
           <p className="text-4xl font-extrabold font-mono text-[#eaecef] leading-none tracking-tight">
-            {hideBalance ? '••••••' : `$${balance.toLocaleString('en-US', { minimumFractionDigits: 2 })}`}
+            {hideBalance ? '••••••' : formatCurrency(balance, currency)}
           </p>
         </div>
 
@@ -227,7 +230,7 @@ export default function DashboardPage() {
             <span className="text-[9px] text-[#848e9c]">Today's P&L</span>
           </div>
           <p className={`text-sm font-bold font-mono ${todayPnl >= 0 ? 'text-[#0ecb81]' : 'text-[#f6465d]'}`}>
-            {todayPnl >= 0 ? '+' : ''}${todayPnl.toFixed(2)}
+            {todayPnl >= 0 ? '+' : '-'}{formatCurrency(Math.abs(todayPnl), currency)}
           </p>
         </div>
 
@@ -237,7 +240,7 @@ export default function DashboardPage() {
             <span className="text-[9px] text-[#848e9c]">Unrealized P&L</span>
           </div>
           <p className={`text-sm font-bold font-mono ${unrealizedPnl >= 0 ? 'text-[#0ecb81]' : 'text-[#f6465d]'}`}>
-            {unrealizedPnl >= 0 ? '+' : ''}${unrealizedPnl.toFixed(2)}
+            {unrealizedPnl >= 0 ? '+' : '-'}{formatCurrency(Math.abs(unrealizedPnl), currency)}
           </p>
         </div>
       </div>

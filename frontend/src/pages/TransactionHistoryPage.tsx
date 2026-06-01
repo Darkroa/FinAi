@@ -1,5 +1,7 @@
 import { useState, useEffect } from 'react';
 import { getMyTransactions, getBotTrades } from '../lib/api';
+import { useLanguage } from '../contexts/LanguageContext';
+import { formatCurrency } from '../lib/i18n';
 import {
   ArrowDownLeft, ArrowUpRight, RefreshCw, Clock,
   CheckCircle, XCircle, Search, SlidersHorizontal,
@@ -50,6 +52,7 @@ function fmt(n: number) { return n.toLocaleString('en-US', { minimumFractionDigi
 type PageTab = 'transactions' | 'bot_history' | 'trade_history';
 
 export default function TransactionHistoryPage() {
+  const { currency } = useLanguage();
   const [pageTab, setPageTab] = useState<PageTab>('transactions');
   const [txs, setTxs] = useState<Tx[]>([]);
   const [botTrades, setBotTrades] = useState<BotTrade[]>([]);
@@ -173,7 +176,7 @@ export default function TransactionHistoryPage() {
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center justify-between gap-2">
                       <p className="text-sm font-semibold text-[#eaecef]">{TYPE_LABELS[tx.tx_type] || tx.tx_type}</p>
-                      <p className={`text-sm font-bold font-mono ${isIn(tx.tx_type) ? 'text-[#0ecb81]' : 'text-[#f6465d]'}`}>{isIn(tx.tx_type) ? '+' : '-'}${fmt(tx.amount_usdt)}</p>
+                      <p className={`text-sm font-bold font-mono ${isIn(tx.tx_type) ? 'text-[#0ecb81]' : 'text-[#f6465d]'}`}>{isIn(tx.tx_type) ? '+' : '-'}{formatCurrency(tx.amount_usdt, currency)}</p>
                     </div>
                     <div className="flex items-center justify-between gap-2 mt-1.5">
                       <p className="text-[10px] text-[#848e9c] capitalize">{tx.method?.replace(/_/g, ' ')} · {new Date(tx.created_at).toLocaleDateString()}</p>
@@ -214,7 +217,7 @@ export default function TransactionHistoryPage() {
                         </div>
                       </td>
                       <td className="px-5 py-3.5 text-xs text-[#848e9c] capitalize">{tx.method?.replace(/_/g, ' ')}</td>
-                      <td className={`px-5 py-3.5 text-right font-mono text-sm font-bold ${isIn(tx.tx_type) ? 'text-[#0ecb81]' : 'text-[#f6465d]'}`}>{isIn(tx.tx_type) ? '+' : '-'}${fmt(tx.amount_usdt)}</td>
+                      <td className={`px-5 py-3.5 text-right font-mono text-sm font-bold ${isIn(tx.tx_type) ? 'text-[#0ecb81]' : 'text-[#f6465d]'}`}>{isIn(tx.tx_type) ? '+' : '-'}{formatCurrency(tx.amount_usdt, currency)}</td>
                       <td className="px-5 py-3.5 text-right">{statusBadge(tx.status)}</td>
                       <td className="px-5 py-3.5 font-mono text-[10px] text-[#848e9c] hidden lg:table-cell max-w-[120px] truncate">{tx.tx_hash ? `${tx.tx_hash.slice(0, 14)}…` : '—'}</td>
                       <td className="px-5 py-3.5 text-xs text-[#848e9c] hidden md:table-cell max-w-[120px] truncate">{tx.note || '—'}</td>

@@ -57,14 +57,17 @@ function Toggle({
 }) {
   return (
     <button
+      type="button"
+      role="switch"
+      aria-checked={on}
       onClick={onToggle}
-      className={`relative w-11 h-6 rounded-full transition-all duration-200 flex-shrink-0 ${
-        on ? color : 'bg-[#2b3139]'
+      className={`relative inline-flex w-11 h-6 rounded-full flex-shrink-0 transition-colors duration-200 focus:outline-none ${
+        on ? color : 'bg-[#3c4451]'
       }`}
     >
       <span
-        className={`absolute top-0.5 w-5 h-5 rounded-full bg-white shadow transition-transform duration-200 ${
-          on ? 'translate-x-5' : 'translate-x-0.5'
+        className={`absolute top-0.5 w-5 h-5 rounded-full bg-white shadow-md transition-all duration-200 ${
+          on ? 'left-[22px]' : 'left-0.5'
         }`}
       />
     </button>

@@ -1,5 +1,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useAuthStore } from '../store/authStore'
+import { useLanguage } from '../contexts/LanguageContext'
+import { formatCurrency } from '../lib/i18n'
 import {
   getWalletConfig, requestDeposit, requestWithdrawal,
   p2pSend, getMyTransactions, getMe, getVpsPlans, getAssetProducts,
@@ -69,6 +71,7 @@ function statusBadge(s: string) {
 
 export default function WalletPage() {
   const { user, setUser } = useAuthStore()
+  const { currency } = useLanguage()
   const [tab, setTab] = useState<WalletTab>('deposit')
   const [cfg, setCfg] = useState<WalletCfg>({})
   const [txs, setTxs] = useState<Tx[]>([])
@@ -229,7 +232,7 @@ export default function WalletPage() {
           <div>
             <p className="text-xs text-[#848e9c] font-medium mb-1">Available Balance</p>
             <p className="text-3xl font-bold font-mono text-[#eaecef]">
-              ${(user?.balance_usdt ?? 0).toLocaleString('en-US', { minimumFractionDigits: 2 })}
+              {formatCurrency(user?.balance_usdt ?? 0, currency)}
             </p>
             <p className="text-xs text-[#848e9c] mt-1">USDT · Updated just now</p>
           </div>

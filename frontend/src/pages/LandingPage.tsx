@@ -2,10 +2,13 @@ import { useNavigate } from 'react-router-dom'
 import {
   Zap, TrendingUp, Shield, BarChart2, Bot, Globe,
   ArrowRight, Activity, Lock, Cpu, Check, Menu, X,
-  Star, Crown, Infinity
+  Star, Crown, Infinity, ChevronDown
 } from 'lucide-react'
-import { useState } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import { useTickerPrices } from '../hooks/useTickerPrices'
+import { useLanguage } from '../contexts/LanguageContext'
+import { LANGUAGE_FULL } from '../lib/i18n'
+import type { LangCode } from '../lib/i18n'
 
 const features = [
   { icon: Bot,        title: 'AI-Powered Bots',   desc: 'Automated strategies driven by Grok AI that react to live market events in real-time.' },
@@ -99,8 +102,19 @@ const plans = [
 export default function LandingPage() {
   const navigate = useNavigate()
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
+  const [langOpen, setLangOpen] = useState(false)
+  const langRef = useRef<HTMLDivElement>(null)
+  const { lang, setLang, t } = useLanguage()
 
   const tickerItems = useTickerPrices()
+
+  useEffect(() => {
+    function handleClick(e: MouseEvent) {
+      if (langRef.current && !langRef.current.contains(e.target as Node)) setLangOpen(false)
+    }
+    document.addEventListener('mousedown', handleClick)
+    return () => document.removeEventListener('mousedown', handleClick)
+  }, [])
 
   return (
     <div className="min-h-screen bg-[#0b0e11] text-[#eaecef] overflow-x-hidden">
@@ -116,26 +130,57 @@ export default function LandingPage() {
           </div>
 
           <nav className="hidden md:flex items-center gap-6">
-            {(['Features', 'Markets', 'Pricing'] as const).map(n => (
-              <a key={n} href={`#${n.toLowerCase()}`}
-                className="text-sm text-[#848e9c] hover:text-[#eaecef] transition font-medium">{n}</a>
-            ))}
+            <a href="#features" className="text-sm text-[#848e9c] hover:text-[#eaecef] transition font-medium">{t('land.nav.features')}</a>
+            <a href="#markets" className="text-sm text-[#848e9c] hover:text-[#eaecef] transition font-medium">{t('land.nav.markets')}</a>
+            <a href="#pricing" className="text-sm text-[#848e9c] hover:text-[#eaecef] transition font-medium">{t('land.nav.pricing')}</a>
             <button onClick={() => navigate('/about')}
-              className="text-sm text-[#848e9c] hover:text-[#eaecef] transition font-medium">About</button>
+              className="text-sm text-[#848e9c] hover:text-[#eaecef] transition font-medium">{t('land.nav.about')}</button>
           </nav>
 
-          <button onClick={() => setMobileMenuOpen(v => !v)}
-            className="md:hidden p-2 text-[#848e9c] hover:text-[#eaecef] flex-shrink-0">
-            {mobileMenuOpen ? <X size={20} /> : <Menu size={20} />}
-          </button>
+          <div className="flex items-center gap-2 flex-shrink-0">
+            {/* Language selector */}
+            <div ref={langRef} className="relative">
+              <button
+                onClick={() => setLangOpen(v => !v)}
+                className="flex items-center gap-1 text-xs text-[#848e9c] hover:text-[#eaecef] border border-[#2b3139] hover:border-[#3c4451] rounded-lg px-2 py-1.5 transition"
+              >
+                <Globe size={12} />
+                <span className="font-semibold">{lang.split('-')[0].toUpperCase()}</span>
+                <ChevronDown size={10} />
+              </button>
+              {langOpen && (
+                <div className="absolute right-0 top-9 z-50 w-40 bg-[#161a1e] border border-[#2b3139] rounded-xl shadow-xl overflow-hidden py-1">
+                  {(Object.entries(LANGUAGE_FULL) as [LangCode, string][]).map(([code, name]) => (
+                    <button key={code} onClick={() => { setLang(code); setLangOpen(false) }}
+                      className={`w-full text-left px-3 py-2 text-xs transition ${lang === code ? 'text-[#f0b90b] bg-[#f0b90b]/10' : 'text-[#848e9c] hover:text-[#eaecef] hover:bg-[#2b3139]/60'}`}>
+                      {name}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* Login button */}
+            <button onClick={() => navigate('/login')}
+              className="hidden sm:flex items-center gap-1.5 text-xs font-semibold bg-[#f0b90b] hover:bg-[#d4a30a] text-black px-3 py-1.5 rounded-lg transition">
+              {t('land.login')}
+            </button>
+
+            {/* Hamburger */}
+            <button onClick={() => setMobileMenuOpen(v => !v)}
+              className="md:hidden p-1.5 text-[#848e9c] hover:text-[#eaecef]">
+              {mobileMenuOpen ? <X size={20} /> : <Menu size={20} />}
+            </button>
+          </div>
         </div>
 
         {mobileMenuOpen && (
           <div className="md:hidden border-t border-[#2b3139] bg-[#0b0e11] px-4 py-3 space-y-1">
-            {['Features', 'Markets', 'Pricing'].map(n => (
-              <a key={n} href={`#${n.toLowerCase()}`} onClick={() => setMobileMenuOpen(false)}
-                className="block text-sm text-[#848e9c] hover:text-[#eaecef] py-2">{n}</a>
-            ))}
+            <a href="#features" onClick={() => setMobileMenuOpen(false)} className="block text-sm text-[#848e9c] hover:text-[#eaecef] py-2">{t('land.nav.features')}</a>
+            <a href="#markets" onClick={() => setMobileMenuOpen(false)} className="block text-sm text-[#848e9c] hover:text-[#eaecef] py-2">{t('land.nav.markets')}</a>
+            <a href="#pricing" onClick={() => setMobileMenuOpen(false)} className="block text-sm text-[#848e9c] hover:text-[#eaecef] py-2">{t('land.nav.pricing')}</a>
+            <button onClick={() => { navigate('/about'); setMobileMenuOpen(false) }} className="block w-full text-left text-sm text-[#848e9c] hover:text-[#eaecef] py-2">{t('land.nav.about')}</button>
+            <button onClick={() => navigate('/login')} className="block w-full text-left text-sm text-[#f0b90b] font-semibold py-2">{t('land.login')}</button>
           </div>
         )}
       </header>
@@ -164,30 +209,30 @@ export default function LandingPage() {
 
         <div className="relative max-w-3xl mx-auto text-center px-5 sm:px-6">
           <div className="inline-flex items-center gap-1.5 bg-[#f0b90b]/10 border border-[#f0b90b]/25 text-[#f0b90b] text-[11px] font-bold px-3 py-1 rounded-full mb-6 tracking-wider uppercase">
-            <Cpu size={10} /> Powered by Grok AI
+            <Cpu size={10} /> {t('land.hero.badge')}
           </div>
 
           <h1 className="text-2xl sm:text-4xl lg:text-5xl font-extrabold leading-tight tracking-tight text-[#eaecef] mb-4">
-            Trade Smarter with{' '}
-            <span className="text-[#f0b90b]">AI&#8209;Powered Insights</span>
+            {t('land.hero.t1')}{' '}
+            <span className="text-[#f0b90b]">{t('land.hero.t2')}</span>
           </h1>
 
           <p className="text-[#848e9c] text-sm leading-relaxed mb-8 max-w-sm sm:max-w-lg mx-auto">
-            FinAi reads real-time market news, detects high-impact events, and executes automated trading strategies — driven by Grok AI.
+            {t('land.hero.sub')}
           </p>
 
           <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-center gap-3">
             <button onClick={() => navigate('/login')}
               className="inline-flex items-center justify-center gap-2 bg-[#f0b90b] hover:bg-[#d4a30a] text-black font-bold px-7 py-3 rounded-xl text-sm transition-all shadow-lg shadow-[#f0b90b]/20 active:scale-[0.98]">
-              Start Trading Free <ArrowRight size={14} />
+              {t('land.hero.cta1')} <ArrowRight size={14} />
             </button>
             <button onClick={() => navigate('/login')}
               className="inline-flex items-center justify-center gap-1.5 border border-[#2b3139] hover:border-[#f0b90b]/40 hover:text-[#f0b90b] text-[#848e9c] px-7 py-3 rounded-xl text-sm transition-all">
-              View Dashboard →
+              {t('land.hero.cta2')} →
             </button>
           </div>
 
-          <p className="text-xs text-[#4a5568] mt-5">No credit card required · Free forever plan available</p>
+          <p className="text-xs text-[#4a5568] mt-5">{t('land.hero.note')}</p>
         </div>
       </section>
 
