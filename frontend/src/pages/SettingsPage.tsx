@@ -13,7 +13,7 @@ import {
 import { useLanguage } from '../contexts/LanguageContext';
 import type { LangCode } from '../lib/i18n';
 
-interface NotifPrefs {
+interface NotifPrefs extends Record<string, unknown> {
   email: boolean;
   whatsapp: boolean;
   telegram: boolean;

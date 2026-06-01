@@ -210,8 +210,13 @@ async def _deferred_init():
         import httpx as _hx
         _bot_token = os.getenv("TELEGRAM_BOT_TOKEN", "")
         _wh_secret = os.getenv("TELEGRAM_WEBHOOK_SECRET", "")
-        WEBHOOK_URL = "https://fin-ai--fibot.replit.app/api/telegram/webhook"
-        print(f"Webhook URL: {WEBHOOK_URL}")
+        _replit_domain = os.getenv("REPLIT_DEV_DOMAIN", "")
+        WEBHOOK_URL = (
+            f"https://{_replit_domain}/api/telegram/webhook"
+            if _replit_domain
+            else "https://fin-ai--fibot.replit.app/api/telegram/webhook"
+        )
+        logger.info(f"Webhook URL: {WEBHOOK_URL}")
         if _bot_token:
             payload = {"url": WEBHOOK_URL}
             if _wh_secret:

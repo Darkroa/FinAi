@@ -1072,20 +1072,39 @@ export default function BotsPage() {
               </div>
             )}
 
-            {/* Recent event trades */}
+            {/* Recent event trades — deposit-history card style */}
             {feTrades.length > 0 && (
               <div className="border-t border-[#2b3139]">
-                <div className="px-5 py-3 border-b border-[#2b3139]">
+                <div className="px-5 py-3 border-b border-[#2b3139] flex items-center justify-between">
                   <p className="text-xs font-semibold text-[#848e9c] uppercase tracking-wide">Recent Event Trades</p>
+                  <span className="text-xs text-[#4a5568]">{feTrades.length} trades</span>
                 </div>
-                <div className="divide-y divide-[#2b3139]/50 max-h-64 overflow-y-auto">
+                <div className="divide-y divide-[#2b3139]/50 max-h-80 overflow-y-auto">
                   {feTrades.map((t, i) => (
-                    <div key={t.id ?? i} className="px-5 py-2.5 flex flex-wrap items-center gap-3 text-xs hover:bg-[#1e2329] transition">
-                      <span className={`px-2 py-0.5 rounded font-bold ${t.action === 'BUY' ? 'bg-[#0ecb81]/10 text-[#0ecb81]' : 'bg-[#f6465d]/10 text-[#f6465d]'}`}>{t.action}</span>
-                      <span className="font-mono font-semibold text-[#f0b90b]">{t.ticker}</span>
-                      <span className="text-[#eaecef] font-mono">${t.price < 1 ? t.price.toFixed(5) : Number(t.price).toLocaleString()}</span>
-                      <span className="text-[#848e9c] flex-1 truncate">{(t.reason || '').replace('FinEventAI | ', '')}</span>
-                      <span className="text-[#4a5568] whitespace-nowrap">{t.created_at ? new Date(t.created_at).toLocaleString() : '—'}</span>
+                    <div key={t.id ?? i} className="px-5 py-3.5 flex items-start gap-3 hover:bg-[#1e2329] transition">
+                      <div className={`w-9 h-9 rounded-full border flex items-center justify-center flex-shrink-0 ${t.action === 'BUY' ? 'bg-[#0ecb81]/10 border-[#0ecb81]/20' : 'bg-[#f6465d]/10 border-[#f6465d]/20'}`}>
+                        {t.action === 'BUY'
+                          ? <TrendingUp size={14} className="text-[#0ecb81]" />
+                          : <TrendingDown size={14} className="text-[#f6465d]" />}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center justify-between gap-2">
+                          <p className="text-sm font-semibold text-[#eaecef] flex items-center gap-1.5">
+                            <span className="font-mono text-[#f0b90b]">{t.ticker}</span>
+                            <span className={`text-[10px] px-1.5 py-0.5 rounded font-bold ${t.action === 'BUY' ? 'bg-[#0ecb81]/10 text-[#0ecb81]' : 'bg-[#f6465d]/10 text-[#f6465d]'}`}>{t.action}</span>
+                          </p>
+                          <p className={`text-sm font-bold font-mono ${t.action === 'BUY' ? 'text-[#0ecb81]' : 'text-[#f6465d]'}`}>
+                            ${t.price < 1 ? Number(t.price).toFixed(5) : Number(t.price).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                          </p>
+                        </div>
+                        <div className="flex items-center justify-between gap-2 mt-1">
+                          <p className="text-[10px] text-[#848e9c]">Qty: <span className="font-mono">{Number(t.qty ?? 0).toFixed(6)}</span> · {t.created_at ? new Date(t.created_at).toLocaleDateString() : '—'}</p>
+                          {t.pnl != null
+                            ? <span className={`text-[10px] px-2 py-0.5 rounded-full font-medium ${t.pnl >= 0 ? 'bg-[#0ecb81]/10 text-[#0ecb81]' : 'bg-[#f6465d]/10 text-[#f6465d]'}`}>{t.pnl >= 0 ? '+' : ''}${fmt(t.pnl)}</span>
+                            : <span className="text-[10px] px-2 py-0.5 rounded-full bg-[#f0b90b]/10 text-[#f0b90b] font-medium">Open</span>}
+                        </div>
+                        {t.reason && <p className="text-[10px] text-[#4a5568] mt-1 truncate">{(t.reason || '').replace('FinEventAI | ', '')}</p>}
+                      </div>
                     </div>
                   ))}
                 </div>
@@ -1191,7 +1210,7 @@ export default function BotsPage() {
         </div>
       </div>
 
-      {/* ── Full trade log ── */}
+      {/* ── Full trade log — deposit-history card style ── */}
       <div className="bg-[#161a1e] border border-[#2b3139] rounded-xl overflow-hidden">
         <div className="px-4 py-3 border-b border-[#2b3139] flex items-center justify-between">
           <div className="flex items-center gap-2">
@@ -1201,41 +1220,48 @@ export default function BotsPage() {
           </div>
           <span className="text-xs text-[#848e9c]">{Math.min(trades.length, 10)} of {trades.length} trades</span>
         </div>
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm min-w-[640px]">
-            <thead>
-              <tr className="text-[#848e9c] text-xs border-b border-[#2b3139]">
-                {['Time','Asset','Action','Price','Qty','P&L','Reason'].map(h => (
-                  <th key={h} className={`px-4 py-3 font-medium ${h === 'Price' || h === 'Qty' || h === 'P&L' ? 'text-right' : 'text-left'}`}>{h}</th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {trades.length === 0 ? (
-                <tr><td colSpan={7} className="px-4 py-12 text-center">
-                  <div className="flex flex-col items-center gap-2">
-                    <Bot size={28} className="text-[#2b3139]" />
-                    <p className="text-sm text-[#848e9c]">No trades yet — start a bot to begin</p>
+
+        {trades.length === 0 ? (
+          <div className="py-14 flex flex-col items-center gap-2">
+            <Bot size={28} className="text-[#2b3139]" />
+            <p className="text-sm text-[#848e9c]">No trades yet — start a bot to begin</p>
+          </div>
+        ) : (
+          <div className="divide-y divide-[#2b3139]/50">
+            {trades.slice(0, 10).map((t, i) => (
+              <div key={t.id ?? i} className="px-4 py-3.5 flex items-start gap-3 hover:bg-[#1e2329] transition">
+                <div className={`w-9 h-9 rounded-full border flex items-center justify-center flex-shrink-0 ${t.action === 'BUY' ? 'bg-[#0ecb81]/10 border-[#0ecb81]/20' : 'bg-[#f6465d]/10 border-[#f6465d]/20'}`}>
+                  {t.action === 'BUY'
+                    ? <TrendingUp size={14} className="text-[#0ecb81]" />
+                    : <TrendingDown size={14} className="text-[#f6465d]" />}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center justify-between gap-2">
+                    <p className="text-sm font-semibold text-[#eaecef] flex items-center gap-1.5">
+                      <span className="font-mono text-[#f0b90b]">{t.ticker}</span>
+                      <span className={`text-[10px] px-1.5 py-0.5 rounded font-bold ${t.action === 'BUY' ? 'bg-[#0ecb81]/10 text-[#0ecb81]' : 'bg-[#f6465d]/10 text-[#f6465d]'}`}>{t.action}</span>
+                      <span className="text-[10px] text-[#848e9c] font-normal">{t.exchange}</span>
+                    </p>
+                    <p className={`text-sm font-bold font-mono ${t.action === 'BUY' ? 'text-[#0ecb81]' : 'text-[#f6465d]'}`}>
+                      ${t.price < 1 ? t.price.toFixed(5) : fmt(t.price)}
+                    </p>
                   </div>
-                </td></tr>
-              ) : trades.slice(0, 10).map((t, i) => (
-                <tr key={t.id ?? i} className="border-b border-[#2b3139]/50 hover:bg-[#1e2329] transition">
-                  <td className="px-4 py-3 text-xs text-[#848e9c] whitespace-nowrap">{t.created_at ? new Date(t.created_at).toLocaleString() : '—'}</td>
-                  <td className="px-4 py-3"><span className="text-xs font-mono font-semibold text-[#f0b90b]">{t.ticker}</span></td>
-                  <td className="px-4 py-3"><span className={`text-xs font-bold px-2 py-0.5 rounded ${t.action === 'BUY' ? 'bg-[#0ecb81]/10 text-[#0ecb81]' : 'bg-[#f6465d]/10 text-[#f6465d]'}`}>{t.action}</span></td>
-                  <td className="px-4 py-3 text-right font-mono text-xs text-[#eaecef]">${t.price < 1 ? t.price.toFixed(5) : fmt(t.price)}</td>
-                  <td className="px-4 py-3 text-right font-mono text-xs text-[#eaecef]">{t.qty.toFixed(6)}</td>
-                  <td className="px-4 py-3 text-right font-mono text-xs">
+                  <div className="flex items-center justify-between gap-2 mt-1">
+                    <p className="text-[10px] text-[#848e9c]">
+                      Qty: <span className="font-mono">{t.qty.toFixed(6)}</span>
+                      {' · '}{t.created_at ? new Date(t.created_at).toLocaleDateString() : '—'}
+                    </p>
                     {t.pnl !== null
-                      ? <span className={t.pnl >= 0 ? 'text-[#0ecb81] font-semibold' : 'text-[#f6465d] font-semibold'}>{t.pnl >= 0 ? '+' : ''}${fmt(t.pnl)}</span>
-                      : <span className="text-[#848e9c]">Open</span>}
-                  </td>
-                  <td className="px-4 py-3 text-xs text-[#848e9c]">{(t.reason ?? '').replace(/_/g, ' ')}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+                      ? <span className={`text-[10px] px-2 py-0.5 rounded-full font-medium ${t.pnl >= 0 ? 'bg-[#0ecb81]/10 text-[#0ecb81]' : 'bg-[#f6465d]/10 text-[#f6465d]'}`}>{t.pnl >= 0 ? '+' : ''}${fmt(t.pnl)}</span>
+                      : <span className="text-[10px] px-2 py-0.5 rounded-full bg-[#f0b90b]/10 text-[#f0b90b] font-medium">Open</span>}
+                  </div>
+                  {t.reason && <p className="text-[10px] text-[#4a5568] mt-1 truncate">{(t.reason ?? '').replace(/_/g, ' ')}</p>}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+
         {trades.length > 0 && (
           <div className="px-4 py-3 border-t border-[#2b3139] flex justify-center">
             <button onClick={() => navigate('/app/transactions')}
