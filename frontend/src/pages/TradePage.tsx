@@ -331,8 +331,7 @@ function FinChatPanel({ pair, livePrice, liveChange, collapsed, onToggle }: {
 // ── Main TradePage ────────────────────────────────────────────────────────────
 export default function TradePage() {
   const { user, token } = useAuthStore()
-  const navigate = useNavigate()
-
+  
   // Order form state
   const [side, setSide]             = useState<'buy' | 'sell'>('buy')
   const [orderType, setType]        = useState<'market' | 'limit'>('limit')
