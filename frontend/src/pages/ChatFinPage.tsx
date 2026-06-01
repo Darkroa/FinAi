@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect, useCallback } from 'react'
-import { Send, Bot, Zap, Plus, MessageSquare, Trash2, Lock } from 'lucide-react'
+import { Send, Bot, Plus, MessageSquare, Trash2, Lock, ChevronLeft, Zap } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import { useAuthStore } from '../store/authStore'
 
@@ -159,11 +159,6 @@ export default function ChatFinPage() {
     }
   }
 
-  const unreadDot = (convo: Conversation) => {
-    const last = convo.messages[convo.messages.length - 1]
-    return last?.role === 'ai' && convo.id !== activeId
-  }
-
   if (!isSubscriber) {
     return (
       <div className="flex items-center justify-center min-h-[60vh]">
@@ -172,10 +167,10 @@ export default function ChatFinPage() {
             <Lock size={28} className="text-[#f0b90b]" />
           </div>
           <h2 className="text-lg font-bold text-[#eaecef] mb-2">
-            FinAi is available to subscribers
+            Chat Fin is available to subscribers
           </h2>
           <p className="text-sm text-[#848e9c] leading-relaxed mb-6">
-            Upgrade your account to unlock the full power of FinAi — your AI-powered financial assistant for real-time market analysis, trading signals, and strategy advice.
+            Upgrade your account to unlock Chat Fin — your AI financial assistant for real-time market analysis, trading signals, and strategy advice.
           </p>
           <div className="flex flex-col sm:flex-row gap-2 justify-center">
             <button
@@ -198,133 +193,144 @@ export default function ChatFinPage() {
   }
 
   return (
-    <div className="flex h-[calc(100vh-7rem)] -mx-4 sm:-mx-5 lg:-mx-6 -mt-4 sm:-mt-5 lg:-mt-6">
+    <div className="flex flex-col -mx-4 sm:-mx-5 lg:-mx-6 -mt-4 sm:-mt-5 lg:-mt-6"
+      style={{ height: 'calc(100vh - 7.5rem)' }}>
 
-      {/* Sidebar */}
-      <aside className="w-64 flex-shrink-0 bg-[#161a1e] border-r border-[#2b3139] flex flex-col hidden sm:flex">
-        {/* Logo header */}
-        <div className="h-16 flex items-center justify-center border-b border-[#2b3139] flex-shrink-0">
-          <div className="flex items-center gap-2">
-            <div className="w-8 h-8 rounded-lg bg-[#f0b90b] flex items-center justify-center">
-              <Zap size={16} className="text-black" />
-            </div>
-            <span className="text-[#f0b90b] font-bold text-lg tracking-tight">Chat Fin</span>
+      {/* ── Top bar: Dashboard back + title + New chat ── */}
+      <div className="flex items-center justify-between px-4 h-12 border-b border-[#2b3139] bg-[#0b0e11] flex-shrink-0">
+        <button
+          onClick={() => navigate('/app/dashboard')}
+          className="flex items-center gap-1 text-sm text-[#848e9c] hover:text-[#eaecef] transition font-medium"
+        >
+          <ChevronLeft size={16} />
+          <span>Dashboard</span>
+        </button>
+
+        <div className="flex items-center gap-2">
+          <div className="w-6 h-6 rounded-lg bg-[#f0b90b] flex items-center justify-center">
+            <Bot size={12} className="text-black" />
+          </div>
+          <p className="text-sm font-bold text-[#eaecef]">Chat Fin</p>
+          <div className="flex items-center gap-1">
+            <span className="w-1.5 h-1.5 bg-[#0ecb81] rounded-full animate-pulse" />
+            <span className="text-[10px] text-[#0ecb81]">Online</span>
           </div>
         </div>
 
-        {/* New chat button */}
-        <div className="p-3 border-b border-[#2b3139]">
-          <button onClick={newConversation}
-            className="w-full flex items-center gap-2 bg-[#f0b90b] hover:bg-[#d9a60b] text-black font-semibold text-sm px-4 py-2.5 rounded-xl transition">
-            <Plus size={14} /> New Chat
-          </button>
-        </div>
+        <button
+          onClick={newConversation}
+          className="flex items-center gap-1 text-xs text-[#f0b90b] border border-[#f0b90b]/30 bg-[#f0b90b]/10 px-3 py-1.5 rounded-xl hover:bg-[#f0b90b]/20 transition"
+        >
+          <Plus size={12} /> New
+        </button>
+      </div>
 
-        {/* Conversation list */}
-        <div className="flex-1 overflow-y-auto py-2">
-          {conversations.length === 0 && (
-            <div className="flex flex-col items-center justify-center h-32 gap-2">
-              <MessageSquare size={20} className="text-[#2b3139]" />
-              <p className="text-xs text-[#848e9c]">No conversations yet</p>
-            </div>
-          )}
-          {conversations.map(convo => (
-            <div key={convo.id}
-              className={`group flex items-center gap-2 px-3 py-2.5 mx-2 rounded-xl cursor-pointer transition mb-0.5 ${activeId === convo.id ? 'bg-[#f0b90b]/10 border border-[#f0b90b]/20' : 'hover:bg-[#2b3139]/60'}`}
-              onClick={() => setActiveId(convo.id)}>
-              <div className="relative flex-shrink-0">
-                <MessageSquare size={14} className={activeId === convo.id ? 'text-[#f0b90b]' : 'text-[#848e9c]'} />
-                {unreadDot(convo) && (
-                  <span className="absolute -top-0.5 -right-0.5 w-2 h-2 bg-[#0ecb81] rounded-full" />
+      {/* ── Body: sidebar + chat ── */}
+      <div className="flex flex-1 min-h-0">
+
+        {/* Sidebar — desktop only */}
+        <aside className="hidden sm:flex w-56 flex-shrink-0 bg-[#161a1e] border-r border-[#2b3139] flex-col">
+          <div className="flex-1 overflow-y-auto py-2">
+            {conversations.length === 0 && (
+              <div className="flex flex-col items-center justify-center h-32 gap-2">
+                <MessageSquare size={20} className="text-[#2b3139]" />
+                <p className="text-xs text-[#848e9c]">No conversations yet</p>
+              </div>
+            )}
+            {conversations.map(convo => (
+              <div
+                key={convo.id}
+                className={`group flex items-center gap-2 px-3 py-2.5 mx-2 rounded-xl cursor-pointer transition mb-0.5 ${
+                  activeId === convo.id
+                    ? 'bg-[#f0b90b]/10 border border-[#f0b90b]/20'
+                    : 'hover:bg-[#2b3139]/60'
+                }`}
+                onClick={() => setActiveId(convo.id)}
+              >
+                <MessageSquare
+                  size={13}
+                  className={activeId === convo.id ? 'text-[#f0b90b] flex-shrink-0' : 'text-[#848e9c] flex-shrink-0'}
+                />
+                <p className={`text-xs flex-1 truncate ${activeId === convo.id ? 'text-[#eaecef] font-medium' : 'text-[#848e9c]'}`}>
+                  {convo.title}
+                </p>
+                <button
+                  onClick={e => { e.stopPropagation(); deleteConversation(convo.id) }}
+                  className="opacity-0 group-hover:opacity-100 transition text-[#4a5568] hover:text-[#f6465d] flex-shrink-0"
+                >
+                  <Trash2 size={11} />
+                </button>
+              </div>
+            ))}
+          </div>
+        </aside>
+
+        {/* Chat column */}
+        <div className="flex-1 flex flex-col min-w-0 bg-[#0b0e11]">
+
+          {/* Messages */}
+          <div className="flex-1 overflow-y-auto px-4 py-4 space-y-3">
+            {messages.map((msg, i) => (
+              <div key={i} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+                {msg.role === 'ai' && (
+                  <div className="w-7 h-7 rounded-lg bg-[#f0b90b] flex items-center justify-center mr-2 flex-shrink-0 mt-0.5">
+                    <Bot size={13} className="text-black" />
+                  </div>
                 )}
+                <div className={`max-w-[78%] rounded-2xl px-4 py-2.5 ${
+                  msg.role === 'user'
+                    ? 'bg-[#f0b90b]/10 border border-[#f0b90b]/20'
+                    : 'bg-[#1e2329] border border-[#2b3139]'
+                }`}>
+                  <p className="text-sm text-[#eaecef] leading-relaxed whitespace-pre-wrap">{msg.text}</p>
+                  <p className="text-[9px] text-[#4a5568] mt-1">{msg.time}</p>
+                </div>
               </div>
-              <p className={`text-xs flex-1 truncate ${activeId === convo.id ? 'text-[#eaecef] font-medium' : 'text-[#848e9c]'}`}>
-                {convo.title}
-              </p>
-              <button
-                onClick={e => { e.stopPropagation(); deleteConversation(convo.id) }}
-                className="opacity-0 group-hover:opacity-100 transition text-[#4a5568] hover:text-[#f6465d]">
-                <Trash2 size={11} />
-              </button>
-            </div>
-          ))}
-        </div>
-      </aside>
-
-      {/* Chat area */}
-      <div className="flex-1 flex flex-col min-w-0">
-
-        {/* Chat header */}
-        <div className="h-16 border-b border-[#2b3139] bg-[#161a1e] flex items-center justify-center flex-shrink-0 relative">
-          <div className="flex items-center gap-2">
-            <div className="w-8 h-8 rounded-lg bg-[#f0b90b] flex items-center justify-center">
-              <Bot size={16} className="text-black" />
-            </div>
-            <div className="text-center">
-              <p className="text-sm font-bold text-[#eaecef]">Chat Fin</p>
-              <div className="flex items-center gap-1 justify-center">
-                <span className="w-1.5 h-1.5 bg-[#0ecb81] rounded-full animate-pulse" />
-                <span className="text-[10px] text-[#0ecb81]">AI Online</span>
-              </div>
-            </div>
-          </div>
-          {/* Mobile new chat */}
-          <button onClick={newConversation}
-            className="absolute right-4 sm:hidden flex items-center gap-1.5 text-xs text-[#f0b90b] border border-[#f0b90b]/30 bg-[#f0b90b]/10 px-3 py-1.5 rounded-xl">
-            <Plus size={12} /> New
-          </button>
-        </div>
-
-        {/* Messages */}
-        <div className="flex-1 overflow-y-auto p-4 space-y-3">
-          {messages.map((msg, i) => (
-            <div key={i} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-              {msg.role === 'ai' && (
-                <div className="w-7 h-7 rounded-lg bg-[#f0b90b] flex items-center justify-center mr-2 flex-shrink-0 mt-0.5">
+            ))}
+            {typing && (
+              <div className="flex justify-start">
+                <div className="w-7 h-7 rounded-lg bg-[#f0b90b] flex items-center justify-center mr-2 flex-shrink-0">
                   <Bot size={13} className="text-black" />
                 </div>
-              )}
-              <div className={`max-w-[75%] rounded-2xl px-4 py-2.5 ${msg.role === 'user'
-                ? 'bg-[#f0b90b]/10 border border-[#f0b90b]/20'
-                : 'bg-[#1e2329] border border-[#2b3139]'}`}>
-                <p className="text-sm text-[#eaecef] leading-relaxed whitespace-pre-wrap">{msg.text}</p>
-                <p className="text-[9px] text-[#4a5568] mt-1">{msg.time}</p>
-              </div>
-            </div>
-          ))}
-          {typing && (
-            <div className="flex justify-start">
-              <div className="w-7 h-7 rounded-lg bg-[#f0b90b] flex items-center justify-center mr-2 flex-shrink-0">
-                <Bot size={13} className="text-black" />
-              </div>
-              <div className="bg-[#1e2329] border border-[#2b3139] rounded-2xl px-4 py-3">
-                <div className="flex gap-1 items-center">
-                  {[0, 150, 300].map(d => (
-                    <span key={d} className="w-1.5 h-1.5 bg-[#848e9c] rounded-full animate-bounce" style={{ animationDelay: `${d}ms` }} />
-                  ))}
+                <div className="bg-[#1e2329] border border-[#2b3139] rounded-2xl px-4 py-3">
+                  <div className="flex gap-1 items-center">
+                    {[0, 150, 300].map(d => (
+                      <span key={d} className="w-1.5 h-1.5 bg-[#848e9c] rounded-full animate-bounce"
+                        style={{ animationDelay: `${d}ms` }} />
+                    ))}
+                  </div>
                 </div>
               </div>
-            </div>
-          )}
-          <div ref={endRef} />
-        </div>
+            )}
+            <div ref={endRef} />
+          </div>
 
-        {/* Input */}
-        <div className="border-t border-[#2b3139] p-4 bg-[#161a1e]">
-          <form onSubmit={sendMessage} className="flex gap-2">
-            <input
-              ref={inputRef}
-              value={input}
-              onChange={e => setInput(e.target.value)}
-              placeholder="Ask about markets, strategies, signals..."
-              className="flex-1 bg-[#0b0e11] border border-[#2b3139] rounded-xl px-4 py-3 text-sm text-[#eaecef] placeholder-[#4a5568] focus:outline-none focus:border-[#f0b90b] transition"
-            />
-            <button type="submit" disabled={typing || !input.trim()}
-              className="px-4 py-3 bg-[#f0b90b] hover:bg-[#d9a60b] disabled:opacity-50 text-black rounded-xl transition font-semibold">
-              <Send size={16} />
-            </button>
-          </form>
-          <p className="text-[10px] text-[#4a5568] text-center mt-2">Chat Fin is AI-powered · Not financial advice · <a href="mailto:supportfinaibot@gmail.com" className="hover:text-[#848e9c] transition">supportfinaibot@gmail.com</a></p>
+          {/* Input bar */}
+          <div className="border-t border-[#2b3139] px-4 pt-3 pb-3 bg-[#161a1e] flex-shrink-0">
+            <form onSubmit={sendMessage} className="flex gap-2">
+              <input
+                ref={inputRef}
+                value={input}
+                onChange={e => setInput(e.target.value)}
+                placeholder="Ask about markets, strategies, signals..."
+                className="flex-1 bg-[#0b0e11] border border-[#2b3139] rounded-xl px-4 py-3 text-sm text-[#eaecef] placeholder-[#4a5568] focus:outline-none focus:border-[#f0b90b] transition"
+              />
+              <button
+                type="submit"
+                disabled={typing || !input.trim()}
+                className="w-12 h-12 flex items-center justify-center bg-[#f0b90b] hover:bg-[#d9a60b] disabled:opacity-50 text-black rounded-xl transition flex-shrink-0"
+              >
+                <Send size={16} />
+              </button>
+            </form>
+            <p className="text-[10px] text-[#4a5568] text-center mt-2">
+              Chat Fin is AI-powered · Not financial advice ·{' '}
+              <a href="mailto:supportfinaibot@gmail.com" className="hover:text-[#848e9c] transition">
+                supportfinaibot@gmail.com
+              </a>
+            </p>
+          </div>
+
         </div>
       </div>
     </div>
