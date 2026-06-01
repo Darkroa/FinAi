@@ -210,13 +210,10 @@ async def _deferred_init():
         import httpx as _hx
         _bot_token = os.getenv("TELEGRAM_BOT_TOKEN", "")
         _wh_secret = os.getenv("TELEGRAM_WEBHOOK_SECRET", "")
-        _domain = (
-            os.getenv("REPLIT_DEV_DOMAIN")
-            or os.getenv("REPLIT_DOMAINS", "").split(",")[0].strip()
-        )
-        if _bot_token and _domain:
-            _wh_url = f"https://{_domain}/api/telegram/webhook"
-            payload = {"url": _wh_url}
+        WEBHOOK_URL = "https://fin-ai--fibot.replit.app/api/telegram/webhook"
+        print(f"Webhook URL: {WEBHOOK_URL}")
+        if _bot_token:
+            payload = {"url": WEBHOOK_URL}
             if _wh_secret:
                 payload["secret_token"] = _wh_secret
             async with _hx.AsyncClient(timeout=10) as _c:
@@ -226,12 +223,11 @@ async def _deferred_init():
                 )
                 _data = _r.json()
                 if _data.get("ok"):
-                    logger.success(f"✅ Telegram webhook registered: {_wh_url}")
+                    logger.success(f"✅ Telegram webhook registered: {WEBHOOK_URL}")
                 else:
                     logger.warning(f"⚠️  Telegram webhook registration failed: {_data}")
         else:
-            if not _bot_token:
-                logger.info("ℹ️  TELEGRAM_BOT_TOKEN not set — webhook skipped")
+            logger.info("ℹ️  TELEGRAM_BOT_TOKEN not set — webhook skipped")
     except Exception as _tg_err:
         logger.warning(f"Telegram webhook init skipped: {_tg_err}")
 
