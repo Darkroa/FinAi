@@ -1,5 +1,5 @@
-import { useState, useEffect, useCallback } from 'react'
-import { Search, TrendingUp, TrendingDown, LayoutGrid, LayoutList, Zap, RefreshCw, Star, ArrowRight } from 'lucide-react'
+import { useState, useEffect, useCallback, useRef } from 'react'
+import { Search, TrendingUp, TrendingDown, LayoutGrid, LayoutList, RefreshCw } from 'lucide-react'
 import { LineChart, Line, ResponsiveContainer, Tooltip } from 'recharts'
 import { useNavigate } from 'react-router-dom'
 
@@ -12,17 +12,6 @@ interface MarketItem {
   mcap: string
   cat: 'crypto' | 'stocks' | 'metals'
   live: boolean
-}
-
-interface NewListing {
-  symbol: string
-  name: string
-  price: number
-  change: number
-  recommendation: 'BUY' | 'SELL' | 'HOLD'
-  confidence: number
-  reason: string
-  cat: string
 }
 
 const sparkline = (up: boolean, volatility = 10) =>
@@ -69,14 +58,51 @@ const ASSET_META: Record<string, { name: string; vol: string; mcap: string }> = 
   'GLD':   { name: 'SPDR Gold Shares',  vol: '$1.4B',  mcap: '—'      },
 }
 
-type Tab = 'all' | 'crypto' | 'stocks' | 'metals' | 'new'
+type Tab = 'all' | 'crypto' | 'stocks' | 'metals' | 'heatmap'
 
-interface NewsItem {
-  title: string
-  source: string
-  url: string
-  published: string
-  description: string
+function TvHeatMap() {
+  const containerRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    const el = containerRef.current
+    if (!el) return
+    el.innerHTML = ''
+    const wrapper = document.createElement('div')
+    wrapper.className = 'tradingview-widget-container__widget'
+    el.appendChild(wrapper)
+    const script = document.createElement('script')
+    script.type = 'text/javascript'
+    script.src =
+      'https://s3.tradingview.com/external-embedding/embed-widget-market-heat-map.js'
+    script.async = true
+    script.textContent = JSON.stringify({
+      exchanges: [],
+      dataSource: 'Crypto',
+      grouping: 'sector',
+      blockSize: 'market_cap_calc',
+      blockColor: 'change',
+      locale: 'en',
+      colorTheme: 'dark',
+      hasTopBar: false,
+      isDataSetEnabled: true,
+      isZoomEnabled: true,
+      hasSymbolTooltip: true,
+      width: '100%',
+      height: '500',
+    })
+    el.appendChild(script)
+    return () => {
+      if (el) el.innerHTML = ''
+    }
+  }, [])
+
+  return (
+    <div
+      ref={containerRef}
+      className="tradingview-widget-container w-full rounded-xl overflow-hidden border border-[#2b3139]"
+      style={{ minHeight: 500 }}
+    />
+  )
 }
 
 export default function MarketsPage() {
@@ -87,26 +113,6 @@ export default function MarketsPage() {
   const [markets, setMarkets] = useState<MarketItem[]>([])
   const [loading, setLoading] = useState(true)
   const [lastUpdate, setLastUpdate] = useState<Date | null>(null)
-  const [recommendations, setRecommendations] = useState<NewListing[]>([])
-  const [recLoading, setRecLoading] = useState(false)
-  const [news, setNews] = useState<NewsItem[]>([])
-  const [newsLoading, setNewsLoading] = useState(false)
-
-  const fetchRecommendations = useCallback(async () => {
-    setRecLoading(true)
-    try {
-      const res = await fetch('/api/public/recommendations')
-      if (res.ok) setRecommendations(await res.json())
-    } catch { /* silent */ } finally { setRecLoading(false) }
-  }, [])
-
-  const fetchNews = useCallback(async () => {
-    setNewsLoading(true)
-    try {
-      const res = await fetch('/api/public/news')
-      if (res.ok) setNews(await res.json())
-    } catch { /* silent */ } finally { setNewsLoading(false) }
-  }, [])
 
   const fetchMarkets = useCallback(async () => {
     try {
@@ -160,30 +166,13 @@ export default function MarketsPage() {
     return () => clearInterval(id)
   }, [fetchMarkets])
 
-  useEffect(() => {
-    fetchRecommendations()
-    const id = setInterval(fetchRecommendations, 60000)
-    return () => clearInterval(id)
-  }, [fetchRecommendations])
-
-  useEffect(() => {
-    fetchNews()
-    const id = setInterval(fetchNews, 120000)
-    return () => clearInterval(id)
-  }, [fetchNews])
-
   const filtered = markets.filter(m => {
-    if (tab !== 'all' && tab !== 'new' && m.cat !== tab) return false
+    if (tab !== 'all' && tab !== 'heatmap' && m.cat !== tab) return false
     return (
       m.symbol.toLowerCase().includes(search.toLowerCase()) ||
       m.name.toLowerCase().includes(search.toLowerCase())
     )
   })
-
-  const filteredNew = recommendations.filter(n =>
-    n.symbol.toLowerCase().includes(search.toLowerCase()) ||
-    n.name.toLowerCase().includes(search.toLowerCase())
-  )
 
   const fmtPrice = (p: number) => {
     if (p >= 10000) return '$' + p.toLocaleString('en-US', { maximumFractionDigits: 0 })
@@ -199,11 +188,11 @@ export default function MarketsPage() {
   }
 
   const tabs: { key: Tab; label: string }[] = [
-    { key: 'all',    label: 'All Markets' },
-    { key: 'crypto', label: 'Crypto'      },
-    { key: 'metals', label: 'Metals'      },
-    { key: 'stocks', label: 'Stocks'      },
-    { key: 'new',    label: '🔥 New'       },
+    { key: 'all',     label: 'All Markets' },
+    { key: 'crypto',  label: 'Crypto'      },
+    { key: 'metals',  label: 'Metals'      },
+    { key: 'stocks',  label: 'Stocks'      },
+    { key: 'heatmap', label: '📊 Heat Map'  },
   ]
 
   return (
@@ -249,99 +238,11 @@ export default function MarketsPage() {
         </div>
       </div>
 
-      {/* New / Trending tab */}
-      {tab === 'new' && (
-        <div className="space-y-5">
-          {/* Live News Section */}
-          <div>
-            <div className="flex items-center gap-2 mb-3">
-              <span className="text-[#f0b90b] text-base">📰</span>
-              <p className="text-xs font-bold text-[#eaecef]">Live Market News</p>
-              {newsLoading && <div className="w-3 h-3 border border-[#f0b90b] border-t-transparent rounded-full animate-spin" />}
-            </div>
-            {news.length === 0 && !newsLoading ? (
-              <p className="text-xs text-[#848e9c]">Loading news...</p>
-            ) : (
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                {news.slice(0, 6).map((n, i) => (
-                  <a key={i} href={n.url} target="_blank" rel="noopener noreferrer"
-                    className="bg-[#161a1e] border border-[#2b3139] hover:border-[#f0b90b]/30 rounded-xl p-3.5 transition-all block">
-                    <p className="text-xs font-semibold text-[#eaecef] leading-snug line-clamp-2 mb-1.5">{n.title}</p>
-                    <div className="flex items-center justify-between">
-                      <span className="text-[10px] text-[#f0b90b] font-medium">{n.source}</span>
-                      {n.published && (
-                        <span className="text-[10px] text-[#4a5568]">
-                          {new Date(n.published).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}
-                        </span>
-                      )}
-                    </div>
-                  </a>
-                ))}
-              </div>
-            )}
-          </div>
-
-          {/* AI Recommendations Section */}
-          <div>
-            <div className="flex items-center gap-2 mb-3">
-              <Star size={13} className="text-[#f0b90b]" />
-              <p className="text-xs font-bold text-[#eaecef]">AI Recommendations</p>
-              <span className="text-[10px] bg-[#f0b90b]/10 text-[#f0b90b] px-2 py-0.5 rounded-full font-medium">Live</span>
-              {recLoading && <div className="w-3 h-3 border border-[#f0b90b] border-t-transparent rounded-full animate-spin" />}
-            </div>
-          {filteredNew.map(n => {
-            const isUp   = n.change >= 0
-            const recColor = n.recommendation === 'BUY' ? 'text-[#0ecb81] bg-[#0ecb81]/10 border-[#0ecb81]/20'
-              : n.recommendation === 'SELL' ? 'text-[#f6465d] bg-[#f6465d]/10 border-[#f6465d]/20'
-              : 'text-[#f0b90b] bg-[#f0b90b]/10 border-[#f0b90b]/20'
-            return (
-              <div key={n.symbol} className="bg-[#161a1e] border border-[#2b3139] hover:border-[#f0b90b]/25 rounded-xl p-4 transition-all">
-                <div className="flex flex-wrap items-start gap-3">
-                  <div className="w-10 h-10 rounded-full bg-[#f0b90b]/10 flex items-center justify-center text-sm font-bold text-[#f0b90b] flex-shrink-0">
-                    {n.symbol[0]}
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <div className="flex flex-wrap items-center gap-2 mb-1">
-                      <span className="font-mono font-bold text-[#eaecef] text-sm">{n.symbol}</span>
-                      <span className="text-[10px] text-[#848e9c]">{n.name}</span>
-                      <span className={`text-[10px] font-bold px-2 py-0.5 rounded border ${isUp ? 'text-[#0ecb81]' : 'text-[#f6465d]'}`}>
-                        {isUp ? '+' : ''}{n.change}%
-                      </span>
-                    </div>
-                    <p className="text-[11px] text-[#848e9c] leading-relaxed">{n.reason}</p>
-                  </div>
-                  <div className="flex flex-col items-end gap-2 flex-shrink-0">
-                    <span className={`text-xs font-bold px-2.5 py-1 rounded-lg border ${recColor}`}>
-                      {n.recommendation}
-                    </span>
-                    <div className="flex items-center gap-1">
-                      <div className="w-20 h-1.5 bg-[#2b3139] rounded-full overflow-hidden">
-                        <div className="h-full bg-[#f0b90b] rounded-full" style={{ width: `${n.confidence}%` }} />
-                      </div>
-                      <span className="text-[10px] text-[#848e9c]">{n.confidence}%</span>
-                    </div>
-                    <p className="text-xs font-mono font-bold text-[#eaecef]">${n.price}</p>
-                  </div>
-                </div>
-                <div className="mt-3 flex items-center justify-between">
-                  <div className="flex items-center gap-1.5">
-                    <Zap size={10} className="text-[#f0b90b]" />
-                    <span className="text-[10px] text-[#848e9c]">AI confidence: {n.confidence}%</span>
-                  </div>
-                  <button onClick={() => navigate('/app/trade')}
-                    className="flex items-center gap-1 text-[10px] text-[#f0b90b] hover:text-[#eaecef] transition font-medium">
-                    Trade <ArrowRight size={9} />
-                  </button>
-                </div>
-              </div>
-            )
-          })}
-          </div>
-        </div>
-      )}
+      {/* Heat Map tab */}
+      {tab === 'heatmap' && <TvHeatMap />}
 
       {/* Grid view */}
-      {tab !== 'new' && view === 'grid' && (
+      {tab !== 'heatmap' && view === 'grid' && (
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
           {loading && filtered.length === 0
             ? Array.from({ length: 8 }).map((_, i) => (
@@ -375,7 +276,7 @@ export default function MarketsPage() {
       )}
 
       {/* Table view */}
-      {tab !== 'new' && view === 'table' && (
+      {tab !== 'heatmap' && view === 'table' && (
         <div className="bg-[#161a1e] border border-[#2b3139] rounded-xl overflow-hidden">
           {/* Mobile card list */}
           <div className="sm:hidden divide-y divide-[#2b3139]/60">
@@ -493,7 +394,7 @@ export default function MarketsPage() {
       )}
 
       {/* Empty state */}
-      {tab !== 'new' && !loading && filtered.length === 0 && (
+      {tab !== 'heatmap' && !loading && filtered.length === 0 && (
         <div className="bg-[#161a1e] border border-[#2b3139] rounded-xl py-14 text-center">
           <Search size={24} className="text-[#2b3139] mx-auto mb-3" />
           <p className="text-sm text-[#848e9c]">No markets match "{search}"</p>

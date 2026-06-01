@@ -3377,7 +3377,7 @@ async def get_referral_stats(current_user=Depends(get_current_user), db: Session
     ).all()
     total_earned = sum(t.amount_usdt for t in bonus_txns)
     domain = os.getenv("REPLIT_DEV_DOMAIN") or os.getenv("REPLIT_DOMAINS", "").split(",")[0].strip()
-    ref_link = f"https://{domain}/login?ref={user.referral_code}" if domain else None
+    ref_link = f"https://{domain}/login?ref={user.referral_code}" if domain else f"/login?ref={user.referral_code}"
     return {
         "referral_code": user.referral_code,
         "referral_link": ref_link,
@@ -3780,3 +3780,36 @@ async def admin_delete_testimonial(testimonial_id: int, db: Session = Depends(ge
     db.commit()
     return {"message": "Testimonial deleted"}
 
+
+
+# ===================== WebSocket — Live Balance Push =====================
+
+@router.websocket("/ws/live")
+async def live_data_ws(websocket: WebSocket, token: str = "", db: Session = Depends(get_db)):
+    import asyncio as _aio
+    from jose import jwt as _jwt
+    await websocket.accept()
+    try:
+        _secret = os.getenv("JWT_SECRET_KEY", "super-secret-key-change-in-production")
+        _payload = _jwt.decode(token, _secret, algorithms=["HS256"])
+        _email = _payload.get("sub")
+        if not _email:
+            await websocket.close(code=4001)
+            return
+        user = db.query(User).filter(User.email == _email).first()
+        if not user:
+            await websocket.close(code=4001)
+            return
+    except Exception:
+        await websocket.close(code=4001)
+        return
+    try:
+        while True:
+            db.refresh(user)
+            await websocket.send_json({
+                "type": "balance",
+                "balance_usdt": float(user.balance_usdt or 0),
+            })
+            await _aio.sleep(3)
+    except (WebSocketDisconnect, Exception):
+        pass

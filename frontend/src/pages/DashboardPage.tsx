@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useAuthStore } from '../store/authStore';
 import { getEvents, getBotStatus, getTodayPnl, finEventListBots, getBotTrades } from '../lib/api';
 import { useTickerPrices } from '../hooks/useTickerPrices';
+import { useHotData } from '../hooks/useHotData';
 import {
   TrendingUp,
   TrendingDown,
@@ -27,6 +28,7 @@ export default function DashboardPage() {
   const navigate = useNavigate();
   const { user } = useAuthStore();
   const tickerItems = useTickerPrices(60000);
+  useHotData();
 
   const [events, setEvents] = useState<
     { id: number; description: string; event_type: string; tickers_affected: string[]; created_at: string }[]

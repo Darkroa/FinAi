@@ -1,8 +1,15 @@
 import { useState, useEffect } from 'react';
 import { useAuthStore } from '../store/authStore';
-import { updateNotificationPreferences } from '../lib/api';
+import {
+  updateNotificationPreferences,
+  changePassword,
+  setTransferPin as apiSetPin,
+} from '../lib/api';
 import toast from 'react-hot-toast';
-import { Bell, Mail, MessageCircle, Send, Zap, Shield, Globe, Info, Check, Activity } from 'lucide-react';
+import {
+  Bell, Mail, MessageCircle, Send, Zap, Shield, Globe,
+  Check, Activity, Eye, EyeOff,
+} from 'lucide-react';
 
 interface NotifPrefs {
   email: boolean;
@@ -21,6 +28,12 @@ interface AppPrefs {
   compact_numbers: boolean;
 }
 
+interface PwForm {
+  current: string;
+  next: string;
+  confirm: string;
+}
+
 const APP_PREFS_KEY = 'finai-app-prefs';
 
 function loadAppPrefs(): AppPrefs {
@@ -29,6 +42,31 @@ function loadAppPrefs(): AppPrefs {
     if (raw) return JSON.parse(raw) as AppPrefs;
   } catch { /* ignore */ }
   return { confirm_before_trade: true, sound_alerts: false, compact_numbers: false };
+}
+
+function Toggle({
+  on,
+  onToggle,
+  color = 'bg-[#f0b90b]',
+}: {
+  on: boolean;
+  onToggle: () => void;
+  color?: string;
+}) {
+  return (
+    <button
+      onClick={onToggle}
+      className={`relative w-11 h-6 rounded-full transition-all duration-200 flex-shrink-0 ${
+        on ? color : 'bg-[#2b3139]'
+      }`}
+    >
+      <span
+        className={`absolute top-0.5 w-5 h-5 rounded-full bg-white shadow transition-transform duration-200 ${
+          on ? 'translate-x-5' : 'translate-x-0.5'
+        }`}
+      />
+    </button>
+  );
 }
 
 export default function SettingsPage() {
@@ -40,26 +78,42 @@ export default function SettingsPage() {
     telegram: false,
   });
   const [saving, setSaving] = useState(false);
-  const [tradeAlerts, setTradeAlerts] = useState<TradeAlertPrefs>({ trade_open_alert: false, trade_close_alert: false });
+  const [tradeAlerts, setTradeAlerts] = useState<TradeAlertPrefs>({
+    trade_open_alert: false,
+    trade_close_alert: false,
+  });
   const [savingAlerts, setSavingAlerts] = useState(false);
 
   const [appPrefs, setAppPrefs] = useState<AppPrefs>(loadAppPrefs);
   const [prefsSaved, setPrefsSaved] = useState(false);
 
-  const [language, setLanguage]   = useState(() => localStorage.getItem('finai-language') || 'en-US');
-  const [currency, setCurrency]   = useState(() => localStorage.getItem('finai-currency') || 'USD');
+  const [language, setLanguage] = useState(
+    () => localStorage.getItem('finai-language') || 'en-US'
+  );
+  const [currency, setCurrency] = useState(
+    () => localStorage.getItem('finai-currency') || 'USD'
+  );
   const [localeSaved, setLocaleSaved] = useState(false);
 
-  // Load notification preferences from user store
+  const [pwForm, setPwForm] = useState<PwForm>({ current: '', next: '', confirm: '' });
+  const [showPw, setShowPw] = useState(false);
+  const [changingPw, setChangingPw] = useState(false);
+
+  const [newPin, setNewPin] = useState('');
+  const [showPin, setShowPin] = useState(false);
+  const [changingPin, setChangingPin] = useState(false);
+
+  useEffect(() => {
+    document.documentElement.lang = language.split('-')[0];
+  }, [language]);
+
   useEffect(() => {
     if (user?.notification_preferences) {
       const prefs = user.notification_preferences;
-
       setNotifs(prefs as NotifPrefs);
-
       setTradeAlerts({
-        trade_open_alert: !!(prefs as any).trade_open_alert,
-        trade_close_alert: !!(prefs as any).trade_close_alert,
+        trade_open_alert: !!(prefs as Record<string, unknown>).trade_open_alert,
+        trade_close_alert: !!(prefs as Record<string, unknown>).trade_close_alert,
       });
     }
   }, [user]);
@@ -67,7 +121,9 @@ export default function SettingsPage() {
   const handleSaveTradeAlerts = async () => {
     setSavingAlerts(true);
     try {
-      const res = await updateNotificationPreferences(tradeAlerts as unknown as Record<string, unknown>);
+      const res = await updateNotificationPreferences(
+        tradeAlerts as unknown as Record<string, unknown>
+      );
       if (res.data) setUser(res.data);
       toast.success('Trade alert preferences saved');
     } catch {
@@ -76,37 +132,6 @@ export default function SettingsPage() {
       setSavingAlerts(false);
     }
   };
-
-  const toggleTradeAlert = (key: keyof TradeAlertPrefs) => {
-    setTradeAlerts(prev => ({ ...prev, [key]: !prev[key] }));
-  };
-
-  const notifItems = [
-    {
-      key: 'email' as const,
-      label: 'Email Notifications',
-      desc: 'Trade alerts, account updates, and security events',
-      icon: Mail,
-      color: 'text-[#f0b90b]',
-      bg: 'bg-[#f0b90b]/10',
-    },
-    {
-      key: 'whatsapp' as const,
-      label: 'WhatsApp Alerts',
-      desc: 'Real-time trade signals and bot status via WhatsApp',
-      icon: MessageCircle,
-      color: 'text-[#0ecb81]',
-      bg: 'bg-[#0ecb81]/10',
-    },
-    {
-      key: 'telegram' as const,
-      label: 'Telegram Alerts',
-      desc: 'Market events and trade notifications via Telegram',
-      icon: Send,
-      color: 'text-[#3b82f6]',
-      bg: 'bg-blue-500/10',
-    },
-  ];
 
   const handleSave = async () => {
     setSaving(true);
@@ -121,19 +146,6 @@ export default function SettingsPage() {
     }
   };
 
-  const toggle = (key: keyof NotifPrefs) => {
-    setNotifs(prev => ({ ...prev, [key]: !prev[key] }));
-  };
-
-  const toggleAppPref = (key: keyof AppPrefs) => {
-    setAppPrefs(prev => {
-      const next = { ...prev, [key]: !prev[key] };
-      localStorage.setItem(APP_PREFS_KEY, JSON.stringify(next));
-      return next;
-    });
-    setPrefsSaved(false);
-  };
-
   const saveAppPrefs = () => {
     localStorage.setItem(APP_PREFS_KEY, JSON.stringify(appPrefs));
     setPrefsSaved(true);
@@ -144,22 +156,101 @@ export default function SettingsPage() {
   const saveLocale = () => {
     localStorage.setItem('finai-language', language);
     localStorage.setItem('finai-currency', currency);
+    document.documentElement.lang = language.split('-')[0];
+    window.dispatchEvent(new CustomEvent('finai-locale-change', { detail: { language, currency } }));
     setLocaleSaved(true);
     toast.success('Language & region saved');
     setTimeout(() => setLocaleSaved(false), 2000);
   };
 
+  const handleChangePw = async () => {
+    if (pwForm.next !== pwForm.confirm) {
+      toast.error('New passwords do not match');
+      return;
+    }
+    if (pwForm.next.length < 8) {
+      toast.error('New password must be at least 8 characters');
+      return;
+    }
+    setChangingPw(true);
+    try {
+      await changePassword(pwForm.current, pwForm.next);
+      toast.success('Password updated successfully');
+      setPwForm({ current: '', next: '', confirm: '' });
+    } catch {
+      toast.error('Failed to update password — check your current password');
+    } finally {
+      setChangingPw(false);
+    }
+  };
+
+  const handleChangePin = async () => {
+    if (newPin.length !== 6) {
+      toast.error('PIN must be exactly 6 digits');
+      return;
+    }
+    setChangingPin(true);
+    try {
+      await apiSetPin(newPin);
+      toast.success('Transfer PIN updated');
+      setNewPin('');
+    } catch {
+      toast.error('Failed to update PIN');
+    } finally {
+      setChangingPin(false);
+    }
+  };
+
+  const notifItems = [
+    {
+      key: 'email' as const,
+      label: 'Email Notifications',
+      desc: 'Trade alerts, account updates, security events',
+      icon: Mail,
+      color: 'text-[#f0b90b]',
+      bg: 'bg-[#f0b90b]/10',
+    },
+    {
+      key: 'whatsapp' as const,
+      label: 'WhatsApp Alerts',
+      desc: 'Real-time trade signals and bot status',
+      icon: MessageCircle,
+      color: 'text-[#0ecb81]',
+      bg: 'bg-[#0ecb81]/10',
+    },
+    {
+      key: 'telegram' as const,
+      label: 'Telegram Alerts',
+      desc: 'Market events and trade notifications',
+      icon: Send,
+      color: 'text-[#3b82f6]',
+      bg: 'bg-blue-500/10',
+    },
+  ];
+
   const appPrefItems: { key: keyof AppPrefs; label: string; desc: string }[] = [
-    { key: 'confirm_before_trade', label: 'Confirm before trade orders',  desc: 'Show a confirmation dialog before placing orders' },
-    { key: 'sound_alerts',         label: 'Sound alerts',                  desc: 'Play audio when a trade executes or a bot signals' },
-    { key: 'compact_numbers',      label: 'Compact number format',         desc: 'Display large numbers as 1.2M instead of 1,200,000' },
+    {
+      key: 'confirm_before_trade',
+      label: 'Confirm before orders',
+      desc: 'Show confirmation dialog before placing orders',
+    },
+    {
+      key: 'sound_alerts',
+      label: 'Sound alerts',
+      desc: 'Play audio when a trade executes or a bot signals',
+    },
+    {
+      key: 'compact_numbers',
+      label: 'Compact number format',
+      desc: 'Display large numbers as 1.2M instead of 1,200,000',
+    },
   ];
 
   return (
     <div className="space-y-5 max-w-2xl">
       <h1 className="text-xl font-bold text-[#eaecef]">Settings</h1>
 
-      {/* Notifications Section */}
+      {/* Notifications */}
       <div className="bg-[#161a1e] border border-[#2b3139] rounded-xl overflow-hidden">
         <div className="flex items-center gap-2.5 px-5 py-4 border-b border-[#2b3139]">
           <div className="w-7 h-7 rounded-lg bg-[#f0b90b]/10 flex items-center justify-center">
@@ -173,26 +264,19 @@ export default function SettingsPage() {
 
         <div className="divide-y divide-[#2b3139]/60">
           {notifItems.map(({ key, label, desc, icon: Icon, color, bg }) => (
-            <div key={key} className="flex items-center gap-4 px-5 py-4">
-              <div className={`w-9 h-9 rounded-xl ${bg} flex items-center justify-center flex-shrink-0`}>
-                <Icon size={16} className={color} />
+            <div key={key} className="flex items-center justify-between gap-3 px-5 py-4">
+              <div className="flex items-center gap-3 min-w-0 flex-1">
+                <div
+                  className={`w-8 h-8 rounded-xl ${bg} flex items-center justify-center flex-shrink-0`}
+                >
+                  <Icon size={15} className={color} />
+                </div>
+                <div className="min-w-0">
+                  <p className="text-sm font-medium text-[#eaecef] leading-tight">{label}</p>
+                  <p className="text-xs text-[#848e9c] mt-0.5 leading-snug">{desc}</p>
+                </div>
               </div>
-              <div className="flex-1 min-w-0">
-                <p className="text-sm font-medium text-[#eaecef]">{label}</p>
-                <p className="text-xs text-[#848e9c] leading-relaxed mt-0.5">{desc}</p>
-              </div>
-              <button
-                onClick={() => toggle(key)}
-                className={`relative w-11 h-6 rounded-full transition-all duration-200 flex-shrink-0 ${
-                  notifs[key] ? 'bg-[#f0b90b]' : 'bg-[#2b3139]'
-                }`}
-              >
-                <span
-                  className={`absolute top-0.5 w-5 h-5 rounded-full bg-white shadow transition-transform duration-200 ${
-                    notifs[key] ? 'translate-x-5' : 'translate-x-0.5'
-                  }`}
-                />
-              </button>
+              <Toggle on={notifs[key]} onToggle={() => setNotifs(p => ({ ...p, [key]: !p[key] }))} />
             </div>
           ))}
         </div>
@@ -216,25 +300,37 @@ export default function SettingsPage() {
           </div>
           <div>
             <h2 className="text-sm font-semibold text-[#eaecef]">Trade Alerts</h2>
-            <p className="text-[10px] text-[#848e9c]">Notify via Telegram · WhatsApp · In-app (off by default)</p>
+            <p className="text-[10px] text-[#848e9c]">
+              Notify via Telegram · WhatsApp · In-app
+            </p>
           </div>
         </div>
         <div className="divide-y divide-[#2b3139]/60">
-          {([
-            { key: 'trade_open_alert'  as const, label: 'Trade Opened', desc: 'Notify when a bot opens a new position' },
-            { key: 'trade_close_alert' as const, label: 'Trade Closed', desc: 'Notify when a bot closes a position' },
-          ] as const).map(item => (
-            <div key={item.key} className="flex items-center gap-4 px-5 py-4">
-              <div className="flex-1 min-w-0">
+          {(
+            [
+              {
+                key: 'trade_open_alert' as const,
+                label: 'Trade Opened',
+                desc: 'Notify when a bot opens a new position',
+              },
+              {
+                key: 'trade_close_alert' as const,
+                label: 'Trade Closed',
+                desc: 'Notify when a bot closes a position',
+              },
+            ] as const
+          ).map(item => (
+            <div key={item.key} className="flex items-center justify-between gap-4 px-5 py-4">
+              <div className="min-w-0">
                 <p className="text-sm font-medium text-[#eaecef]">{item.label}</p>
-                <p className="text-xs text-[#848e9c] leading-relaxed mt-0.5">{item.desc}</p>
+                <p className="text-xs text-[#848e9c] mt-0.5">{item.desc}</p>
               </div>
-              <button
-                onClick={() => toggleTradeAlert(item.key)}
-                className={`relative w-11 h-6 rounded-full transition-all duration-200 flex-shrink-0 ${tradeAlerts[item.key] ? 'bg-[#f0b90b]' : 'bg-[#2b3139]'}`}
-              >
-                <span className={`absolute top-0.5 w-5 h-5 rounded-full bg-white shadow transition-transform duration-200 ${tradeAlerts[item.key] ? 'translate-x-5' : 'translate-x-0.5'}`} />
-              </button>
+              <Toggle
+                on={tradeAlerts[item.key]}
+                onToggle={() =>
+                  setTradeAlerts(p => ({ ...p, [item.key]: !p[item.key] }))
+                }
+              />
             </div>
           ))}
         </div>
@@ -263,22 +359,22 @@ export default function SettingsPage() {
         <div className="divide-y divide-[#2b3139]/60">
           {appPrefItems.map(item => (
             <div key={item.key} className="flex items-center justify-between gap-4 px-5 py-4">
-              <div>
+              <div className="min-w-0">
                 <p className="text-sm font-medium text-[#eaecef]">{item.label}</p>
                 <p className="text-xs text-[#848e9c] mt-0.5">{item.desc}</p>
               </div>
-              <button
-                onClick={() => toggleAppPref(item.key)}
-                className={`relative w-11 h-6 rounded-full transition-all duration-200 flex-shrink-0 ${
-                  appPrefs[item.key] ? 'bg-[#0ecb81]' : 'bg-[#2b3139]'
-                }`}
-              >
-                <span
-                  className={`absolute top-0.5 w-5 h-5 rounded-full bg-white shadow transition-transform duration-200 ${
-                    appPrefs[item.key] ? 'translate-x-5' : 'translate-x-0.5'
-                  }`}
-                />
-              </button>
+              <Toggle
+                on={appPrefs[item.key]}
+                onToggle={() => {
+                  setAppPrefs(prev => {
+                    const next = { ...prev, [item.key]: !prev[item.key] };
+                    localStorage.setItem(APP_PREFS_KEY, JSON.stringify(next));
+                    return next;
+                  });
+                  setPrefsSaved(false);
+                }}
+                color="bg-[#0ecb81]"
+              />
             </div>
           ))}
         </div>
@@ -287,7 +383,13 @@ export default function SettingsPage() {
             onClick={saveAppPrefs}
             className="flex items-center gap-2 bg-[#0ecb81] hover:bg-[#0aaf6f] text-black font-semibold px-6 py-2.5 rounded-xl text-sm transition w-full sm:w-auto"
           >
-            {prefsSaved ? <><Check size={14} /> Saved!</> : 'Save App Preferences'}
+            {prefsSaved ? (
+              <>
+                <Check size={14} /> Saved!
+              </>
+            ) : (
+              'Save App Preferences'
+            )}
           </button>
         </div>
       </div>
@@ -300,7 +402,7 @@ export default function SettingsPage() {
           </div>
           <div>
             <h2 className="text-sm font-semibold text-[#eaecef]">Language & Region</h2>
-            <p className="text-[10px] text-[#848e9c]">Locale and display preferences — saved to this device</p>
+            <p className="text-[10px] text-[#848e9c]">Locale and display preferences</p>
           </div>
         </div>
         <div className="p-5 space-y-4">
@@ -316,6 +418,9 @@ export default function SettingsPage() {
               <option value="fr">Français</option>
               <option value="es">Español</option>
               <option value="de">Deutsch</option>
+              <option value="ar">العربية</option>
+              <option value="zh">中文</option>
+              <option value="pt">Português</option>
             </select>
           </div>
           <div>
@@ -328,6 +433,7 @@ export default function SettingsPage() {
               <option value="USD">USD — US Dollar</option>
               <option value="EUR">EUR — Euro</option>
               <option value="GBP">GBP — British Pound</option>
+              <option value="AED">AED — UAE Dirham</option>
               <option value="BTC">BTC — Bitcoin</option>
             </select>
           </div>
@@ -335,12 +441,18 @@ export default function SettingsPage() {
             onClick={saveLocale}
             className="flex items-center gap-2 bg-[#f0b90b] hover:bg-[#d4a30a] text-black font-semibold px-5 py-2.5 rounded-xl text-sm transition"
           >
-            {localeSaved ? <><Check size={14} /> Saved!</> : 'Save'}
+            {localeSaved ? (
+              <>
+                <Check size={14} /> Saved!
+              </>
+            ) : (
+              'Save'
+            )}
           </button>
         </div>
       </div>
 
-      {/* Security Note */}
+      {/* Security & Account */}
       <div className="bg-[#161a1e] border border-[#2b3139] rounded-xl overflow-hidden">
         <div className="flex items-center gap-2.5 px-5 py-4 border-b border-[#2b3139]">
           <div className="w-7 h-7 rounded-lg bg-[#f6465d]/10 flex items-center justify-center">
@@ -348,15 +460,85 @@ export default function SettingsPage() {
           </div>
           <div>
             <h2 className="text-sm font-semibold text-[#eaecef]">Security & Account</h2>
-            <p className="text-[10px] text-[#848e9c]">Password, PIN, and account deletion</p>
+            <p className="text-[10px] text-[#848e9c]">Change your password and transfer PIN</p>
           </div>
         </div>
-        <div className="px-5 py-4 flex items-center gap-3">
-          <Info size={14} className="text-[#848e9c] flex-shrink-0" />
-          <p className="text-xs text-[#848e9c] leading-relaxed">
-            Security settings including password change, Transfer PIN, exchange connections, and API keys are managed in your{' '}
-            <span className="text-[#f0b90b] font-medium">Profile</span> page under the Security tab.
+
+        {/* Change Password */}
+        <div className="p-5 border-b border-[#2b3139]/60 space-y-3">
+          <p className="text-xs font-semibold text-[#eaecef]">Change Password</p>
+          <div className="space-y-2">
+            <div className="relative">
+              <input
+                type={showPw ? 'text' : 'password'}
+                placeholder="Current password"
+                value={pwForm.current}
+                onChange={e => setPwForm(p => ({ ...p, current: e.target.value }))}
+                className="w-full bg-[#0b0e11] border border-[#2b3139] rounded-xl px-3 py-2.5 pr-10 text-sm text-[#eaecef] placeholder-[#4a5568] focus:outline-none focus:border-[#f6465d] transition"
+              />
+              <button
+                type="button"
+                onClick={() => setShowPw(v => !v)}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-[#848e9c] hover:text-[#eaecef] transition"
+              >
+                {showPw ? <EyeOff size={13} /> : <Eye size={13} />}
+              </button>
+            </div>
+            <input
+              type={showPw ? 'text' : 'password'}
+              placeholder="New password (min 8 characters)"
+              value={pwForm.next}
+              onChange={e => setPwForm(p => ({ ...p, next: e.target.value }))}
+              className="w-full bg-[#0b0e11] border border-[#2b3139] rounded-xl px-3 py-2.5 text-sm text-[#eaecef] placeholder-[#4a5568] focus:outline-none focus:border-[#f6465d] transition"
+            />
+            <input
+              type={showPw ? 'text' : 'password'}
+              placeholder="Confirm new password"
+              value={pwForm.confirm}
+              onChange={e => setPwForm(p => ({ ...p, confirm: e.target.value }))}
+              className="w-full bg-[#0b0e11] border border-[#2b3139] rounded-xl px-3 py-2.5 text-sm text-[#eaecef] placeholder-[#4a5568] focus:outline-none focus:border-[#f6465d] transition"
+            />
+          </div>
+          <button
+            onClick={handleChangePw}
+            disabled={changingPw || !pwForm.current || !pwForm.next || !pwForm.confirm}
+            className="bg-[#f6465d]/15 hover:bg-[#f6465d]/25 disabled:opacity-50 border border-[#f6465d]/30 text-[#f6465d] font-semibold px-5 py-2 rounded-xl text-sm transition"
+          >
+            {changingPw ? 'Updating…' : 'Update Password'}
+          </button>
+        </div>
+
+        {/* Change Transfer PIN */}
+        <div className="p-5 space-y-3">
+          <p className="text-xs font-semibold text-[#eaecef]">Transfer PIN</p>
+          <p className="text-[10px] text-[#848e9c]">
+            6-digit PIN used to authorize P2P transfers and withdrawals
           </p>
+          <div className="relative">
+            <input
+              type={showPin ? 'text' : 'password'}
+              inputMode="numeric"
+              placeholder="New 6-digit PIN"
+              maxLength={6}
+              value={newPin}
+              onChange={e => setNewPin(e.target.value.replace(/\D/g, '').slice(0, 6))}
+              className="w-full bg-[#0b0e11] border border-[#2b3139] rounded-xl px-3 py-2.5 pr-10 text-sm text-[#eaecef] placeholder-[#4a5568] focus:outline-none focus:border-[#f0b90b] transition font-mono tracking-[0.4em]"
+            />
+            <button
+              type="button"
+              onClick={() => setShowPin(v => !v)}
+              className="absolute right-3 top-1/2 -translate-y-1/2 text-[#848e9c] hover:text-[#eaecef] transition"
+            >
+              {showPin ? <EyeOff size={13} /> : <Eye size={13} />}
+            </button>
+          </div>
+          <button
+            onClick={handleChangePin}
+            disabled={changingPin || newPin.length !== 6}
+            className="bg-[#f0b90b]/15 hover:bg-[#f0b90b]/25 disabled:opacity-50 border border-[#f0b90b]/30 text-[#f0b90b] font-semibold px-5 py-2 rounded-xl text-sm transition"
+          >
+            {changingPin ? 'Saving…' : 'Set PIN'}
+          </button>
         </div>
       </div>
     </div>

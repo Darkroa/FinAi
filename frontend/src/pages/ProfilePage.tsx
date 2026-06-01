@@ -258,16 +258,23 @@ function ReferralTab() {
         </div>
 
         {/* Link */}
-        {stats?.referral_link && (
+        {stats?.referral_code && (
           <div>
             <label className="text-xs text-[#848e9c] mb-1.5 block">Or share your referral link</label>
             <div className="flex gap-2">
               <div className="flex-1 flex items-center gap-2 bg-[#0b0e11] border border-[#2b3139] rounded-xl px-3 py-2.5 overflow-hidden">
                 <Share2 size={12} className="text-[#848e9c] flex-shrink-0" />
-                <span className="text-xs text-[#848e9c] truncate font-mono">{stats.referral_link}</span>
+                <span className="text-xs text-[#848e9c] truncate font-mono">
+                  {`${window.location.origin}/login?ref=${stats.referral_code}`}
+                </span>
               </div>
               <button
-                onClick={() => copyToClipboard(stats.referral_link, 'link')}
+                onClick={() =>
+                  copyToClipboard(
+                    `${window.location.origin}/login?ref=${stats.referral_code}`,
+                    'link'
+                  )
+                }
                 className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-[#2b3139] text-[#eaecef] text-xs font-semibold hover:bg-[#3c4451] transition">
                 {copied === 'link' ? <CheckCircle size={13} /> : <Copy size={13} />}
                 {copied === 'link' ? 'Copied!' : 'Copy Link'}
