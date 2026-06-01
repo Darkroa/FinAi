@@ -10,6 +10,7 @@ import {
 } from 'lucide-react'
 import { cn } from '../lib/utils'
 import { getUserNotifications, markAllNotificationsRead } from '../lib/api'
+import { useLanguage } from '../contexts/LanguageContext'
 
 import AdPopup from '../components/AdPopup'
 
@@ -31,14 +32,14 @@ const TIER_META = [
 ]
 
 const sideNavItems = [
-  { to: '/app/dashboard',     icon: Home,          label: 'Dashboard' },
-  { to: '/app/wallet',        icon: Wallet,        label: 'Wallet' },
-  { to: '/app/chat',          icon: MessageCircle, label: 'Chat Fin' },
-  { to: '/app/news',          icon: Newspaper,     label: 'News' },
-  { to: '/app/notifications', icon: BellRing,      label: 'Notifications' },
-  { to: '/app/settings',      icon: Settings,      label: 'Settings' },
-  { to: '/app/support',       icon: MessageSquare, label: 'Support' },
-  { to: '/app/pricing',       icon: Crown,         label: 'Pricing' },
+  { to: '/app/dashboard',     icon: Home,          tKey: 'nav.dashboard' },
+  { to: '/app/wallet',        icon: Wallet,        tKey: 'nav.wallet' },
+  { to: '/app/chat',          icon: MessageCircle, tKey: 'nav.chatfin' },
+  { to: '/app/news',          icon: Newspaper,     tKey: 'nav.news' },
+  { to: '/app/notifications', icon: BellRing,      tKey: 'nav.notifications' },
+  { to: '/app/settings',      icon: Settings,      tKey: 'nav.settings' },
+  { to: '/app/support',       icon: MessageSquare, tKey: 'nav.support' },
+  { to: '/app/pricing',       icon: Crown,         tKey: 'nav.pricing' },
 ]
 
 interface AppNotification {
@@ -48,6 +49,7 @@ interface AppNotification {
 export default function DashboardLayout() {
   const { user, logout } = useAuthStore()
   const navigate = useNavigate()
+  const { t } = useLanguage()
   const [navOpen, setNavOpen]     = useState(false)
   const [notifOpen, setNotifOpen] = useState(false)
   const [notifications, setNotifications] = useState<AppNotification[]>([])
@@ -124,13 +126,13 @@ export default function DashboardLayout() {
         </div>
 
         <nav className="flex-1 py-4 px-3 space-y-0.5 overflow-y-auto">
-          {sideNavItems.map(({ to, icon: Icon, label }) => (
+          {sideNavItems.map(({ to, icon: Icon, tKey }) => (
             <NavLink key={to} to={to} onClick={() => setNavOpen(false)}
               className={({ isActive }) => cn(
                 'flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all',
                 isActive ? 'bg-[#f0b90b]/10 text-[#f0b90b]' : 'text-[#848e9c] hover:text-[#eaecef] hover:bg-[#2b3139]/60'
               )}>
-              <Icon size={15} />{label}
+              <Icon size={15} />{t(tKey)}
             </NavLink>
           ))}
           {user?.is_admin && (
@@ -139,7 +141,7 @@ export default function DashboardLayout() {
                 'flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all',
                 isActive ? 'bg-[#f6465d]/10 text-[#f6465d]' : 'text-[#848e9c] hover:text-[#eaecef] hover:bg-[#2b3139]/60'
               )}>
-              <ShieldCheck size={15} />Admin Panel
+              <ShieldCheck size={15} />{t('nav.admin')}
             </NavLink>
           )}
         </nav>
@@ -147,7 +149,7 @@ export default function DashboardLayout() {
         <div className="p-3 border-t border-[#2b3139] flex-shrink-0">
           <button onClick={handleLogout}
             className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs text-[#848e9c] hover:text-[#f6465d] hover:bg-[#f6465d]/10 transition-all">
-            <LogOut size={13} /> Sign Out
+            <LogOut size={13} /> {t('nav.signout')}
           </button>
         </div>
       </aside>
@@ -273,7 +275,7 @@ export default function DashboardLayout() {
             {({ isActive }) => (
               <>
                 <Home size={20} />
-                <span className="text-[9px] font-medium">Home</span>
+                <span className="text-[9px] font-medium">{t('nav.home')}</span>
                 {isActive && <span className="w-4 h-0.5 rounded-full bg-[#f0b90b] mt-0.5" />}
               </>
             )}
@@ -286,7 +288,7 @@ export default function DashboardLayout() {
             {({ isActive }) => (
               <>
                 <TrendingUp size={20} />
-                <span className="text-[9px] font-medium">Trade</span>
+                <span className="text-[9px] font-medium">{t('nav.trade')}</span>
                 {isActive && <span className="w-4 h-0.5 rounded-full bg-[#f0b90b] mt-0.5" />}
               </>
             )}
@@ -305,7 +307,7 @@ export default function DashboardLayout() {
                   <Bot size={26} className="text-black" />
                 </div>
                 <span className={cn('text-[9px] font-medium', isActive ? 'text-[#f0b90b]' : 'text-[#848e9c]')}>
-                  Fin Bot
+                  {t('nav.finbot')}
                 </span>
               </>
             )}
@@ -318,7 +320,7 @@ export default function DashboardLayout() {
             {({ isActive }) => (
               <>
                 <BarChart2 size={20} />
-                <span className="text-[9px] font-medium">Markets</span>
+                <span className="text-[9px] font-medium">{t('nav.markets')}</span>
                 {isActive && <span className="w-4 h-0.5 rounded-full bg-[#f0b90b] mt-0.5" />}
               </>
             )}
@@ -338,7 +340,7 @@ export default function DashboardLayout() {
                       </div>
                   }
                 </div>
-                <span className="text-[9px] font-medium">Profile</span>
+                <span className="text-[9px] font-medium">{t('nav.profile')}</span>
                 {isActive && <span className="w-4 h-0.5 rounded-full bg-[#f0b90b] mt-0.5" />}
               </>
             )}

@@ -10,6 +10,8 @@ import {
   Bell, Mail, MessageCircle, Send, Zap, Shield, Globe,
   Check, Activity, Eye, EyeOff,
 } from 'lucide-react';
+import { useLanguage } from '../contexts/LanguageContext';
+import type { LangCode } from '../lib/i18n';
 
 interface NotifPrefs {
   email: boolean;
@@ -87,12 +89,7 @@ export default function SettingsPage() {
   const [appPrefs, setAppPrefs] = useState<AppPrefs>(loadAppPrefs);
   const [prefsSaved, setPrefsSaved] = useState(false);
 
-  const [language, setLanguage] = useState(
-    () => localStorage.getItem('finai-language') || 'en-US'
-  );
-  const [currency, setCurrency] = useState(
-    () => localStorage.getItem('finai-currency') || 'USD'
-  );
+  const { lang: language, currency, setLang, setCurrency: setCtxCurrency } = useLanguage();
   const [localeSaved, setLocaleSaved] = useState(false);
 
   const [pwForm, setPwForm] = useState<PwForm>({ current: '', next: '', confirm: '' });
@@ -102,10 +99,6 @@ export default function SettingsPage() {
   const [newPin, setNewPin] = useState('');
   const [showPin, setShowPin] = useState(false);
   const [changingPin, setChangingPin] = useState(false);
-
-  useEffect(() => {
-    document.documentElement.lang = language.split('-')[0];
-  }, [language]);
 
   useEffect(() => {
     if (user?.notification_preferences) {
@@ -154,10 +147,6 @@ export default function SettingsPage() {
   };
 
   const saveLocale = () => {
-    localStorage.setItem('finai-language', language);
-    localStorage.setItem('finai-currency', currency);
-    document.documentElement.lang = language.split('-')[0];
-    window.dispatchEvent(new CustomEvent('finai-locale-change', { detail: { language, currency } }));
     setLocaleSaved(true);
     toast.success('Language & region saved');
     setTimeout(() => setLocaleSaved(false), 2000);
@@ -410,7 +399,7 @@ export default function SettingsPage() {
             <label className="text-xs text-[#848e9c] mb-1.5 block">Language</label>
             <select
               value={language}
-              onChange={e => setLanguage(e.target.value)}
+              onChange={e => setLang(e.target.value as LangCode)}
               className="w-full bg-[#0b0e11] border border-[#2b3139] rounded-xl px-3 py-2.5 text-sm text-[#eaecef] focus:outline-none focus:border-[#f0b90b] transition"
             >
               <option value="en-US">English (US)</option>
@@ -427,7 +416,7 @@ export default function SettingsPage() {
             <label className="text-xs text-[#848e9c] mb-1.5 block">Currency display</label>
             <select
               value={currency}
-              onChange={e => setCurrency(e.target.value)}
+              onChange={e => setCtxCurrency(e.target.value)}
               className="w-full bg-[#0b0e11] border border-[#2b3139] rounded-xl px-3 py-2.5 text-sm text-[#eaecef] focus:outline-none focus:border-[#f0b90b] transition"
             >
               <option value="USD">USD — US Dollar</option>

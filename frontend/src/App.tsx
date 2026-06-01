@@ -27,6 +27,7 @@ import ChatFinPage from './pages/ChatFinPage'
 import { useAuthStore } from './store/authStore'
 import DashboardLayout from './layouts/DashboardLayout'
 import { trackVisitor } from './lib/api'
+import { LanguageProvider } from './contexts/LanguageContext'
 
 function PrivateRoute({ children }: { children: React.ReactNode }) {
   const token = useAuthStore((s) => s.token)
@@ -55,6 +56,7 @@ function VisitorBeacon() {
 
 export default function App() {
   return (
+    <LanguageProvider>
     <BrowserRouter>
       <VisitorBeacon />
       <Toaster
@@ -119,5 +121,6 @@ export default function App() {
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </BrowserRouter>
+    </LanguageProvider>
   )
 }

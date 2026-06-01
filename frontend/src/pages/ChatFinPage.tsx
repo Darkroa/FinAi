@@ -2,6 +2,7 @@ import { useState, useRef, useEffect, useCallback } from 'react'
 import { Send, Bot, Plus, MessageSquare, Trash2, Lock, ChevronLeft, Zap } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import { useAuthStore } from '../store/authStore'
+import { useLanguage } from '../contexts/LanguageContext'
 
 interface Message {
   role: 'user' | 'ai'
@@ -45,6 +46,7 @@ function saveConversations(convos: Conversation[]) {
 export default function ChatFinPage() {
   const navigate = useNavigate()
   const { token, user } = useAuthStore()
+  const { t } = useLanguage()
   const isSubscriber = (user?.account_tier ?? 0) >= 1
   const [conversations, setConversations] = useState<Conversation[]>(loadConversations)
   const [activeId, setActiveId] = useState<string | null>(() => {
@@ -193,8 +195,8 @@ export default function ChatFinPage() {
   }
 
   return (
-    <div className="flex flex-col -mx-4 sm:-mx-5 lg:-mx-6 -mt-4 sm:-mt-5 lg:-mt-6"
-      style={{ height: 'calc(100vh - 7.5rem)' }}>
+    <div className="fixed inset-x-0 flex flex-col bg-[#0b0e11] z-20"
+      style={{ top: '56px', bottom: '56px' }}>
 
       {/* ── Top bar: Dashboard back + title + New chat ── */}
       <div className="flex items-center justify-between px-4 h-12 border-b border-[#2b3139] bg-[#0b0e11] flex-shrink-0">
@@ -203,7 +205,7 @@ export default function ChatFinPage() {
           className="flex items-center gap-1 text-sm text-[#848e9c] hover:text-[#eaecef] transition font-medium"
         >
           <ChevronLeft size={16} />
-          <span>Dashboard</span>
+          <span>{t('chat.dashboard')}</span>
         </button>
 
         <div className="flex items-center gap-2">
@@ -213,7 +215,7 @@ export default function ChatFinPage() {
           <p className="text-sm font-bold text-[#eaecef]">Chat Fin</p>
           <div className="flex items-center gap-1">
             <span className="w-1.5 h-1.5 bg-[#0ecb81] rounded-full animate-pulse" />
-            <span className="text-[10px] text-[#0ecb81]">Online</span>
+            <span className="text-[10px] text-[#0ecb81]">{t('chat.online')}</span>
           </div>
         </div>
 
@@ -221,7 +223,7 @@ export default function ChatFinPage() {
           onClick={newConversation}
           className="flex items-center gap-1 text-xs text-[#f0b90b] border border-[#f0b90b]/30 bg-[#f0b90b]/10 px-3 py-1.5 rounded-xl hover:bg-[#f0b90b]/20 transition"
         >
-          <Plus size={12} /> New
+          <Plus size={12} /> {t('btn.newchat')}
         </button>
       </div>
 
@@ -312,7 +314,7 @@ export default function ChatFinPage() {
                 ref={inputRef}
                 value={input}
                 onChange={e => setInput(e.target.value)}
-                placeholder="Ask about markets, strategies, signals..."
+                placeholder={t('chat.placeholder')}
                 className="flex-1 bg-[#0b0e11] border border-[#2b3139] rounded-xl px-4 py-3 text-sm text-[#eaecef] placeholder-[#4a5568] focus:outline-none focus:border-[#f0b90b] transition"
               />
               <button
@@ -324,7 +326,7 @@ export default function ChatFinPage() {
               </button>
             </form>
             <p className="text-[10px] text-[#4a5568] text-center mt-2">
-              Chat Fin is AI-powered · Not financial advice ·{' '}
+              {t('chat.disclaimer')} ·{' '}
               <a href="mailto:supportfinaibot@gmail.com" className="hover:text-[#848e9c] transition">
                 supportfinaibot@gmail.com
               </a>
