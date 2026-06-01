@@ -36,7 +36,7 @@ export const updateProfile = (data: Record<string, unknown>) =>
 export const uploadPhoto = (file: File) => {
   const form = new FormData()
   form.append('file', file)
-  return api.post('/users/upload-photo', form, { headers: { 'Content-Type': 'multipart/form-data' } })
+  return api.post('/users/upload-photo', form)
 }
 export const sendVerifyEmail = () => api.post('/users/send-verify-email')
 export const verifyEmail = (code: string) => api.post('/users/verify-email', { code })

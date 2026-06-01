@@ -381,14 +381,30 @@ function PersonalTab({ user, setUser }: { user: UserProfile | null; setUser: (u:
   const handlePhotoChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
     if (!file) return
+    if (!file.type.startsWith('image/')) {
+      toast.error('Please select an image file')
+      return
+    }
+    if (file.size > 2 * 1024 * 1024) {
+      toast.error('Image must be under 2MB')
+      return
+    }
     setPhotoLoading(true)
+    if (fileRef.current) fileRef.current.value = ''
     try {
-      await uploadPhoto(file)
-      const res = await getMe()
-      setUser(res.data)
-      toast.success('Photo updated')
-    } catch { toast.error('Failed to upload photo') }
-    finally { setPhotoLoading(false) }
+      const uploadRes = await uploadPhoto(file)
+      const photo = uploadRes.data?.profile_photo
+      if (photo) {
+        setUser({ ...useAuthStore.getState().user!, profile_photo: photo })
+      } else {
+        const res = await getMe()
+        setUser(res.data)
+      }
+      toast.success('Photo updated!')
+    } catch (err: unknown) {
+      const msg = (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail
+      toast.error(msg || 'Failed to upload photo')
+    } finally { setPhotoLoading(false) }
   }
 
   const handleSendCode = async () => {
