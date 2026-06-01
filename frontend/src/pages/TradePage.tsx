@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
-import { useNavigate } from 'react-router-dom'
+
 import {
   ArrowUpDown, TrendingUp, TrendingDown, ChevronDown, ChevronUp,
   Wifi, WifiOff, Link2, RefreshCw, Clock, CheckCircle2, X,
