@@ -485,48 +485,80 @@ function PersonalTab({ user, setUser }: { user: UserProfile | null; setUser: (u:
     }
   }
 
+  const fullName = [user?.first_name, user?.middle_name, user?.last_name].filter(Boolean).join(' ') || user?.email || ''
+  const initials = user?.first_name?.[0] || user?.email?.[0]?.toUpperCase() || 'U'
+  const tgConnected = !!(user as any)?.telegram_connected
+  const waConnected = !!(user as any)?.whatsapp_connected
+
   return (
     <div className="space-y-3">
 
-      {/* 1. Profile picture */}
-      <div className="bg-[#161a1e] border border-[#2b3139] rounded-xl p-5">
-        <div className="flex flex-col items-center gap-3 text-center">
-          <div className="relative">
-            <div className="w-24 h-24 rounded-full bg-[#f0b90b]/10 border-2 border-[#f0b90b]/30 overflow-hidden flex items-center justify-center">
-              {user?.profile_photo
-                ? <img src={user.profile_photo} alt="avatar" className="w-full h-full object-cover" />
-                : <span className="text-4xl font-bold text-[#f0b90b]">{user?.email?.[0]?.toUpperCase() ?? 'U'}</span>
-              }
-            </div>
-            <button onClick={() => fileRef.current?.click()} disabled={photoLoading}
-              className="absolute -bottom-1 -right-1 w-8 h-8 rounded-full bg-[#f0b90b] flex items-center justify-center shadow-lg hover:bg-[#d4a30a] transition">
-              {photoLoading
-                ? <div className="w-3.5 h-3.5 border border-black border-t-transparent rounded-full animate-spin" />
-                : <Camera size={13} className="text-black" />}
-            </button>
-            <input ref={fileRef} type="file" accept="image/*" className="hidden" onChange={handlePhotoChange} />
-          </div>
-          <div>
-            <p className="font-bold text-base text-[#eaecef]">{user?.full_name || user?.email}</p>
-            <p className="text-xs text-[#848e9c] mt-0.5">@{user?.username || 'no username set'}</p>
-            <p className="text-[11px] text-[#4a5568] mt-0.5">{user?.email}</p>
-          </div>
-        </div>
-      </div>
+      {/* ── Unified profile card ── */}
+      <div className="bg-[#161a1e] border border-[#2b3139] rounded-xl overflow-hidden">
+        <div className="p-4 sm:p-5">
+          <div className="flex items-start gap-4">
 
-      {/* 2. Unverified / tier status */}
-      <div className={`rounded-xl border ${tier.border} ${tier.bg} px-4 py-3`}>
-        <div className="flex items-center gap-2 mb-2">
-          <Star size={13} className={tier.color} />
-          <span className={`font-bold text-sm ${tier.color}`}>{tier.label}</span>
-        </div>
-        <p className="text-[11px] text-[#848e9c] mb-2">{tier.limits}</p>
-        <div className="flex flex-wrap gap-2">
-          {kycBadge()}
-          {user?.is_mail_verified
-            ? <span className="inline-flex items-center gap-1 text-[11px] px-2 py-0.5 rounded-full bg-[#0ecb81]/10 text-[#0ecb81]"><CheckCircle size={9}/>Email verified</span>
-            : <span className="inline-flex items-center gap-1 text-[11px] px-2 py-0.5 rounded-full bg-[#f6465d]/10 text-[#f6465d]">Email unverified</span>
-          }
+            {/* Left: avatar */}
+            <div className="flex-shrink-0">
+              <div className="relative">
+                <div className="w-20 h-20 sm:w-24 sm:h-24 rounded-full bg-[#f0b90b]/10 border-2 border-[#f0b90b]/30 overflow-hidden flex items-center justify-center">
+                  {user?.profile_photo
+                    ? <img src={user.profile_photo} alt="avatar" className="w-full h-full object-cover" />
+                    : <span className="text-3xl sm:text-4xl font-bold text-[#f0b90b]">{initials}</span>
+                  }
+                </div>
+                <button onClick={() => fileRef.current?.click()} disabled={photoLoading}
+                  className="absolute -bottom-1 -right-1 w-7 h-7 rounded-full bg-[#f0b90b] flex items-center justify-center shadow-lg hover:bg-[#d4a30a] transition">
+                  {photoLoading
+                    ? <div className="w-3 h-3 border border-black border-t-transparent rounded-full animate-spin" />
+                    : <Camera size={12} className="text-black" />}
+                </button>
+                <input ref={fileRef} type="file" accept="image/*" className="hidden" onChange={handlePhotoChange} />
+              </div>
+            </div>
+
+            {/* Right: name, details, badges */}
+            <div className="flex-1 min-w-0 space-y-2">
+
+              {/* Name */}
+              <div>
+                <p className="font-bold text-base sm:text-lg text-[#eaecef] leading-tight truncate">{fullName}</p>
+                <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 mt-0.5">
+                  <span className="text-xs text-[#848e9c]">@{user?.username || 'no username'}</span>
+                  {user?.dob && <><span className="text-[#3c4451]">·</span><span className="text-xs text-[#848e9c]">{user.dob}</span></>}
+                  {user?.sex && <><span className="text-[#3c4451]">·</span><span className="text-xs text-[#848e9c]">{user.sex}</span></>}
+                </div>
+                <p className="text-[11px] text-[#4a5568] mt-0.5 truncate">{user?.email}</p>
+              </div>
+
+              {/* Connection status row */}
+              <div className="flex flex-wrap items-center gap-1.5 pt-0.5">
+                <span className={`inline-flex items-center gap-1 text-[10px] font-medium px-2 py-0.5 rounded-full border ${tgConnected ? 'bg-[#0ecb81]/8 border-[#0ecb81]/25 text-[#0ecb81]' : 'bg-[#2b3139]/60 border-[#2b3139] text-[#848e9c]'}`}>
+                  <Send size={8} />{tgConnected ? 'Telegram' : 'No Telegram'}
+                </span>
+                <span className={`inline-flex items-center gap-1 text-[10px] font-medium px-2 py-0.5 rounded-full border ${waConnected ? 'bg-[#0ecb81]/8 border-[#0ecb81]/25 text-[#0ecb81]' : 'bg-[#2b3139]/60 border-[#2b3139] text-[#848e9c]'}`}>
+                  <MessageCircle size={8} />{waConnected ? 'WhatsApp' : 'No WhatsApp'}
+                </span>
+              </div>
+
+              {/* Status badges row */}
+              <div className="flex flex-wrap items-center gap-1.5">
+                {/* Tier */}
+                <span className={`inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full border ${tier.border} ${tier.bg} ${tier.color}`}>
+                  <Star size={8} />{tier.label}
+                </span>
+                {/* KYC */}
+                {kycBadge()}
+                {/* Email */}
+                {user?.is_mail_verified
+                  ? <span className="inline-flex items-center gap-1 text-[10px] font-medium px-2 py-0.5 rounded-full bg-[#0ecb81]/8 border border-[#0ecb81]/25 text-[#0ecb81]"><CheckCircle size={8}/>Email Verified</span>
+                  : <span className="inline-flex items-center gap-1 text-[10px] font-medium px-2 py-0.5 rounded-full bg-[#f6465d]/8 border border-[#f6465d]/25 text-[#f6465d]"><Mail size={8}/>Unverified</span>
+                }
+                {/* Tier limits hint */}
+                <span className="inline-flex items-center text-[10px] text-[#848e9c] px-2 py-0.5 rounded-full bg-[#1e2329] border border-[#2b3139]">{tier.limits}</span>
+              </div>
+            </div>
+          </div>
         </div>
       </div>
 
