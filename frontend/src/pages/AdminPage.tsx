@@ -53,7 +53,7 @@ export default function AdminPage() {
   const [bonusForm, setBonusForm] = useState({
     title: '', bonus_type: 'manual_grant', amount_usdt: 10,
     target: 'all', target_user_email: '', tier_required: 3,
-    note: '', grant_now: true,
+    note: '', task_description: '', require_claim: false, grant_now: true,
   })
   const [bonusLoading, setBonusLoading] = useState(false)
 
@@ -1375,12 +1375,32 @@ export default function AdminPage() {
                 </div>
               </div>
               {bonusForm.bonus_type === 'manual_grant' && (
-                <label className="flex items-center gap-2 cursor-pointer w-fit">
-                  <input type="checkbox" checked={bonusForm.grant_now}
-                    onChange={e => setBonusForm(f => ({ ...f, grant_now: e.target.checked }))}
-                    className="accent-[#f0b90b]" />
-                  <span className="text-xs text-[#848e9c]">Credit users immediately when created</span>
-                </label>
+                <div className="space-y-3 border-t border-[#2b3139] pt-3">
+                  <div>
+                    <label className="text-xs text-[#848e9c] mb-1.5 block">Task Description (shown to user)</label>
+                    <textarea value={bonusForm.task_description}
+                      onChange={e => setBonusForm(f => ({ ...f, task_description: e.target.value }))}
+                      placeholder="Describe what the user needs to do to earn this bonus..."
+                      rows={2} className={`${inp} resize-none`} />
+                  </div>
+                  <div className="flex flex-col gap-2">
+                    <label className="flex items-center gap-2 cursor-pointer w-fit">
+                      <input type="checkbox" checked={bonusForm.require_claim}
+                        onChange={e => setBonusForm(f => ({ ...f, require_claim: e.target.checked, grant_now: e.target.checked ? false : f.grant_now }))}
+                        className="accent-[#f0b90b]" />
+                      <span className="text-xs text-[#eaecef] font-medium">Require user to claim (Task mode)</span>
+                    </label>
+                    <p className="text-[10px] text-[#4a5568] -mt-1 ml-5">User gets a notification + a Claim button. Balance is only credited when they click Claim.</p>
+                    {!bonusForm.require_claim && (
+                      <label className="flex items-center gap-2 cursor-pointer w-fit">
+                        <input type="checkbox" checked={bonusForm.grant_now}
+                          onChange={e => setBonusForm(f => ({ ...f, grant_now: e.target.checked }))}
+                          className="accent-[#f0b90b]" />
+                        <span className="text-xs text-[#848e9c]">Credit users immediately when created</span>
+                      </label>
+                    )}
+                  </div>
+                </div>
               )}
               <button disabled={bonusLoading || !bonusForm.title || !bonusForm.amount_usdt}
                 onClick={async () => {
@@ -1394,10 +1414,15 @@ export default function AdminPage() {
                       target_user_email: bonusForm.target === 'specific' ? bonusForm.target_user_email : undefined,
                       tier_required: bonusForm.bonus_type === 'tier_achievement' ? bonusForm.tier_required : undefined,
                       note: bonusForm.note || undefined,
+                      task_description: bonusForm.task_description || undefined,
+                      require_claim: bonusForm.require_claim,
                       grant_now: bonusForm.grant_now,
                     })
-                    toast.success(`Bonus created — ${res.data.credited} user(s) credited`)
-                    setBonusForm({ title: '', bonus_type: 'manual_grant', amount_usdt: 10, target: 'all', target_user_email: '', tier_required: 3, note: '', grant_now: true })
+                    const msg = res.data.require_claim
+                      ? `Task created — ${res.data.credited} user(s) notified`
+                      : `Bonus created — ${res.data.credited} user(s) credited`
+                    toast.success(msg)
+                    setBonusForm({ title: '', bonus_type: 'manual_grant', amount_usdt: 10, target: 'all', target_user_email: '', tier_required: 3, note: '', task_description: '', require_claim: false, grant_now: true })
                     const r2 = await getAdminBonuses().catch(() => null)
                     if (r2) setBonuses(Array.isArray(r2.data) ? r2.data : [])
                   } catch (e: any) {
@@ -1405,7 +1430,7 @@ export default function AdminPage() {
                   } finally { setBonusLoading(false) }
                 }}
                 className="flex items-center gap-2 px-5 py-2 bg-[#f0b90b] hover:bg-[#d4a30a] disabled:opacity-50 text-black rounded-xl text-xs font-bold transition">
-                <Gift size={13} /> {bonusLoading ? 'Creating…' : 'Create & Grant Bonus'}
+                <Gift size={13} /> {bonusLoading ? 'Creating…' : bonusForm.require_claim ? 'Create Task' : 'Create & Grant Bonus'}
               </button>
             </div>
           </div>

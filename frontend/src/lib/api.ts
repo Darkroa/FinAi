@@ -285,6 +285,8 @@ export const adminGrantBonus = (data: {
   target_user_email?: string
   tier_required?: number
   note?: string
+  task_description?: string
+  require_claim?: boolean
   grant_now?: boolean
 }) => api.post('/admin/bonuses/grant', data)
 export const toggleAdminBonus = (id: number) => api.patch(`/admin/bonuses/${id}/toggle`)
@@ -309,6 +311,8 @@ export const adminGetUserDepositConfig = (userId: number) =>
 export const adminSetUserDepositConfig = (userId: number, data: Record<string, string>) =>
   api.post(`/admin/users/${userId}/deposit-config`, data)
 export const getMyDepositConfig = () => api.get('/wallet/my-deposit-config')
+export const getMyBonusTasks = () => api.get('/wallet/my-tasks')
+export const claimBonusTask = (bonusId: number) => api.post(`/wallet/my-tasks/${bonusId}/claim`)
 export const adminDeleteAd = (id: number) => api.delete(`/admin/ads/${id}`)
 
 // Testimonials

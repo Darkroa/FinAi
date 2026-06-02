@@ -1,12 +1,13 @@
 import { useEffect, useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuthStore } from '../store/authStore';
-import { getEvents, getBotStatus, getTodayPnl, finEventListBots, getBotTrades } from '../lib/api';
+import { getEvents, getBotStatus, getTodayPnl, finEventListBots, getBotTrades, getMyBonusTasks, claimBonusTask, getMe } from '../lib/api';
 
 import { useTickerPrices } from '../hooks/useTickerPrices';
 import { useHotData } from '../hooks/useHotData';
 import { useLanguage } from '../contexts/LanguageContext';
 import { formatCurrency } from '../lib/i18n';
+import toast from 'react-hot-toast';
 import {
   TrendingUp,
   TrendingDown,
@@ -25,6 +26,8 @@ import {
   CalendarDays,
   MoreHorizontal,
   BarChart2,
+  Gift,
+  CheckCircle2,
 } from 'lucide-react';
 
 export default function DashboardPage() {
@@ -48,6 +51,9 @@ export default function DashboardPage() {
   const [activeBotCount, setActiveBotCount] = useState(0);
   const [newsCount, setNewsCount] = useState(0);
   const [tradeCount, setTradeCount] = useState(0);
+  const [bonusTasks, setBonusTasks] = useState<{ claim_id: number; bonus_id: number; title: string; amount_usdt: number; task_description?: string; note?: string; assigned_at?: string }[]>([]);
+  const [claimingId, setClaimingId] = useState<number | null>(null);
+  const { setUser } = useAuthStore();
 
   const balance = user?.balance_usdt ?? 0;
 
@@ -125,6 +131,27 @@ export default function DashboardPage() {
     const interval = setInterval(fetchData, 30000);
     return () => clearInterval(interval);
   }, [fetchData]);
+
+  useEffect(() => {
+    getMyBonusTasks()
+      .then(res => setBonusTasks(Array.isArray(res.data) ? res.data : []))
+      .catch(() => {})
+  }, []);
+
+  const handleClaim = async (bonusId: number) => {
+    setClaimingId(bonusId)
+    try {
+      const res = await claimBonusTask(bonusId)
+      toast.success(`Claimed $${res.data.amount_usdt?.toFixed(2) ?? '0.00'} USDT!`)
+      setBonusTasks(t => t.filter(task => task.bonus_id !== bonusId))
+      // Refresh user balance
+      getMe().then(r => { if (r.data) setUser(r.data) }).catch(() => {})
+    } catch (e: any) {
+      toast.error(e?.response?.data?.detail || 'Failed to claim bonus')
+    } finally {
+      setClaimingId(null)
+    }
+  }
 
   return (
     <div className="space-y-4">
@@ -369,6 +396,46 @@ export default function DashboardPage() {
         </div>
       </div>
       
+      {/* Claimable Bonus Tasks */}
+      {bonusTasks.length > 0 && (
+        <div>
+          <div className="flex items-center justify-between mb-3">
+            <p className="text-xs font-bold text-[#eaecef] flex items-center gap-1.5">
+              <Gift size={13} className="text-[#f0b90b]" /> Pending Tasks
+            </p>
+            <span className="text-[10px] bg-[#f0b90b]/15 text-[#f0b90b] px-2 py-0.5 rounded-full font-semibold">{bonusTasks.length} available</span>
+          </div>
+          <div className="space-y-2">
+            {bonusTasks.map(task => (
+              <div key={task.claim_id}
+                className="bg-[#161a1e] border border-[#f0b90b]/20 rounded-xl px-4 py-3 flex items-start gap-3">
+                <div className="w-9 h-9 rounded-xl bg-[#f0b90b]/10 flex items-center justify-center flex-shrink-0 mt-0.5">
+                  <Gift size={16} className="text-[#f0b90b]" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-xs font-semibold text-[#eaecef] leading-snug">{task.title}</p>
+                  {(task.task_description || task.note) && (
+                    <p className="text-[10px] text-[#848e9c] mt-0.5 leading-relaxed">{task.task_description || task.note}</p>
+                  )}
+                  <p className="text-[10px] text-[#0ecb81] mt-1 font-semibold">Reward: ${task.amount_usdt.toFixed(2)} USDT</p>
+                </div>
+                <button
+                  onClick={() => handleClaim(task.bonus_id)}
+                  disabled={claimingId === task.bonus_id}
+                  className="flex items-center gap-1.5 px-3 py-1.5 bg-[#f0b90b] hover:bg-[#d4a30a] disabled:opacity-60 text-black font-bold text-[10px] rounded-xl transition flex-shrink-0">
+                  {claimingId === task.bonus_id ? (
+                    <RefreshCw size={10} className="animate-spin" />
+                  ) : (
+                    <CheckCircle2 size={10} />
+                  )}
+                  {claimingId === task.bonus_id ? 'Claiming…' : `Claim $${task.amount_usdt.toFixed(2)}`}
+                </button>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
       {/* AI Events */}
       <div>
         <div className="flex items-center justify-between mb-3">

@@ -365,6 +365,8 @@ class Bonus(Base):
     target_user_id = Column(Integer, ForeignKey("users.id"), nullable=True)
     tier_required = Column(Integer, nullable=True)       # auto-trigger when user reaches this tier
     note          = Column(Text, nullable=True)
+    task_description = Column(Text, nullable=True)       # detailed task instructions shown to user
+    require_claim = Column(Boolean, default=False)       # if True, user must click Claim to receive USDT
     active        = Column(Boolean, default=True)
     granted_count = Column(Integer, default=0)           # how many users credited
     created_by    = Column(Integer, ForeignKey("users.id"), nullable=True)
@@ -372,3 +374,19 @@ class Bonus(Base):
 
     target_user = relationship("User", foreign_keys=[target_user_id])
     creator     = relationship("User", foreign_keys=[created_by])
+    claims      = relationship("UserBonusClaim", back_populates="bonus")
+
+
+class UserBonusClaim(Base):
+    """Tracks which users have been assigned claimable bonus tasks and their claim status."""
+    __tablename__ = "user_bonus_claims"
+
+    id          = Column(Integer, primary_key=True, index=True)
+    user_id     = Column(Integer, ForeignKey("users.id"), nullable=False)
+    bonus_id    = Column(Integer, ForeignKey("bonuses.id"), nullable=False)
+    status      = Column(String(20), default="pending")  # pending / claimed
+    assigned_at = Column(DateTime, default=datetime.utcnow)
+    claimed_at  = Column(DateTime, nullable=True)
+
+    user  = relationship("User", foreign_keys=[user_id])
+    bonus = relationship("Bonus", back_populates="claims")

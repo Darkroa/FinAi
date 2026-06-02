@@ -3451,7 +3451,9 @@ class BonusGrantRequest(BaseModel):
     target_user_email: Optional[str] = None
     tier_required: Optional[int] = None
     note: Optional[str] = None
-    grant_now: bool = True    # immediately credit eligible users
+    task_description: Optional[str] = None
+    require_claim: bool = False  # if True, users must click Claim; balance not credited until claimed
+    grant_now: bool = True    # immediately credit eligible users (ignored if require_claim=True)
 
 
 @router.post("/admin/bonuses/grant", dependencies=[Depends(require_admin)])
@@ -3470,6 +3472,7 @@ async def admin_grant_bonus(
         if not target_user:
             raise HTTPException(status_code=404, detail="Target user not found")
 
+    from src.database.models import UserBonusClaim as _UserBonusClaim
     bonus = _Bonus(
         title=data.title,
         bonus_type=data.bonus_type,
@@ -3478,6 +3481,8 @@ async def admin_grant_bonus(
         target_user_id=target_user.id if target_user else None,
         tier_required=data.tier_required,
         note=data.note,
+        task_description=data.task_description,
+        require_claim=data.require_claim,
         active=True,
         granted_count=0,
         created_by=admin.id if admin else None,
@@ -3492,12 +3497,11 @@ async def admin_grant_bonus(
         db.commit()
         return {"status": "created", "bonus_id": bonus.id, "credited": 0}
 
-    # Immediately grant to eligible users
-    if data.grant_now and data.bonus_type == "manual_grant":
+    # Determine recipients for manual_grant
+    if data.bonus_type == "manual_grant":
         if data.target == "all":
             recipients = db.query(User).filter(User.is_active == True, User.is_banned == False).all()
         elif data.target == "new_users":
-            # Users who signed up in the last 30 days
             from datetime import timedelta
             cutoff = datetime.utcnow() - timedelta(days=30)
             recipients = db.query(User).filter(User.created_at >= cutoff, User.is_active == True).all()
@@ -3506,28 +3510,117 @@ async def admin_grant_bonus(
         else:
             recipients = []
 
-        for u in recipients:
-            u.balance_usdt = (u.balance_usdt or 0) + data.amount_usdt
-            db.add(Transaction(
-                user_id=u.id,
-                tx_type="bonus",
-                method="internal",
-                asset="USDT",
-                amount_usdt=data.amount_usdt,
-                status="completed",
-                note=f"{data.title} — bonus_id_{bonus.id}",
-            ))
-            db.add(Notification(
-                title=f"🎁 Bonus Received: ${data.amount_usdt:.2f} USDT",
-                message=data.note or f"An admin granted you a ${data.amount_usdt:.2f} USDT bonus. It has been added to your balance.",
-                target_all=False, target_user_id=u.id, created_by=None,
-            ))
-            credited_count += 1
+        if data.require_claim:
+            # Create claim records — user must click Claim to receive the USDT
+            for u in recipients:
+                db.add(_UserBonusClaim(
+                    user_id=u.id,
+                    bonus_id=bonus.id,
+                    status="pending",
+                ))
+                db.add(Notification(
+                    title=f"Task Available: {data.title}",
+                    message=data.task_description or data.note or f"You have a new task available! Complete it to claim ${data.amount_usdt:.2f} USDT.",
+                    target_all=False, target_user_id=u.id, created_by=None,
+                ))
+                credited_count += 1
+        elif data.grant_now:
+            # Immediately credit balance
+            for u in recipients:
+                u.balance_usdt = (u.balance_usdt or 0) + data.amount_usdt
+                db.add(Transaction(
+                    user_id=u.id,
+                    tx_type="bonus",
+                    method="internal",
+                    asset="USDT",
+                    amount_usdt=data.amount_usdt,
+                    status="completed",
+                    note=f"{data.title} — bonus_id_{bonus.id}",
+                ))
+                db.add(Notification(
+                    title=f"Bonus Received: ${data.amount_usdt:.2f} USDT",
+                    message=data.note or f"An admin granted you a ${data.amount_usdt:.2f} USDT bonus. It has been added to your balance.",
+                    target_all=False, target_user_id=u.id, created_by=None,
+                ))
+                credited_count += 1
 
         bonus.granted_count = credited_count
 
     db.commit()
-    return {"status": "granted", "bonus_id": bonus.id, "credited": credited_count}
+    return {
+        "status": "task_created" if data.require_claim else "granted",
+        "bonus_id": bonus.id,
+        "credited": credited_count,
+        "require_claim": data.require_claim,
+    }
+
+
+@router.get("/wallet/my-tasks")
+async def get_my_bonus_tasks(current_user=Depends(get_current_user), db: Session = Depends(get_db)):
+    """Return all pending claimable bonus tasks for the current user."""
+    from src.database.models import UserBonusClaim as _UBC, Bonus as _Bonus
+    user = db.query(User).filter(User.email == current_user["email"]).first()
+    if not user:
+        return []
+    claims = (
+        db.query(_UBC)
+        .filter(_UBC.user_id == user.id, _UBC.status == "pending")
+        .join(_Bonus, _UBC.bonus_id == _Bonus.id)
+        .filter(_Bonus.active == True)
+        .order_by(_UBC.assigned_at.desc())
+        .all()
+    )
+    return [
+        {
+            "claim_id": c.id,
+            "bonus_id": c.bonus_id,
+            "title": c.bonus.title,
+            "amount_usdt": c.bonus.amount_usdt,
+            "task_description": c.bonus.task_description,
+            "note": c.bonus.note,
+            "assigned_at": c.assigned_at.isoformat() if c.assigned_at else None,
+        }
+        for c in claims
+    ]
+
+
+@router.post("/wallet/my-tasks/{bonus_id}/claim")
+async def claim_bonus_task(bonus_id: int, current_user=Depends(get_current_user), db: Session = Depends(get_db)):
+    """User claims a bonus task — credits balance and marks claim as completed."""
+    from src.database.models import UserBonusClaim as _UBC, Bonus as _Bonus
+    user = db.query(User).filter(User.email == current_user["email"]).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    claim = db.query(_UBC).filter(
+        _UBC.user_id == user.id,
+        _UBC.bonus_id == bonus_id,
+        _UBC.status == "pending",
+    ).first()
+    if not claim:
+        raise HTTPException(status_code=404, detail="Task not found or already claimed")
+    bonus = db.query(_Bonus).filter(_Bonus.id == bonus_id, _Bonus.active == True).first()
+    if not bonus:
+        raise HTTPException(status_code=404, detail="Bonus no longer active")
+    # Credit user balance
+    user.balance_usdt = (user.balance_usdt or 0) + bonus.amount_usdt
+    claim.status = "claimed"
+    claim.claimed_at = datetime.utcnow()
+    db.add(Transaction(
+        user_id=user.id,
+        tx_type="bonus",
+        method="internal",
+        asset="USDT",
+        amount_usdt=bonus.amount_usdt,
+        status="completed",
+        note=f"{bonus.title} — task claimed — bonus_id_{bonus.id}",
+    ))
+    db.add(Notification(
+        title=f"Bonus Claimed: ${bonus.amount_usdt:.2f} USDT",
+        message=f"You successfully claimed your task reward! ${bonus.amount_usdt:.2f} USDT has been added to your balance.",
+        target_all=False, target_user_id=user.id, created_by=None,
+    ))
+    db.commit()
+    return {"status": "claimed", "amount_usdt": bonus.amount_usdt, "new_balance": user.balance_usdt}
 
 
 @router.patch("/admin/bonuses/{bonus_id}/toggle", dependencies=[Depends(require_admin)])
