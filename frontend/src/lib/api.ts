@@ -76,6 +76,9 @@ export const adminApproveTransaction = (transaction_id: string, tx_hash?: string
   api.post('/admin/approve-transaction', { transaction_id, tx_hash })
 export const adminRejectTransaction = (transaction_id: string) =>
   api.post('/admin/reject-transaction', { transaction_id })
+export const cancelDeposit = (txId: number) => api.delete(`/wallet/deposits/${txId}`)
+export const getWithdrawalMethods = () => api.get('/users/withdrawal-methods')
+export const saveWithdrawalMethods = (methods: object[]) => api.post('/users/withdrawal-methods', { methods })
 export const adminGetWalletConfig = () => api.get('/admin/wallet-config')
 export const adminUpdateWalletConfig = (data: { key: string; value: string; label?: string }) =>
   api.post('/admin/wallet-config', data)

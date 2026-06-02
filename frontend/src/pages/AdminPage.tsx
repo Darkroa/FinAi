@@ -664,6 +664,27 @@ export default function AdminPage() {
             </button>
           </div>
 
+          {/* Deposit Note */}
+          <div className="bg-[#161a1e] border border-[#2b3139] rounded-xl p-5">
+            <h2 className="text-sm font-semibold text-[#eaecef] mb-1 flex items-center gap-2">
+              <MessageSquare size={14} className="text-[#f0b90b]" /> Deposit Instructions / Note
+            </h2>
+            <p className="text-[11px] text-[#848e9c] mb-3">This note is shown to users on the deposit confirmation screen. Use it for important instructions, warnings, or minimum deposit info.</p>
+            <textarea
+              value={cfgEdits['deposit_note'] !== undefined ? cfgEdits['deposit_note'] : (walletConfig.find((c: any) => c.key === 'deposit_note')?.value || '')}
+              onChange={e => setCfgEdits(p => ({ ...p, deposit_note: e.target.value }))}
+              placeholder="e.g. Minimum deposit $10 · Allow 1-3 business days for bank transfers · Always include your User ID as reference..."
+              rows={3}
+              className="w-full bg-[#0b0e11] border border-[#2b3139] rounded-xl px-3 py-2.5 text-sm text-[#eaecef] placeholder-[#4a5568] focus:outline-none focus:border-[#f0b90b] transition resize-none"
+            />
+            <button
+              onClick={() => saveWalletConfig('deposit_note')}
+              disabled={cfgEdits['deposit_note'] === undefined}
+              className="mt-3 flex items-center gap-2 px-4 py-2.5 bg-[#f0b90b]/10 hover:bg-[#f0b90b]/20 border border-[#f0b90b]/30 text-[#f0b90b] rounded-xl text-xs font-semibold transition disabled:opacity-40">
+              <Save size={12} /> Save Note
+            </button>
+          </div>
+
           {/* Per-User Deposit Config */}
           <div className="bg-[#161a1e] border border-[#2b3139] rounded-xl p-5">
             <h2 className="text-sm font-semibold text-[#eaecef] mb-1 flex items-center gap-2">

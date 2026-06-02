@@ -71,6 +71,9 @@ class WalletConfigUpdate(BaseModel):
     value: str
     label: Optional[str] = None
 
+class WithdrawalMethodsUpdate(BaseModel):
+    methods: List[dict]
+
 class KYCUpdate(BaseModel):
     first_name: Optional[str] = None
     middle_name: Optional[str] = None
@@ -755,6 +758,7 @@ async def get_wallet_config(db: Session = Depends(get_db)):
         "bank_routing":         {"value": "", "label": "Routing / Sort Code"},
         "bank_swift":           {"value": "", "label": "SWIFT / BIC Code"},
         "bank_name_beneficiary":{"value": "", "label": "Beneficiary Name"},
+        "deposit_note":         {"value": "", "label": "Deposit Note"},
     }
     for c in db.query(WalletConfig).all():
         result[c.key] = {"value": c.value or "", "label": c.label or c.key}
@@ -880,6 +884,47 @@ async def request_withdrawal(data: WithdrawRequest, current_user=Depends(get_cur
     db.commit()
     db.refresh(tx)
     return _tx_dict(tx)
+
+
+@router.delete("/wallet/deposits/{tx_id}")
+async def cancel_deposit(tx_id: int, current_user=Depends(get_current_user), db: Session = Depends(get_db)):
+    user = db.query(User).filter(User.email == current_user["email"]).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    tx = db.query(Transaction).filter(
+        Transaction.id == tx_id,
+        Transaction.user_id == user.id,
+        Transaction.tx_type == "deposit",
+        Transaction.status == "pending",
+    ).first()
+    if not tx:
+        raise HTTPException(status_code=404, detail="Pending deposit not found")
+    tx.status = "cancelled"
+    db.commit()
+    return {"ok": True}
+
+
+@router.get("/users/withdrawal-methods")
+async def get_withdrawal_methods(current_user=Depends(get_current_user), db: Session = Depends(get_db)):
+    import json as _json
+    user = db.query(User).filter(User.email == current_user["email"]).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    try:
+        return _json.loads(user.withdrawal_methods or "[]")
+    except Exception:
+        return []
+
+
+@router.post("/users/withdrawal-methods")
+async def save_withdrawal_methods(data: WithdrawalMethodsUpdate, current_user=Depends(get_current_user), db: Session = Depends(get_db)):
+    import json as _json
+    user = db.query(User).filter(User.email == current_user["email"]).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    user.withdrawal_methods = _json.dumps(data.methods)
+    db.commit()
+    return {"ok": True}
 
 
 @router.post("/wallet/p2p")

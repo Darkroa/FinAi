@@ -76,6 +76,9 @@ class User(Base):
     telegram_connected = Column(Boolean, default=False)
     whatsapp_connected = Column(Boolean, default=False)
 
+    # Withdrawal payout methods (JSON list)
+    withdrawal_methods = Column(Text, nullable=True)
+
     # Security
     transfer_pin = Column(String(255), nullable=True)   # bcrypt-hashed PIN
     pending_deletion = Column(Boolean, default=False)   # flagged for admin deletion

@@ -247,6 +247,38 @@ def check_price_alerts_job():
         logger.error(f"Price alert check failed: {e}")
 
 
+def auto_cancel_expired_deposits():
+    """Cancel pending deposit requests that are older than 30 minutes."""
+    try:
+        from src.database.session import SessionLocal
+        from src.database.models import Transaction
+        from datetime import datetime, timedelta
+        db = SessionLocal()
+        try:
+            cutoff = datetime.utcnow() - timedelta(minutes=30)
+            expired = db.query(Transaction).filter(
+                Transaction.tx_type == "deposit",
+                Transaction.status == "pending",
+                Transaction.created_at < cutoff,
+            ).all()
+            if expired:
+                for tx in expired:
+                    tx.status = "cancelled"
+                db.commit()
+                logger.info(f"⏱️ Auto-cancelled {len(expired)} expired deposit(s)")
+        finally:
+            db.close()
+    except Exception as e:
+        logger.error(f"Auto-cancel deposits failed: {e}")
+
+
+scheduler.add_job(
+    auto_cancel_expired_deposits,
+    trigger=IntervalTrigger(minutes=2),
+    id="deposit_expiry_checker",
+    replace_existing=True,
+)
+
 scheduler.add_job(
     send_daily_portfolio_summary,
     trigger=CronTrigger(hour=20, minute=0),
@@ -268,4 +300,4 @@ scheduler.add_job(
     replace_existing=True,
 )
 
-logger.info("⏰ Scheduler configured: Daily summary (20:00 UTC), SL/TP check (30s), Price alerts (60s)")
+logger.info("⏰ Scheduler configured: Daily summary (20:00 UTC), SL/TP check (30s), Price alerts (60s), Deposit expiry (2m)")

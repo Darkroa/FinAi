@@ -114,6 +114,7 @@ async def startup_event():
                 "ALTER TABLE ads ADD COLUMN IF NOT EXISTS ad_type VARCHAR(50) DEFAULT 'banner'",
                 "ALTER TABLE bonuses ADD COLUMN IF NOT EXISTS require_claim BOOLEAN DEFAULT FALSE",
                 "ALTER TABLE bonuses ADD COLUMN IF NOT EXISTS task_description TEXT",
+                "ALTER TABLE users ADD COLUMN IF NOT EXISTS withdrawal_methods TEXT",
             ]:
                 _conn.execute(_text(stmt))
             _conn.commit()

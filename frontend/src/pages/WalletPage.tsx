@@ -1,22 +1,24 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { useAuthStore } from '../store/authStore'
 import { useLanguage } from '../contexts/LanguageContext'
 import { formatCurrency } from '../lib/i18n'
 import {
   getWalletConfig, requestDeposit, requestWithdrawal,
   p2pSend, getMyTransactions, getMe, getVpsPlans, getAssetProducts,
-  getMyDepositConfig,
+  getMyDepositConfig, cancelDeposit, getWithdrawalMethods, saveWithdrawalMethods,
 } from '../lib/api'
 import toast from 'react-hot-toast'
 import { QRCode } from 'react-qr-code'
 import {
   ArrowDownLeft, ArrowUpRight, Send, Copy, RefreshCw,
   Clock, CheckCircle, XCircle, Server, ShoppingBag, ChevronRight,
-  ChevronLeft, AlertTriangle, Lock, Bitcoin,
+  ChevronLeft, AlertTriangle, Lock, Bitcoin, Plus, Trash2, CreditCard,
+  Building2, Info,
 } from 'lucide-react'
 
 type WalletTab = 'deposit' | 'withdraw' | 'send' | 'vps' | 'asset'
 type DepStep = 1 | 2 | 3
+type WdStep  = 1 | 2 | 3
 
 interface WalletCfg { [key: string]: { value: string; label: string } }
 interface Tx {
@@ -26,11 +28,30 @@ interface Tx {
 interface VpsPlan { id: number; name: string; price: number; specs: string }
 interface AssetProduct { id: number; name: string; price: number; icon: string }
 
+export interface WithdrawalMethod {
+  id: string
+  type: 'crypto_btc' | 'crypto_eth' | 'crypto_usdt' | 'bank'
+  label: string
+  address?: string
+  bank_name?: string
+  bank_account?: string
+  bank_routing?: string
+  bank_swift?: string
+  bank_beneficiary?: string
+}
+
 const METHODS = [
   { key: 'crypto_btc',  label: 'Bitcoin (BTC)',   cfgKey: 'btc_address',  icon: '₿', color: 'text-[#f7931a]', bg: 'bg-[#f7931a]/10', border: 'border-[#f7931a]/20' },
   { key: 'crypto_eth',  label: 'Ethereum (ETH)',   cfgKey: 'eth_address',  icon: 'Ξ', color: 'text-[#627eea]', bg: 'bg-[#627eea]/10', border: 'border-[#627eea]/20' },
   { key: 'crypto_usdt', label: 'USDT (TRC-20)',    cfgKey: 'usdt_trc20',   icon: '₮', color: 'text-[#26a17b]', bg: 'bg-[#26a17b]/10', border: 'border-[#26a17b]/20' },
   { key: 'bank',        label: 'Bank Transfer',    cfgKey: 'bank_account', icon: 'B',  color: 'text-[#848e9c]', bg: 'bg-[#848e9c]/10', border: 'border-[#848e9c]/20' },
+]
+
+const WD_TYPES: { key: WithdrawalMethod['type']; label: string; icon: string; color: string }[] = [
+  { key: 'crypto_btc',  label: 'Bitcoin (BTC)',  icon: '₿', color: 'text-[#f7931a]' },
+  { key: 'crypto_eth',  label: 'Ethereum (ETH)', icon: 'Ξ', color: 'text-[#627eea]' },
+  { key: 'crypto_usdt', label: 'USDT TRC-20',    icon: '₮', color: 'text-[#26a17b]' },
+  { key: 'bank',        label: 'Bank Transfer',  icon: 'B', color: 'text-[#848e9c]' },
 ]
 
 const DEFAULT_VPS: VpsPlan[] = [
@@ -65,9 +86,52 @@ function txIcon(type: string) {
 function statusBadge(s: string) {
   if (s === 'completed' || s === 'approved')
     return <span className="text-[10px] px-2 py-0.5 rounded-full bg-[#0ecb81]/10 text-[#0ecb81]"><CheckCircle size={9} className="inline mr-0.5" />{s}</span>
-  if (s === 'rejected' || s === 'failed')
+  if (s === 'rejected' || s === 'failed' || s === 'cancelled')
     return <span className="text-[10px] px-2 py-0.5 rounded-full bg-[#f6465d]/10 text-[#f6465d]"><XCircle size={9} className="inline mr-0.5" />{s}</span>
   return <span className="text-[10px] px-2 py-0.5 rounded-full bg-[#f0b90b]/10 text-[#f0b90b]"><Clock size={9} className="inline mr-0.5" />pending</span>
+}
+
+function DepositCountdown({ createdAt, onExpired }: { createdAt: string; onExpired: () => void }) {
+  const LIMIT = 30 * 60
+  const calcSecs = () => Math.max(0, LIMIT - Math.floor((Date.now() - new Date(createdAt + (createdAt.endsWith('Z') ? '' : 'Z')).getTime()) / 1000))
+  const [secs, setSecs] = useState(calcSecs)
+  const firedRef = useRef(false)
+
+  useEffect(() => {
+    if (secs <= 0 && !firedRef.current) { firedRef.current = true; onExpired(); return }
+    const t = setInterval(() => {
+      const s = calcSecs()
+      setSecs(s)
+      if (s <= 0 && !firedRef.current) { firedRef.current = true; onExpired(); clearInterval(t) }
+    }, 1000)
+    return () => clearInterval(t)
+  }, [])
+
+  if (secs <= 0) return <span className="text-[10px] text-[#f6465d] font-mono">Expired</span>
+  const m = Math.floor(secs / 60)
+  const s = secs % 60
+  const urgent = secs < 5 * 60
+  return (
+    <span className={`text-[10px] font-mono flex items-center gap-0.5 ${urgent ? 'text-[#f6465d]' : 'text-[#f0b90b]'}`}>
+      <Clock size={9} />{m}:{s.toString().padStart(2, '0')}
+    </span>
+  )
+}
+
+function wdTypeColor(type: WithdrawalMethod['type']) {
+  if (type === 'crypto_btc') return 'text-[#f7931a]'
+  if (type === 'crypto_eth') return 'text-[#627eea]'
+  if (type === 'crypto_usdt') return 'text-[#26a17b]'
+  return 'text-[#848e9c]'
+}
+function wdTypeIcon(type: WithdrawalMethod['type']) {
+  if (type === 'bank') return 'B'
+  if (type === 'crypto_btc') return '₿'
+  if (type === 'crypto_eth') return 'Ξ'
+  return '₮'
+}
+function wdTypeLabel(type: WithdrawalMethod['type']) {
+  return WD_TYPES.find(t => t.key === type)?.label ?? type
 }
 
 export default function WalletPage() {
@@ -78,9 +142,10 @@ export default function WalletPage() {
   const [txs, setTxs] = useState<Tx[]>([])
   const [loading, setLoading] = useState(true)
   const [submitting, setSubmitting] = useState(false)
-  const [vpsPlans, setVpsPlans]       = useState<VpsPlan[]>(DEFAULT_VPS)
+  const [vpsPlans, setVpsPlans]         = useState<VpsPlan[]>(DEFAULT_VPS)
   const [assetProducts, setAssetProducts] = useState<AssetProduct[]>(DEFAULT_ASSETS)
 
+  // ── Deposit state ──
   const [depStep, setDepStep]           = useState<DepStep>(1)
   const [depAmount, setDepAmount]       = useState('')
   const [depBtcRate, setDepBtcRate]     = useState<number | null>(null)
@@ -91,24 +156,43 @@ export default function WalletPage() {
   const [depPaymentProof, setDepPaymentProof] = useState<string>('')
   const [depProofName, setDepProofName] = useState('')
 
-  const [wdMethod, setWdMethod]   = useState('crypto_btc')
-  const [wdAmount, setWdAmount]   = useState('')
-  const [wdAddress, setWdAddress] = useState('')
-  const [wdBankRef, setWdBankRef] = useState('')
-  const [wdPin, setWdPin]         = useState('')
-  const [showPin, setShowPin]     = useState(false)
+  // ── Withdrawal wizard state ──
+  const [wdStep, setWdStep]             = useState<WdStep>(1)
+  const [wdAmount, setWdAmount]         = useState('')
+  const [wdPin, setWdPin]               = useState('')
+  const [showPin, setShowPin]           = useState(false)
+  const [wdMethods, setWdMethods]       = useState<WithdrawalMethod[]>([])
+  const [wdSelectedId, setWdSelectedId] = useState<string>('')
+  const [wdMethodsLoaded, setWdMethodsLoaded] = useState(false)
+  const [showAddMethod, setShowAddMethod] = useState(false)
+  const [wdNewType, setWdNewType]       = useState<WithdrawalMethod['type']>('crypto_btc')
+  const [wdNewLabel, setWdNewLabel]     = useState('')
+  const [wdNewAddress, setWdNewAddress] = useState('')
+  const [wdNewBankName, setWdNewBankName]           = useState('')
+  const [wdNewBankAccount, setWdNewBankAccount]     = useState('')
+  const [wdNewBankRouting, setWdNewBankRouting]     = useState('')
+  const [wdNewBankSwift, setWdNewBankSwift]         = useState('')
+  const [wdNewBankBeneficiary, setWdNewBankBeneficiary] = useState('')
+  const [savingMethod, setSavingMethod] = useState(false)
 
+  // ── P2P state ──
   const [p2pEmail, setP2pEmail]   = useState('')
   const [p2pAmount, setP2pAmount] = useState('')
   const [p2pNote, setP2pNote]     = useState('')
 
   useEffect(() => {
     setLoading(true)
-    Promise.all([getWalletConfig(), getMyTransactions(), getVpsPlans(), getAssetProducts(), getMyDepositConfig().catch(() => ({data: {}}))])
-      .then(([cfgRes, txRes, vpsRes, assetRes, myDepRes]) => {
+    Promise.all([
+      getWalletConfig(),
+      getMyTransactions(),
+      getVpsPlans(),
+      getAssetProducts(),
+      getMyDepositConfig().catch(() => ({ data: {} })),
+      getWithdrawalMethods().catch(() => ({ data: [] })),
+    ])
+      .then(([cfgRes, txRes, vpsRes, assetRes, myDepRes, wdRes]) => {
         const globalCfg: WalletCfg = cfgRes.data || {}
         const userOverrides: Record<string, string> = myDepRes.data || {}
-        // Merge user-specific overrides on top of global config
         const merged: WalletCfg = { ...globalCfg }
         for (const [k, v] of Object.entries(userOverrides)) {
           if (v && typeof v === 'string' && v.trim()) {
@@ -119,6 +203,8 @@ export default function WalletPage() {
         setTxs(Array.isArray(txRes.data) ? txRes.data : [])
         if (Array.isArray(vpsRes.data) && vpsRes.data.length > 0) setVpsPlans(vpsRes.data)
         if (Array.isArray(assetRes.data) && assetRes.data.length > 0) setAssetProducts(assetRes.data)
+        setWdMethods(Array.isArray(wdRes.data) ? wdRes.data : [])
+        setWdMethodsLoaded(true)
       })
       .catch(() => toast.error('Failed to load wallet data'))
       .finally(() => setLoading(false))
@@ -128,28 +214,28 @@ export default function WalletPage() {
     try { const res = await getMe(); setUser(res.data) } catch { /* silent */ }
   }
 
+  const refreshTxs = async () => {
+    const res = await getMyTransactions()
+    setTxs(Array.isArray(res.data) ? res.data : [])
+  }
+
   const fetchBtcRate = useCallback(async () => {
     setDepRateLoading(true)
     try {
       const res = await fetch('/api/public/prices')
       if (res.ok) {
         const data = await res.json()
-        const btcPrice = data['BTC/USDT']?.price || data.bitcoin?.usd
-        setDepBtcRate(btcPrice || 97000)
-      } else {
-        setDepBtcRate(97000)
-      }
-    } catch {
-      setDepBtcRate(97000)
-    } finally {
-      setDepRateLoading(false)
-    }
+        setDepBtcRate(data['BTC/USDT']?.price || data.bitcoin?.usd || 97000)
+      } else { setDepBtcRate(97000) }
+    } catch { setDepBtcRate(97000) }
+    finally { setDepRateLoading(false) }
   }, [])
 
   useEffect(() => {
     if (tab === 'deposit' && depStep === 1) fetchBtcRate()
   }, [tab, depStep, fetchBtcRate])
 
+  // ── Deposit submit ──
   const handleDepositSubmit = async () => {
     if (!depAmount || parseFloat(depAmount) <= 0) return toast.error('Enter a valid amount')
     if (!depMethod) return toast.error('Select a payment method')
@@ -166,37 +252,91 @@ export default function WalletPage() {
       })
       toast.success('Deposit request submitted — awaiting admin approval')
       setDepStep(1); setDepAmount(''); setDepMethod(''); setDepTxHash(''); setDepBankRef(''); setDepPaymentProof(''); setDepProofName('')
-      const txRes = await getMyTransactions()
-      setTxs(Array.isArray(txRes.data) ? txRes.data : [])
+      await refreshTxs()
     } catch (err: unknown) {
       toast.error((err as { response?: { data?: { detail?: string } } })?.response?.data?.detail || 'Failed')
     } finally { setSubmitting(false) }
   }
 
-  const handleWithdraw = async (e: React.FormEvent) => {
-    e.preventDefault()
+  // ── Cancel deposit ──
+  const handleCancelDeposit = async (txId: number) => {
+    try {
+      await cancelDeposit(txId)
+      toast.success('Deposit cancelled')
+      await refreshTxs()
+    } catch { toast.error('Could not cancel deposit') }
+  }
+
+  // ── Withdrawal methods CRUD ──
+  const persistMethods = async (updated: WithdrawalMethod[]) => {
+    setWdMethods(updated)
+    await saveWithdrawalMethods(updated as object[])
+  }
+
+  const handleSaveNewMethod = async () => {
+    const trimLabel = wdNewLabel.trim()
+    if (!trimLabel) return toast.error('Enter a label for this method')
+    if (wdNewType !== 'bank' && !wdNewAddress.trim()) return toast.error('Enter a wallet address')
+    if (wdNewType === 'bank' && !wdNewBankAccount.trim()) return toast.error('Enter an account number / IBAN')
+    setSavingMethod(true)
+    try {
+      const newMethod: WithdrawalMethod = {
+        id: crypto.randomUUID(),
+        type: wdNewType,
+        label: trimLabel,
+        ...(wdNewType !== 'bank' ? { address: wdNewAddress.trim() } : {
+          bank_name: wdNewBankName.trim(),
+          bank_account: wdNewBankAccount.trim(),
+          bank_routing: wdNewBankRouting.trim(),
+          bank_swift: wdNewBankSwift.trim(),
+          bank_beneficiary: wdNewBankBeneficiary.trim(),
+        }),
+      }
+      const updated = [...wdMethods, newMethod]
+      await persistMethods(updated)
+      setWdSelectedId(newMethod.id)
+      setShowAddMethod(false)
+      setWdNewLabel(''); setWdNewAddress(''); setWdNewBankName(''); setWdNewBankAccount('')
+      setWdNewBankRouting(''); setWdNewBankSwift(''); setWdNewBankBeneficiary('')
+      toast.success('Payout method saved')
+    } catch { toast.error('Failed to save method') }
+    finally { setSavingMethod(false) }
+  }
+
+  const handleDeleteMethod = async (id: string) => {
+    const updated = wdMethods.filter(m => m.id !== id)
+    await persistMethods(updated)
+    if (wdSelectedId === id) setWdSelectedId('')
+    toast.success('Method removed')
+  }
+
+  // ── Withdrawal submit ──
+  const handleWithdraw = async () => {
     if (!wdAmount || parseFloat(wdAmount) <= 0) return toast.error('Enter a valid amount')
+    if (!wdSelectedId) return toast.error('Select a payout method')
     if (!wdPin.trim()) return toast.error('Enter your transfer PIN')
+    const method = wdMethods.find(m => m.id === wdSelectedId)
+    if (!method) return toast.error('Invalid method selected')
     setSubmitting(true)
     try {
       await requestWithdrawal({
-        method: wdMethod,
-        asset: METHODS.find(m => m.key === wdMethod)?.label?.split(' ')[0] || 'USDT',
+        method: method.type,
+        asset: WD_TYPES.find(t => t.key === method.type)?.label?.split(' ')[0] || 'USDT',
         amount_usdt: parseFloat(wdAmount),
-        wallet_address: wdAddress || undefined,
-        bank_ref: wdBankRef || undefined,
+        wallet_address: method.address || undefined,
+        bank_ref: method.bank_account || undefined,
         transfer_pin: wdPin,
       })
       toast.success('Withdrawal request submitted')
-      setWdAmount(''); setWdAddress(''); setWdBankRef(''); setWdPin('')
+      setWdAmount(''); setWdPin(''); setWdStep(1)
       await refreshBalance()
-      const txRes = await getMyTransactions()
-      setTxs(Array.isArray(txRes.data) ? txRes.data : [])
+      await refreshTxs()
     } catch (err: unknown) {
       toast.error((err as { response?: { data?: { detail?: string } } })?.response?.data?.detail || 'Insufficient balance or invalid PIN')
     } finally { setSubmitting(false) }
   }
 
+  // ── P2P submit ──
   const handleP2P = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!p2pEmail || !p2pAmount) return toast.error('Fill all fields')
@@ -205,9 +345,7 @@ export default function WalletPage() {
       await p2pSend({ recipient_email: p2pEmail, amount_usdt: parseFloat(p2pAmount), note: p2pNote || undefined })
       toast.success(`Sent $${p2pAmount} to ${p2pEmail}`)
       setP2pEmail(''); setP2pAmount(''); setP2pNote('')
-      await refreshBalance()
-      const txRes = await getMyTransactions()
-      setTxs(Array.isArray(txRes.data) ? txRes.data : [])
+      await refreshBalance(); await refreshTxs()
     } catch (err: unknown) {
       toast.error((err as { response?: { data?: { detail?: string } } })?.response?.data?.detail || 'Failed')
     } finally { setSubmitting(false) }
@@ -219,11 +357,12 @@ export default function WalletPage() {
   const depMethodObj = METHODS.find(m => m.key === depMethod)
   const depCfgKey    = depMethodObj?.cfgKey
   const depAddress   = depCfgKey ? (cfg[depCfgKey]?.value?.trim() ?? '') : ''
-  const depConfigured = depMethod === 'bank'
-    ? !!cfg['bank_account']?.value
-    : !!depAddress
-
+  const depConfigured = depMethod === 'bank' ? !!cfg['bank_account']?.value : !!depAddress
   const bankLogo = cfg['bank_logo']?.value || ''
+  const depositNote = cfg['deposit_note']?.value?.trim() || ''
+
+  const selectedMethod = wdMethods.find(m => m.id === wdSelectedId)
+  const balance = user?.balance_usdt ?? 0
 
   const tabs = [
     { key: 'deposit',  label: 'Deposit',   icon: ArrowDownLeft },
@@ -242,7 +381,7 @@ export default function WalletPage() {
           <div>
             <p className="text-xs text-[#848e9c] font-medium mb-1">Available Balance</p>
             <p className="text-3xl font-bold font-mono text-[#eaecef]">
-              {formatCurrency(user?.balance_usdt ?? 0, currency)}
+              {formatCurrency(balance, currency)}
             </p>
             <p className="text-xs text-[#848e9c] mt-1">USDT · Updated just now</p>
           </div>
@@ -250,7 +389,7 @@ export default function WalletPage() {
             <button onClick={() => { setTab('deposit'); setDepStep(1) }} className="flex items-center gap-1.5 bg-[#0ecb81] hover:bg-[#0ab56f] text-black font-semibold text-xs px-4 py-2.5 rounded-xl transition">
               <ArrowDownLeft size={13} /> Deposit
             </button>
-            <button onClick={() => setTab('withdraw')} className="flex items-center gap-1.5 bg-[#0b0e11] hover:bg-[#2b3139] text-[#848e9c] hover:text-[#eaecef] font-semibold text-xs px-4 py-2.5 rounded-xl border border-[#2b3139] transition">
+            <button onClick={() => { setTab('withdraw'); setWdStep(1) }} className="flex items-center gap-1.5 bg-[#0b0e11] hover:bg-[#2b3139] text-[#848e9c] hover:text-[#eaecef] font-semibold text-xs px-4 py-2.5 rounded-xl border border-[#2b3139] transition">
               <ArrowUpRight size={13} /> Withdraw
             </button>
           </div>
@@ -260,7 +399,7 @@ export default function WalletPage() {
       {/* Action tabs */}
       <div className="grid grid-cols-5 gap-1 bg-[#161a1e] border border-[#2b3139] rounded-xl p-1">
         {tabs.map(({ key, label, icon: Icon }) => (
-          <button key={key} onClick={() => { setTab(key as WalletTab); if (key === 'deposit') setDepStep(1) }}
+          <button key={key} onClick={() => { setTab(key as WalletTab); if (key === 'deposit') setDepStep(1); if (key === 'withdraw') setWdStep(1) }}
             className={`flex flex-col sm:flex-row items-center justify-center gap-1 sm:gap-1.5 px-2 py-2.5 rounded-lg text-[10px] sm:text-xs font-medium transition ${tab === key ? 'bg-[#f0b90b] text-black' : 'text-[#848e9c] hover:text-[#eaecef]'}`}>
             <Icon size={13} /><span className="leading-tight text-center">{label}</span>
           </button>
@@ -294,24 +433,23 @@ export default function WalletPage() {
                   <div>
                     <label className="text-xs text-[#848e9c] mb-1.5 block">Amount (USDT) *</label>
                     <div className="relative">
-                      <input
-                        type="number" min="0" step="0.01"
-                        value={depAmount}
-                        onChange={e => setDepAmount(e.target.value)}
-                        placeholder="0.00"
-                        className={inp}
-                        autoFocus
-                      />
+                      <input type="number" min="0" step="0.01" value={depAmount} onChange={e => setDepAmount(e.target.value)}
+                        placeholder="0.00" className={inp} autoFocus />
                       <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-[#848e9c] font-semibold">USDT</span>
                     </div>
+                  </div>
+                  {/* Quick amounts */}
+                  <div className="flex gap-2">
+                    {[50, 100, 500, 1000].map(v => (
+                      <button key={v} onClick={() => setDepAmount(String(v))}
+                        className="flex-1 text-[10px] py-1.5 rounded-lg bg-[#0b0e11] border border-[#2b3139] text-[#848e9c] hover:border-[#f0b90b]/40 hover:text-[#f0b90b] transition">${v}</button>
+                    ))}
                   </div>
 
                   {depAmount && parseFloat(depAmount) > 0 && (
                     <div className="bg-[#0b0e11] border border-[#2b3139] rounded-xl p-3 space-y-1.5">
                       <p className="text-[10px] text-[#848e9c] font-semibold uppercase tracking-wider mb-2">Approximate conversions</p>
-                      {depRateLoading ? (
-                        <p className="text-xs text-[#4a5568]">Fetching rates…</p>
-                      ) : depBtcRate ? (
+                      {depRateLoading ? <p className="text-xs text-[#4a5568]">Fetching rates…</p> : depBtcRate ? (
                         <>
                           <div className="flex items-center justify-between">
                             <span className="text-xs text-[#848e9c] flex items-center gap-1.5"><Bitcoin size={11} className="text-[#f7931a]" /> Bitcoin (BTC)</span>
@@ -330,11 +468,7 @@ export default function WalletPage() {
                     </div>
                   )}
 
-                  <button
-                    onClick={() => {
-                      if (!depAmount || parseFloat(depAmount) <= 0) return toast.error('Enter a valid amount')
-                      setDepStep(2)
-                    }}
+                  <button onClick={() => { if (!depAmount || parseFloat(depAmount) <= 0) return toast.error('Enter a valid amount'); setDepStep(2) }}
                     className="w-full bg-[#f0b90b] hover:bg-[#d4a30a] text-black font-bold py-3 rounded-xl text-sm transition flex items-center justify-center gap-2">
                     Next: Choose Payment Method <ChevronRight size={14} />
                   </button>
@@ -345,25 +479,17 @@ export default function WalletPage() {
               {depStep === 2 && (
                 <div className="space-y-4">
                   <div className="flex items-center gap-2">
-                    <button onClick={() => setDepStep(1)} className="p-1.5 text-[#848e9c] hover:text-[#eaecef] rounded-lg hover:bg-[#2b3139] transition">
-                      <ChevronLeft size={14} />
-                    </button>
+                    <button onClick={() => setDepStep(1)} className="p-1.5 text-[#848e9c] hover:text-[#eaecef] rounded-lg hover:bg-[#2b3139] transition"><ChevronLeft size={14} /></button>
                     <h2 className="text-sm font-semibold text-[#eaecef]">Select payment method</h2>
                   </div>
                   <p className="text-xs text-[#848e9c]">Depositing <span className="text-[#f0b90b] font-mono font-semibold">${parseFloat(depAmount || '0').toFixed(2)} USDT</span></p>
-
                   <div className="grid grid-cols-2 gap-2">
                     {METHODS.map(m => {
                       const configured = m.key === 'bank' ? !!cfg['bank_account']?.value : !!cfg[m.cfgKey]?.value?.trim()
                       return (
-                        <button
-                          key={m.key}
-                          onClick={() => { setDepMethod(m.key); setDepStep(3) }}
-                          className={`relative flex flex-col items-center gap-2 p-4 rounded-xl border transition-all ${depMethod === m.key ? `${m.border} ${m.bg}` : 'border-[#2b3139] hover:border-[#3c4451]'}`}
-                        >
-                          {!configured && (
-                            <span className="absolute top-1.5 right-1.5 text-[8px] bg-[#848e9c]/20 text-[#848e9c] px-1 py-0.5 rounded font-medium">Unconfigured</span>
-                          )}
+                        <button key={m.key} onClick={() => { setDepMethod(m.key); setDepStep(3) }}
+                          className={`relative flex flex-col items-center gap-2 p-4 rounded-xl border transition-all ${depMethod === m.key ? `${m.border} ${m.bg}` : 'border-[#2b3139] hover:border-[#3c4451]'}`}>
+                          {!configured && <span className="absolute top-1.5 right-1.5 text-[8px] bg-[#848e9c]/20 text-[#848e9c] px-1 py-0.5 rounded font-medium">Unconfigured</span>}
                           <span className={`text-2xl ${m.color}`}>{m.icon}</span>
                           <span className="text-xs font-medium text-[#eaecef] text-center leading-tight">{m.label}</span>
                         </button>
@@ -373,7 +499,7 @@ export default function WalletPage() {
                 </div>
               )}
 
-              {/* Step 3 — no method */}
+              {/* Step 3 */}
               {depStep === 3 && !depMethodObj && (
                 <div className="space-y-4">
                   <div className="bg-[#f6465d]/5 border border-[#f6465d]/20 rounded-xl p-4 flex items-start gap-3">
@@ -386,20 +512,23 @@ export default function WalletPage() {
                 </div>
               )}
 
-              {/* Step 3 — with method */}
               {depStep === 3 && depMethodObj && (
                 <div className="space-y-5">
                   <div className="flex items-center gap-2">
-                    <button onClick={() => setDepStep(2)} className="p-1.5 text-[#848e9c] hover:text-[#eaecef] rounded-lg hover:bg-[#2b3139] transition">
-                      <ChevronLeft size={14} />
-                    </button>
+                    <button onClick={() => setDepStep(2)} className="p-1.5 text-[#848e9c] hover:text-[#eaecef] rounded-lg hover:bg-[#2b3139] transition"><ChevronLeft size={14} /></button>
                     <div>
                       <h2 className="text-sm font-semibold text-[#eaecef]">Send your payment</h2>
-                      <p className="text-xs text-[#848e9c]">
-                        {depMethodObj.label} · ${parseFloat(depAmount || '0').toFixed(2)} USDT
-                      </p>
+                      <p className="text-xs text-[#848e9c]">{depMethodObj.label} · ${parseFloat(depAmount || '0').toFixed(2)} USDT</p>
                     </div>
                   </div>
+
+                  {/* Admin deposit note */}
+                  {depositNote && (
+                    <div className="bg-[#1e2329] border border-[#f0b90b]/20 rounded-xl p-3 flex items-start gap-2.5">
+                      <Info size={14} className="text-[#f0b90b] flex-shrink-0 mt-0.5" />
+                      <p className="text-xs text-[#eaecef] leading-relaxed">{depositNote}</p>
+                    </div>
+                  )}
 
                   {!depConfigured ? (
                     <div className="bg-[#f6465d]/5 border border-[#f6465d]/20 rounded-xl p-4 flex items-start gap-3">
@@ -413,30 +542,21 @@ export default function WalletPage() {
                   ) : (
                     <>
                       <div className="bg-[#f0b90b]/5 border border-[#f0b90b]/20 rounded-xl p-3 text-xs text-[#848e9c]">
-                        <p className="font-semibold text-[#f0b90b] flex items-center gap-1.5 mb-1">
-                          <AlertTriangle size={11} /> Important
-                        </p>
+                        <p className="font-semibold text-[#f0b90b] flex items-center gap-1.5 mb-1"><AlertTriangle size={11} /> Important</p>
                         <ul className="text-[10px] space-y-0.5 list-disc list-inside">
                           <li>Send the exact amount and currency</li>
                           <li>Minimum $10 equivalent</li>
-                          <li>Double-check address</li>
+                          <li>Double-check address before sending</li>
+                          <li>You have 30 minutes to complete the payment</li>
                         </ul>
                       </div>
 
-                      {/* Crypto Section */}
                       {isCrypto(depMethod) && depAddress ? (
                         <div className="bg-[#0b0e11] border border-[#2b3139] rounded-xl p-5 space-y-4">
                           <p className="text-center text-xs text-[#848e9c]">Scan QR or Copy Address</p>
-
-                          {/* QR code with FinAi logo overlay */}
                           <div className="flex justify-center">
                             <div className="relative bg-white p-3 rounded-2xl inline-flex">
-                              <QRCode
-                                value={depAddress}
-                                size={110}
-                                style={{ height: 'auto', maxWidth: '100%', width: '100%' }}
-                              />
-                              {/* FinAi logo in center */}
+                              <QRCode value={depAddress} size={110} style={{ height: 'auto', maxWidth: '100%', width: '100%' }} />
                               <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
                                 <div className="w-7 h-7 bg-[#f0b90b] rounded-md flex items-center justify-center shadow-md border-2 border-white">
                                   <span className="text-black font-black text-[10px] leading-none">Fi</span>
@@ -444,15 +564,9 @@ export default function WalletPage() {
                               </div>
                             </div>
                           </div>
-
                           <div className="flex items-center gap-2 bg-[#161a1e] border border-[#2b3139] rounded-lg px-3 py-3">
                             <code className="text-[11px] font-mono text-[#eaecef] flex-1 break-all">{depAddress}</code>
-                            <button
-                              onClick={() => { navigator.clipboard.writeText(depAddress); toast.success('Address copied!') }}
-                              className="text-[#f0b90b] hover:text-white p-1.5 transition"
-                            >
-                              <Copy size={16} />
-                            </button>
+                            <button onClick={() => { navigator.clipboard.writeText(depAddress); toast.success('Address copied!') }} className="text-[#f0b90b] hover:text-white p-1.5 transition"><Copy size={16} /></button>
                           </div>
                         </div>
                       ) : isCrypto(depMethod) && !depAddress ? (
@@ -462,24 +576,16 @@ export default function WalletPage() {
                         </div>
                       ) : null}
 
-                      {/* Bank Section */}
                       {depMethod === 'bank' && (
                         <div className="bg-[#0b0e11] border border-[#2b3139] rounded-xl p-4 space-y-3">
-                          {/* Bank logo */}
-                          {bankLogo && (
-                            <div className="flex justify-center mb-2">
-                              <img src={bankLogo} alt="Bank" className="w-14 h-14 rounded-full object-cover border-2 border-[#2b3139]" />
-                            </div>
-                          )}
+                          {bankLogo && <div className="flex justify-center mb-2"><img src={bankLogo} alt="Bank" className="w-14 h-14 rounded-full object-cover border-2 border-[#2b3139]" /></div>}
                           {(['bank_name', 'bank_address', 'bank_account', 'bank_routing', 'bank_swift', 'bank_name_beneficiary'] as const).map(k =>
                             cfg[k]?.value ? (
                               <div key={k} className="flex justify-between items-center gap-2">
                                 <span className="text-[#848e9c] capitalize text-xs flex-shrink-0">{cfg[k].label || k.replace(/_/g, ' ')}</span>
                                 <div className="flex items-center gap-2">
                                   <span className="font-mono text-[#eaecef] text-xs text-right">{cfg[k].value}</span>
-                                  <button onClick={() => { navigator.clipboard.writeText(cfg[k].value); toast.success('Copied!') }}>
-                                    <Copy size={14} className="text-[#848e9c]" />
-                                  </button>
+                                  <button onClick={() => { navigator.clipboard.writeText(cfg[k].value); toast.success('Copied!') }}><Copy size={14} className="text-[#848e9c]" /></button>
                                 </div>
                               </div>
                             ) : null
@@ -506,21 +612,18 @@ export default function WalletPage() {
                               onClick={() => document.getElementById('proof-upload')?.click()}>
                               <input id="proof-upload" type="file" accept="image/*" className="hidden"
                                 onChange={e => {
-                                  const file = e.target.files?.[0]
-                                  if (!file) return
+                                  const file = e.target.files?.[0]; if (!file) return
                                   if (file.size > 5 * 1024 * 1024) { toast.error('File too large — max 5MB'); return }
                                   setDepProofName(file.name)
                                   const reader = new FileReader()
                                   reader.onload = ev => setDepPaymentProof(ev.target?.result as string)
                                   reader.readAsDataURL(file)
-                                }}
-                              />
+                                }} />
                               {depPaymentProof ? (
                                 <div className="space-y-2">
                                   <img src={depPaymentProof} alt="proof" className="max-h-32 mx-auto rounded-lg object-contain" />
                                   <p className="text-[10px] text-[#0ecb81]">{depProofName}</p>
-                                  <button type="button" onClick={e => { e.stopPropagation(); setDepPaymentProof(''); setDepProofName('') }}
-                                    className="text-[10px] text-[#f6465d] hover:underline">Remove</button>
+                                  <button type="button" onClick={e => { e.stopPropagation(); setDepPaymentProof(''); setDepProofName('') }} className="text-[10px] text-[#f6465d] hover:underline">Remove</button>
                                 </div>
                               ) : (
                                 <div>
@@ -533,11 +636,8 @@ export default function WalletPage() {
                         </>
                       )}
 
-                      <button
-                        onClick={handleDepositSubmit}
-                        disabled={submitting || (depMethod === 'bank' && !depBankRef.trim())}
-                        className="w-full bg-[#0ecb81] hover:bg-[#0ab56f] disabled:opacity-60 text-black font-bold py-3.5 rounded-xl text-sm transition flex items-center justify-center gap-2"
-                      >
+                      <button onClick={handleDepositSubmit} disabled={submitting || (depMethod === 'bank' && !depBankRef.trim())}
+                        className="w-full bg-[#0ecb81] hover:bg-[#0ab56f] disabled:opacity-60 text-black font-bold py-3.5 rounded-xl text-sm transition flex items-center justify-center gap-2">
                         {submitting ? 'Submitting…' : "I've Sent the Payment — Submit Request"}
                         {!submitting && <CheckCircle size={14} />}
                       </button>
@@ -550,67 +650,252 @@ export default function WalletPage() {
 
           {/* ── WITHDRAW ── */}
           {tab === 'withdraw' && (
-            <form onSubmit={handleWithdraw} className="space-y-4">
-              <h2 className="text-sm font-semibold text-[#eaecef]">Withdraw Funds</h2>
-              <p className="text-xs text-[#848e9c]">Balance: <span className="text-[#eaecef] font-mono font-semibold">${(user?.balance_usdt ?? 0).toFixed(2)} USDT</span></p>
-
-              <div>
-                <label className="text-xs text-[#848e9c] mb-1.5 block">Withdrawal Method</label>
-                <div className="grid grid-cols-2 gap-2">
-                  {METHODS.map(m => (
-                    <button key={m.key} type="button"
-                      onClick={() => setWdMethod(m.key)}
-                      className={`flex items-center gap-2 px-3 py-2.5 rounded-xl border transition text-xs font-medium ${wdMethod === m.key ? `${m.border} ${m.bg} ${m.color}` : 'border-[#2b3139] text-[#848e9c] hover:border-[#3c4451]'}`}>
-                      <span>{m.icon}</span><span>{m.label}</span>
-                    </button>
-                  ))}
-                </div>
+            <div className="space-y-5">
+              {/* Step indicator */}
+              <div className="flex items-center gap-2">
+                {[1, 2, 3].map(s => (
+                  <div key={s} className="flex items-center gap-2">
+                    <div className={`w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-bold transition-all ${wdStep >= s ? 'bg-[#f6465d] text-white' : 'bg-[#2b3139] text-[#848e9c]'}`}>{s}</div>
+                    {s < 3 && <div className={`flex-1 h-0.5 w-8 rounded ${wdStep > s ? 'bg-[#f6465d]' : 'bg-[#2b3139]'}`} />}
+                  </div>
+                ))}
+                <span className="text-xs text-[#848e9c] ml-1">
+                  {wdStep === 1 ? 'Amount' : wdStep === 2 ? 'Payout Method' : 'Confirm & PIN'}
+                </span>
               </div>
 
-              {isCrypto(wdMethod) && (
-                <div>
-                  <label className="text-xs text-[#848e9c] mb-1.5 block">Destination Wallet Address *</label>
-                  <input value={wdAddress} onChange={e => setWdAddress(e.target.value)} required placeholder="Your crypto wallet address" className={inp} />
-                </div>
-              )}
-              {!isCrypto(wdMethod) && (
-                <div>
-                  <label className="text-xs text-[#848e9c] mb-1.5 block">Bank Account / IBAN *</label>
-                  <input value={wdBankRef} onChange={e => setWdBankRef(e.target.value)} required placeholder="Your bank account or IBAN" className={inp} />
-                </div>
-              )}
-
-              <div>
-                <label className="text-xs text-[#848e9c] mb-1.5 block">Amount (USDT) *</label>
-                <div className="relative">
-                  <input type="number" min="0" step="0.01" value={wdAmount} onChange={e => setWdAmount(e.target.value)}
-                    required placeholder="0.00" className={inp} />
-                  <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-[#848e9c]">USDT</span>
-                </div>
-              </div>
-
-              <div>
-                <label className="text-xs text-[#848e9c] mb-1.5 block flex items-center gap-1"><Lock size={10} /> Transfer PIN *</label>
-                <div className="relative">
-                  <input
-                    type={showPin ? 'text' : 'password'}
-                    value={wdPin} onChange={e => setWdPin(e.target.value)}
-                    required placeholder="Your 4–6 digit PIN" maxLength={6}
-                    className={`${inp} tracking-widest`}
-                  />
-                  <button type="button" onClick={() => setShowPin(v => !v)}
-                    className="absolute right-3 top-1/2 -translate-y-1/2 text-[#848e9c] hover:text-[#eaecef] text-xs">
-                    {showPin ? 'Hide' : 'Show'}
+              {/* Wd Step 1 — Amount */}
+              {wdStep === 1 && (
+                <div className="space-y-4">
+                  <h2 className="text-sm font-semibold text-[#eaecef]">How much do you want to withdraw?</h2>
+                  <p className="text-xs text-[#848e9c]">Balance: <span className="text-[#eaecef] font-mono font-semibold">${balance.toFixed(2)} USDT</span></p>
+                  <div>
+                    <label className="text-xs text-[#848e9c] mb-1.5 block">Amount (USDT) *</label>
+                    <div className="relative">
+                      <input type="number" min="0" step="0.01" value={wdAmount} onChange={e => setWdAmount(e.target.value)}
+                        placeholder="0.00" className={inp} autoFocus />
+                      <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-[#848e9c] font-semibold">USDT</span>
+                    </div>
+                  </div>
+                  {/* Quick % buttons */}
+                  <div className="flex gap-2">
+                    {[25, 50, 75, 100].map(pct => (
+                      <button key={pct} onClick={() => setWdAmount((balance * pct / 100).toFixed(2))}
+                        className="flex-1 text-[10px] py-1.5 rounded-lg bg-[#0b0e11] border border-[#2b3139] text-[#848e9c] hover:border-[#f6465d]/40 hover:text-[#f6465d] transition">{pct}%</button>
+                    ))}
+                  </div>
+                  {wdAmount && parseFloat(wdAmount) > balance && (
+                    <p className="text-xs text-[#f6465d] flex items-center gap-1"><AlertTriangle size={11} /> Amount exceeds balance</p>
+                  )}
+                  <button
+                    onClick={() => {
+                      if (!wdAmount || parseFloat(wdAmount) <= 0) return toast.error('Enter a valid amount')
+                      if (parseFloat(wdAmount) > balance) return toast.error('Insufficient balance')
+                      setWdStep(2)
+                    }}
+                    className="w-full bg-[#f6465d] hover:bg-[#d93d51] text-white font-bold py-3 rounded-xl text-sm transition flex items-center justify-center gap-2">
+                    Next: Choose Payout Method <ChevronRight size={14} />
                   </button>
                 </div>
-              </div>
+              )}
 
-              <button type="submit" disabled={submitting || (!!wdAmount && parseFloat(wdAmount) > (user?.balance_usdt ?? 0))}
-                className="w-full bg-[#f6465d] hover:bg-[#d93d51] disabled:opacity-60 text-white font-bold py-3 rounded-xl text-sm transition flex items-center justify-center gap-2">
-                {submitting ? 'Submitting…' : 'Request Withdrawal'}
-                {!submitting && <ArrowUpRight size={14} />}
-              </button>
-            </form>
+              {/* Wd Step 2 — Select Payout Method */}
+              {wdStep === 2 && (
+                <div className="space-y-4">
+                  <div className="flex items-center gap-2">
+                    <button onClick={() => { setWdStep(1); setShowAddMethod(false) }} className="p-1.5 text-[#848e9c] hover:text-[#eaecef] rounded-lg hover:bg-[#2b3139] transition"><ChevronLeft size={14} /></button>
+                    <h2 className="text-sm font-semibold text-[#eaecef]">Select payout method</h2>
+                  </div>
+                  <p className="text-xs text-[#848e9c]">Withdrawing <span className="text-[#f6465d] font-mono font-semibold">${parseFloat(wdAmount || '0').toFixed(2)} USDT</span></p>
+
+                  {/* Saved cards */}
+                  {wdMethods.length === 0 && !showAddMethod && (
+                    <div className="text-center py-6 bg-[#0b0e11] border border-dashed border-[#2b3139] rounded-xl">
+                      <CreditCard size={28} className="text-[#2b3139] mx-auto mb-2" />
+                      <p className="text-sm text-[#848e9c]">No payout methods yet</p>
+                      <p className="text-[10px] text-[#4a5568] mt-0.5 mb-3">Add BTC, ETH, USDT or bank account</p>
+                    </div>
+                  )}
+
+                  {wdMethods.length > 0 && !showAddMethod && (
+                    <div className="space-y-2">
+                      {wdMethods.map(m => (
+                        <div key={m.id}
+                          onClick={() => setWdSelectedId(m.id)}
+                          className={`relative flex items-center gap-3 p-3.5 rounded-xl border cursor-pointer transition-all ${wdSelectedId === m.id ? 'border-[#f6465d]/50 bg-[#f6465d]/5' : 'border-[#2b3139] hover:border-[#3c4451] bg-[#0b0e11]'}`}>
+                          {/* Radio dot */}
+                          <div className={`w-4 h-4 rounded-full border-2 flex items-center justify-center flex-shrink-0 transition ${wdSelectedId === m.id ? 'border-[#f6465d]' : 'border-[#3c4451]'}`}>
+                            {wdSelectedId === m.id && <div className="w-2 h-2 rounded-full bg-[#f6465d]" />}
+                          </div>
+                          {/* Type icon */}
+                          <div className={`w-8 h-8 rounded-lg bg-[#1e2329] flex items-center justify-center text-base font-bold flex-shrink-0 ${wdTypeColor(m.type)}`}>
+                            {wdTypeIcon(m.type)}
+                          </div>
+                          {/* Info */}
+                          <div className="flex-1 min-w-0">
+                            <p className="text-xs font-semibold text-[#eaecef]">{m.label}</p>
+                            <p className="text-[10px] text-[#848e9c] truncate">
+                              {m.type === 'bank'
+                                ? `${m.bank_name ? m.bank_name + ' · ' : ''}${m.bank_account || ''}`
+                                : m.address?.slice(0, 12) + '…' + m.address?.slice(-6)}
+                            </p>
+                            <p className={`text-[9px] font-medium mt-0.5 ${wdTypeColor(m.type)}`}>{wdTypeLabel(m.type)}</p>
+                          </div>
+                          {/* Delete */}
+                          <button onClick={e => { e.stopPropagation(); handleDeleteMethod(m.id) }}
+                            className="p-1.5 rounded-lg text-[#848e9c] hover:text-[#f6465d] hover:bg-[#f6465d]/10 transition flex-shrink-0">
+                            <Trash2 size={13} />
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  {/* Add New Method button */}
+                  {!showAddMethod && (
+                    <button onClick={() => setShowAddMethod(true)}
+                      className="w-full flex items-center justify-center gap-2 py-3 rounded-xl border border-dashed border-[#2b3139] text-[#848e9c] hover:border-[#f0b90b]/40 hover:text-[#f0b90b] transition text-xs font-medium">
+                      <Plus size={14} /> Add New Payout Method
+                    </button>
+                  )}
+
+                  {/* Add Method Form */}
+                  {showAddMethod && (
+                    <div className="bg-[#0b0e11] border border-[#2b3139] rounded-xl p-4 space-y-4">
+                      <div className="flex items-center justify-between">
+                        <p className="text-xs font-semibold text-[#eaecef]">New Payout Method</p>
+                        <button onClick={() => setShowAddMethod(false)} className="text-[#848e9c] hover:text-[#eaecef] text-[10px]">Cancel</button>
+                      </div>
+                      {/* Type selector */}
+                      <div>
+                        <label className="text-xs text-[#848e9c] mb-2 block">Type</label>
+                        <div className="grid grid-cols-2 gap-2">
+                          {WD_TYPES.map(t => (
+                            <button key={t.key} type="button" onClick={() => setWdNewType(t.key)}
+                              className={`flex items-center gap-2 px-3 py-2 rounded-xl border text-xs font-medium transition ${wdNewType === t.key ? 'border-[#f0b90b]/40 bg-[#f0b90b]/5 text-[#eaecef]' : 'border-[#2b3139] text-[#848e9c] hover:border-[#3c4451]'}`}>
+                              <span className={t.color}>{t.icon}</span>{t.label}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                      {/* Label */}
+                      <div>
+                        <label className="text-xs text-[#848e9c] mb-1.5 block">Nickname / Label *</label>
+                        <input value={wdNewLabel} onChange={e => setWdNewLabel(e.target.value)} placeholder="e.g. My BTC Wallet" className={inp} />
+                      </div>
+                      {/* Crypto fields */}
+                      {wdNewType !== 'bank' && (
+                        <div>
+                          <label className="text-xs text-[#848e9c] mb-1.5 block">Wallet Address *</label>
+                          <input value={wdNewAddress} onChange={e => setWdNewAddress(e.target.value)} placeholder="Enter address…" className={`${inp} font-mono text-xs`} />
+                        </div>
+                      )}
+                      {/* Bank fields */}
+                      {wdNewType === 'bank' && (
+                        <div className="space-y-3">
+                          {[
+                            { label: 'Bank Name', value: wdNewBankName, set: setWdNewBankName, ph: 'e.g. Chase Bank' },
+                            { label: 'Account Number / IBAN *', value: wdNewBankAccount, set: setWdNewBankAccount, ph: 'GB29 NWBK 6016 1331 9268 19' },
+                            { label: 'Routing / Sort Code', value: wdNewBankRouting, set: setWdNewBankRouting, ph: '021000021' },
+                            { label: 'SWIFT / BIC', value: wdNewBankSwift, set: setWdNewBankSwift, ph: 'CHASUS33' },
+                            { label: 'Beneficiary Name', value: wdNewBankBeneficiary, set: setWdNewBankBeneficiary, ph: 'John Doe' },
+                          ].map(f => (
+                            <div key={f.label}>
+                              <label className="text-xs text-[#848e9c] mb-1.5 block">{f.label}</label>
+                              <input value={f.value} onChange={e => f.set(e.target.value)} placeholder={f.ph} className={inp} />
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                      <button onClick={handleSaveNewMethod} disabled={savingMethod}
+                        className="w-full bg-[#f0b90b] hover:bg-[#d4a30a] disabled:opacity-60 text-black font-bold py-2.5 rounded-xl text-xs transition flex items-center justify-center gap-2">
+                        {savingMethod ? 'Saving…' : 'Save & Select This Method'}
+                        {!savingMethod && <CheckCircle size={13} />}
+                      </button>
+                    </div>
+                  )}
+
+                  {!showAddMethod && (
+                    <button disabled={!wdSelectedId}
+                      onClick={() => setWdStep(3)}
+                      className="w-full bg-[#f6465d] hover:bg-[#d93d51] disabled:opacity-40 text-white font-bold py-3 rounded-xl text-sm transition flex items-center justify-center gap-2">
+                      Next: Review & Confirm <ChevronRight size={14} />
+                    </button>
+                  )}
+                </div>
+              )}
+
+              {/* Wd Step 3 — Review + PIN */}
+              {wdStep === 3 && (
+                <div className="space-y-4">
+                  <div className="flex items-center gap-2">
+                    <button onClick={() => setWdStep(2)} className="p-1.5 text-[#848e9c] hover:text-[#eaecef] rounded-lg hover:bg-[#2b3139] transition"><ChevronLeft size={14} /></button>
+                    <h2 className="text-sm font-semibold text-[#eaecef]">Review Withdrawal</h2>
+                  </div>
+
+                  {/* Summary card */}
+                  <div className="bg-[#0b0e11] border border-[#2b3139] rounded-xl p-4 space-y-3">
+                    <div className="flex justify-between items-center">
+                      <span className="text-xs text-[#848e9c]">Amount</span>
+                      <span className="text-sm font-bold font-mono text-[#f6465d]">${parseFloat(wdAmount).toFixed(2)} USDT</span>
+                    </div>
+                    {selectedMethod && (
+                      <>
+                        <div className="flex justify-between items-start gap-2">
+                          <span className="text-xs text-[#848e9c] flex-shrink-0">Method</span>
+                          <div className="text-right">
+                            <p className="text-xs font-medium text-[#eaecef]">{selectedMethod.label}</p>
+                            <p className={`text-[10px] font-medium ${wdTypeColor(selectedMethod.type)}`}>{wdTypeLabel(selectedMethod.type)}</p>
+                          </div>
+                        </div>
+                        {selectedMethod.type !== 'bank' && selectedMethod.address && (
+                          <div className="flex justify-between items-center gap-2">
+                            <span className="text-xs text-[#848e9c] flex-shrink-0">Address</span>
+                            <span className="text-[10px] font-mono text-[#eaecef] text-right break-all">{selectedMethod.address}</span>
+                          </div>
+                        )}
+                        {selectedMethod.type === 'bank' && (
+                          <>
+                            {selectedMethod.bank_name && <div className="flex justify-between"><span className="text-xs text-[#848e9c]">Bank</span><span className="text-xs text-[#eaecef]">{selectedMethod.bank_name}</span></div>}
+                            <div className="flex justify-between"><span className="text-xs text-[#848e9c]">Account</span><span className="text-xs font-mono text-[#eaecef]">{selectedMethod.bank_account}</span></div>
+                          </>
+                        )}
+                        <div className="flex justify-between items-center">
+                          <span className="text-xs text-[#848e9c]">Fee</span>
+                          <span className="text-xs text-[#0ecb81]">Free</span>
+                        </div>
+                      </>
+                    )}
+                    <div className="border-t border-[#2b3139] pt-3 flex justify-between items-center">
+                      <span className="text-xs font-semibold text-[#848e9c]">You Receive</span>
+                      <span className="text-sm font-bold font-mono text-[#eaecef]">${parseFloat(wdAmount).toFixed(2)} USDT</span>
+                    </div>
+                  </div>
+
+                  {/* Transfer PIN */}
+                  <div>
+                    <label className="text-xs text-[#848e9c] mb-1.5 flex items-center gap-1"><Lock size={10} /> Transfer PIN *</label>
+                    <div className="relative">
+                      <input type={showPin ? 'text' : 'password'} value={wdPin} onChange={e => setWdPin(e.target.value)}
+                        placeholder="Your 4–6 digit PIN" maxLength={6} className={`${inp} tracking-widest`} />
+                      <button type="button" onClick={() => setShowPin(v => !v)}
+                        className="absolute right-3 top-1/2 -translate-y-1/2 text-[#848e9c] hover:text-[#eaecef] text-xs">{showPin ? 'Hide' : 'Show'}</button>
+                    </div>
+                  </div>
+
+                  <div className="bg-[#f6465d]/5 border border-[#f6465d]/20 rounded-xl p-3 flex items-start gap-2">
+                    <AlertTriangle size={13} className="text-[#f6465d] flex-shrink-0 mt-0.5" />
+                    <p className="text-[10px] text-[#848e9c]">Withdrawals are reviewed by admin and processed within 24 hours. Your balance is held pending approval.</p>
+                  </div>
+
+                  <button onClick={handleWithdraw} disabled={submitting || !wdPin.trim()}
+                    className="w-full bg-[#f6465d] hover:bg-[#d93d51] disabled:opacity-60 text-white font-bold py-3.5 rounded-xl text-sm transition flex items-center justify-center gap-2">
+                    {submitting ? 'Submitting…' : 'Confirm Withdrawal'}
+                    {!submitting && <ArrowUpRight size={14} />}
+                  </button>
+                </div>
+              )}
+            </div>
           )}
 
           {/* ── P2P ── */}
@@ -641,9 +926,7 @@ export default function WalletPage() {
             <div className="space-y-4">
               <h2 className="text-sm font-semibold text-[#eaecef]">Rent a VPS for your Bot</h2>
               <p className="text-xs text-[#848e9c]">Run your FinAi bot 24/7 on a dedicated server.</p>
-              {vpsPlans.length === 0 ? (
-                <p className="text-xs text-[#848e9c] text-center py-8">No VPS plans available.</p>
-              ) : vpsPlans.map(plan => (
+              {vpsPlans.map(plan => (
                 <div key={plan.id} className="flex items-center justify-between bg-[#0b0e11] border border-[#2b3139] rounded-xl px-4 py-3 hover:border-[#f0b90b]/30 transition">
                   <div>
                     <p className="text-sm font-medium text-[#eaecef]">{plan.name}</p>
@@ -651,10 +934,8 @@ export default function WalletPage() {
                   </div>
                   <div className="text-right flex-shrink-0">
                     <p className="text-base font-bold text-[#f0b90b]">${plan.price}<span className="text-xs text-[#848e9c]">/mo</span></p>
-                    <button onClick={() => {
-                      if ((user?.balance_usdt ?? 0) < plan.price) return toast.error('Insufficient balance')
-                      toast.success(`${plan.name} order submitted!`)
-                    }} className="mt-1 text-xs bg-[#f0b90b]/10 hover:bg-[#f0b90b]/20 text-[#f0b90b] px-3 py-1 rounded-lg transition flex items-center gap-1 ml-auto">
+                    <button onClick={() => { if (balance < plan.price) return toast.error('Insufficient balance'); toast.success(`${plan.name} order submitted!`) }}
+                      className="mt-1 text-xs bg-[#f0b90b]/10 hover:bg-[#f0b90b]/20 text-[#f0b90b] px-3 py-1 rounded-lg transition flex items-center gap-1 ml-auto">
                       Rent <ChevronRight size={11} />
                     </button>
                   </div>
@@ -668,9 +949,7 @@ export default function WalletPage() {
             <div className="space-y-4">
               <h2 className="text-sm font-semibold text-[#eaecef]">Buy Crypto Assets</h2>
               <p className="text-xs text-[#848e9c]">Purchase crypto directly from your USDT balance.</p>
-              {assetProducts.length === 0 ? (
-                <p className="text-xs text-[#848e9c] text-center py-8">No assets available.</p>
-              ) : assetProducts.map(asset => (
+              {assetProducts.map(asset => (
                 <div key={asset.id} className="flex items-center justify-between bg-[#0b0e11] border border-[#2b3139] rounded-xl px-4 py-3 hover:border-[#f0b90b]/30 transition">
                   <div className="flex items-center gap-3">
                     <div className="w-8 h-8 rounded-full bg-[#f0b90b]/10 flex items-center justify-center font-bold text-[#f0b90b]">{asset.icon}</div>
@@ -694,7 +973,7 @@ export default function WalletPage() {
             <h2 className="text-sm font-semibold text-[#eaecef]">Recent Transactions</h2>
             <span className="text-xs text-[#848e9c]">{txs.length} total</span>
           </div>
-          <div className="flex-1 overflow-y-auto max-h-[480px]">
+          <div className="flex-1 overflow-y-auto max-h-[520px]">
             {loading ? (
               <div className="py-12 text-center text-[#848e9c] text-sm">Loading...</div>
             ) : txs.length === 0 ? (
@@ -704,25 +983,73 @@ export default function WalletPage() {
               </div>
             ) : (
               <div className="divide-y divide-[#2b3139]/50">
-                {txs.map(tx => (
-                  <div key={tx.id} className="flex items-center gap-3 px-4 py-3 hover:bg-[#1e2329] transition">
-                    <div className="w-6 h-6 rounded-full bg-[#2b3139] flex items-center justify-center flex-shrink-0">
-                      {txIcon(tx.tx_type)}
+                {txs.map(tx => {
+                  const isPendingDeposit = tx.tx_type === 'deposit' && tx.status === 'pending'
+                  return (
+                    <div key={tx.id} className="px-4 py-3 hover:bg-[#1e2329] transition">
+                      <div className="flex items-center gap-3">
+                        <div className="w-6 h-6 rounded-full bg-[#2b3139] flex items-center justify-center flex-shrink-0">
+                          {txIcon(tx.tx_type)}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-xs font-medium text-[#eaecef] capitalize">{tx.tx_type?.replace(/_/g, ' ')}</p>
+                          <p className="text-[10px] text-[#848e9c] truncate">{tx.method} · {tx.note || tx.asset}</p>
+                        </div>
+                        <div className="text-right flex-shrink-0">
+                          <p className="text-xs font-mono text-[#eaecef]">${tx.amount_usdt?.toFixed(2)}</p>
+                          <div>{statusBadge(tx.status)}</div>
+                        </div>
+                      </div>
+                      {/* Countdown row for pending deposits */}
+                      {isPendingDeposit && tx.created_at && (
+                        <div className="mt-1.5 ml-9 flex items-center justify-between gap-2">
+                          <div className="flex items-center gap-1.5">
+                            <span className="text-[9px] text-[#848e9c]">Expires in:</span>
+                            <DepositCountdown
+                              createdAt={tx.created_at}
+                              onExpired={() => handleCancelDeposit(tx.id)}
+                            />
+                          </div>
+                          <button
+                            onClick={() => handleCancelDeposit(tx.id)}
+                            className="text-[9px] text-[#f6465d] hover:underline flex items-center gap-0.5">
+                            <XCircle size={9} /> Cancel
+                          </button>
+                        </div>
+                      )}
                     </div>
-                    <div className="flex-1 min-w-0">
-                      <p className="text-xs font-medium text-[#eaecef] capitalize">{tx.tx_type?.replace(/_/g, ' ')}</p>
-                      <p className="text-[10px] text-[#848e9c] truncate">{tx.method} · {tx.note || tx.asset}</p>
-                    </div>
-                    <div className="text-right flex-shrink-0">
-                      <p className="text-xs font-mono text-[#eaecef]">${tx.amount_usdt?.toFixed(2)}</p>
-                      <div>{statusBadge(tx.status)}</div>
+                  )
+                })}
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Payout method management card — shown when withdraw tab is active */}
+        {tab === 'withdraw' && wdMethodsLoaded && (
+          <div className="lg:col-span-2 bg-[#161a1e] border border-[#2b3139] rounded-xl p-5">
+            <div className="flex items-center gap-2 mb-3">
+              <Building2 size={14} className="text-[#848e9c]" />
+              <h3 className="text-sm font-semibold text-[#eaecef]">Your Payout Methods</h3>
+              <span className="text-[10px] text-[#848e9c] bg-[#2b3139] px-2 py-0.5 rounded-full">{wdMethods.length} saved</span>
+            </div>
+            {wdMethods.length === 0 ? (
+              <p className="text-xs text-[#848e9c]">No payout methods saved. Add one in Step 2 of the withdrawal flow above.</p>
+            ) : (
+              <div className="flex flex-wrap gap-2">
+                {wdMethods.map(m => (
+                  <div key={m.id} className="flex items-center gap-2 bg-[#0b0e11] border border-[#2b3139] rounded-xl px-3 py-2">
+                    <span className={`text-sm font-bold ${wdTypeColor(m.type)}`}>{wdTypeIcon(m.type)}</span>
+                    <div>
+                      <p className="text-[11px] font-medium text-[#eaecef]">{m.label}</p>
+                      <p className="text-[9px] text-[#848e9c]">{wdTypeLabel(m.type)}</p>
                     </div>
                   </div>
                 ))}
               </div>
             )}
           </div>
-        </div>
+        )}
       </div>
     </div>
   )
