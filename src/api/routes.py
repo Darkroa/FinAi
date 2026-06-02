@@ -214,8 +214,60 @@ class CloseManualTradeRequest(BaseModel):
     trade_id: int
 
 
+class TFASetupRequest(BaseModel):
+    tfa_method: str                     # 'telegram' | 'email'
+    recovery_email: Optional[str] = None
+
+
+class TFAVerifyRequest(BaseModel):
+    partial_token: str
+    code: str
+
+
 # ===================== Router =====================
 router = APIRouter()
+
+
+# ─── Admin Telegram alert helper ──────────────────────────────────────────────
+def _fire_admin_telegram_alert(message_md: str, db=None) -> None:
+    """
+    Fire-and-forget admin Telegram notification.
+    Sends to TELEGRAM_ADMIN_CHAT_ID env var AND to every admin user
+    with a linked Telegram chat_id.  Runs in a background thread.
+    """
+    import threading, requests as _rq
+    tg_token = os.getenv("TELEGRAM_BOT_TOKEN", "")
+    if not tg_token:
+        return
+
+    chat_ids: set = set()
+
+    env_cid = os.getenv("TELEGRAM_ADMIN_CHAT_ID", "").strip()
+    if env_cid:
+        chat_ids.add(env_cid)
+
+    if db is not None:
+        try:
+            admins = db.query(User).filter(User.is_admin == True).all()
+            for adm in admins:
+                cid = adm.telegram_chat_id or (dict(adm.notification_preferences or {}).get("telegram_chat_id"))
+                if cid:
+                    chat_ids.add(str(cid))
+        except Exception:
+            pass
+
+    def _send(ids=chat_ids, tok=tg_token, txt=message_md):
+        for cid in ids:
+            try:
+                _rq.post(
+                    f"https://api.telegram.org/bot{tok}/sendMessage",
+                    json={"chat_id": cid, "text": txt, "parse_mode": "Markdown"},
+                    timeout=8,
+                )
+            except Exception as _e:
+                logger.warning(f"Admin Telegram alert failed (chat {cid}): {_e}")
+
+    threading.Thread(target=_send, daemon=True).start()
 
 
 # ===================== API Key Auth =====================
@@ -388,6 +440,59 @@ async def login(request: Request, user_data: UserCreate2, db: Session = Depends(
         raise HTTPException(status_code=403, detail="Account banned. Contact support.")
     token = create_access_token({"sub": db_user.email})
 
+    # ── Two-factor authentication check ──────────────────────────────────
+    _prefs_2fa = dict(db_user.notification_preferences or {})
+    if _prefs_2fa.get("tfa_enabled"):
+        import random as _rnd, threading as _thr2fa, requests as _rq2fa
+        from datetime import timedelta as _td2fa
+        _code = str(_rnd.randint(100000, 999999))
+        _expires = (datetime.utcnow() + _td2fa(minutes=10)).isoformat()
+        _prefs_2fa["tfa_pending_code"]    = _code
+        _prefs_2fa["tfa_code_expires"]    = _expires
+        db_user.notification_preferences = _prefs_2fa
+        db.commit()
+
+        _method = _prefs_2fa.get("tfa_method", "telegram")
+        _tg_tok = os.getenv("TELEGRAM_BOT_TOKEN", "")
+        _tg_cid = db_user.telegram_chat_id or _prefs_2fa.get("telegram_chat_id")
+        _tfa_msg = (
+            f"🔐 *FinAi Login Verification*\n\n"
+            f"Your 2FA code: `{_code}`\n\n"
+            f"This code expires in 10 minutes.\n"
+            f"_If you didn't request this, change your password immediately._"
+        )
+
+        if _method == "telegram" and _tg_tok and _tg_cid:
+            def _send_2fa_tg(tok=_tg_tok, cid=_tg_cid, txt=_tfa_msg):
+                try:
+                    _rq2fa.post(
+                        f"https://api.telegram.org/bot{tok}/sendMessage",
+                        json={"chat_id": cid, "text": txt, "parse_mode": "Markdown"},
+                        timeout=8,
+                    )
+                except Exception as _e:
+                    logger.warning(f"2FA Telegram send failed: {_e}")
+            _thr2fa.Thread(target=_send_2fa_tg, daemon=True).start()
+        elif _method == "email":
+            try:
+                from src.notifications.notifier import Notifier as _N2fa
+                _n2fa = _N2fa()
+                _n2fa._send_email(
+                    f"Your FinAi login verification code is: {_code}\n\nExpires in 10 minutes.",
+                    "FinAi — Login Verification Code"
+                )
+            except Exception as _e:
+                logger.warning(f"2FA email send failed: {_e}")
+
+        from jose import jwt as _jose_jwt
+        _SECRET = os.getenv("JWT_SECRET_KEY", "super-secret-key-change-in-production")
+        from datetime import timedelta as _td_partial
+        _partial_token = _jose_jwt.encode(
+            {"sub": db_user.email, "purpose": "2fa_pending", "exp": datetime.utcnow() + _td_partial(minutes=10)},
+            _SECRET, algorithm="HS256"
+        )
+        return {"requires_2fa": True, "partial_token": _partial_token, "method": _method}
+
     # ── Login notifications (non-blocking) ──────────────────────────────
     try:
         client_ip  = request.headers.get("X-Forwarded-For", request.client.host if request.client else "unknown").split(",")[0].strip()
@@ -475,6 +580,49 @@ async def login(request: Request, user_data: UserCreate2, db: Session = Depends(
         logger.warning(f"Login notification skipped: {_notif_err}")
 
     return {"access_token": token, "token_type": "bearer"}
+
+
+@router.post("/auth/verify-2fa")
+async def verify_2fa(body: TFAVerifyRequest, db: Session = Depends(get_db)):
+    """Verify 2FA code from Telegram/email and return full JWT."""
+    from jose import jwt as _jose_jwt, JWTError as _JWTError
+    _SECRET = os.getenv("JWT_SECRET_KEY", "super-secret-key-change-in-production")
+    try:
+        payload = _jose_jwt.decode(body.partial_token, _SECRET, algorithms=["HS256"])
+        if payload.get("purpose") != "2fa_pending":
+            raise HTTPException(status_code=400, detail="Invalid token purpose")
+        email = payload.get("sub")
+    except _JWTError:
+        raise HTTPException(status_code=400, detail="Invalid or expired 2FA session. Please log in again.")
+
+    user = get_user_by_email(db, email)
+    if not user:
+        raise HTTPException(status_code=400, detail="User not found")
+
+    prefs = dict(user.notification_preferences or {})
+    pending_code = prefs.get("tfa_pending_code")
+    code_expires = prefs.get("tfa_code_expires")
+
+    if not pending_code:
+        raise HTTPException(status_code=400, detail="No pending 2FA code. Please log in again.")
+    if code_expires:
+        from datetime import timezone as _tz
+        try:
+            exp_dt = datetime.fromisoformat(code_expires)
+            if exp_dt < datetime.utcnow():
+                raise HTTPException(status_code=400, detail="2FA code has expired. Please log in again.")
+        except ValueError:
+            pass
+    if body.code != pending_code:
+        raise HTTPException(status_code=400, detail="Invalid verification code")
+
+    # Clear the pending code
+    prefs.pop("tfa_pending_code", None)
+    prefs.pop("tfa_code_expires", None)
+    user.notification_preferences = prefs
+    db.commit()
+
+    return {"access_token": create_access_token({"sub": user.email}), "token_type": "bearer"}
 
 
 @router.get("/users/me")
@@ -700,6 +848,42 @@ async def verify_email(data: EmailVerifyRequest, current_user=Depends(get_curren
     return {"message": "Email verified successfully"}
 
 
+@router.post("/users/setup-2fa")
+async def setup_2fa(data: TFASetupRequest, current_user=Depends(get_current_user), db: Session = Depends(get_db)):
+    """Enable 2FA for the current user (stores settings in notification_preferences)."""
+    if data.tfa_method not in ("telegram", "email"):
+        raise HTTPException(status_code=400, detail="tfa_method must be 'telegram' or 'email'")
+    user = db.query(User).filter(User.email == current_user["email"]).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    prefs = dict(user.notification_preferences or {})
+    if data.tfa_method == "telegram":
+        if not user.telegram_connected and not (user.telegram_chat_id or prefs.get("telegram_chat_id")):
+            raise HTTPException(status_code=400, detail="Connect your Telegram account first before enabling Telegram 2FA")
+    prefs["tfa_enabled"] = True
+    prefs["tfa_method"]  = data.tfa_method
+    if data.recovery_email:
+        prefs["recovery_email"] = data.recovery_email
+    user.notification_preferences = prefs
+    db.commit()
+    return {"ok": True, "tfa_enabled": True, "tfa_method": data.tfa_method}
+
+
+@router.post("/users/disable-2fa")
+async def disable_2fa(current_user=Depends(get_current_user), db: Session = Depends(get_db)):
+    """Disable 2FA for the current user."""
+    user = db.query(User).filter(User.email == current_user["email"]).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    prefs = dict(user.notification_preferences or {})
+    prefs["tfa_enabled"]      = False
+    prefs["tfa_pending_code"] = None
+    prefs["tfa_code_expires"] = None
+    user.notification_preferences = prefs
+    db.commit()
+    return {"ok": True, "tfa_enabled": False}
+
+
 @router.post("/users/submit-kyc")
 async def submit_kyc(current_user=Depends(get_current_user), db: Session = Depends(get_db)):
     user = db.query(User).filter(User.email == current_user["email"]).first()
@@ -711,6 +895,14 @@ async def submit_kyc(current_user=Depends(get_current_user), db: Session = Depen
     user.kyc_status = "submitted"
     user.kyc_submitted_at = datetime.utcnow()
     db.commit()
+    _fire_admin_telegram_alert(
+        f"📋 *KYC Submitted*\n\n"
+        f"👤 User: `{user.email}`\n"
+        f"🧑 Name: {user.first_name or ''} {user.last_name or ''}\n"
+        f"🕐 Time: {datetime.utcnow().strftime('%Y-%m-%d %H:%M UTC')}\n"
+        f"🔍 Status → *Pending Review*",
+        db=db,
+    )
     return {"message": "KYC submitted for review", "kyc_status": "submitted"}
 
 
@@ -849,6 +1041,15 @@ async def request_deposit(data: DepositRequest, current_user=Depends(get_current
     db.add(tx)
     db.commit()
     db.refresh(tx)
+    _fire_admin_telegram_alert(
+        f"💵 *New Deposit Request*\n\n"
+        f"👤 User: `{user.email}`\n"
+        f"💰 Amount: `${data.amount_usdt:,.2f} USDT` via {data.method}\n"
+        f"🪙 Asset: {data.asset or '—'}\n"
+        f"🕐 Time: {datetime.utcnow().strftime('%Y-%m-%d %H:%M UTC')}\n"
+        f"🔍 Status → *Pending Approval*",
+        db=db,
+    )
     return _tx_dict(tx)
 
 
@@ -1583,6 +1784,15 @@ async def create_ticket(data: SupportTicketCreate, current_user=Depends(get_curr
     db.add(msg)
     db.commit()
     db.refresh(ticket)
+    _fire_admin_telegram_alert(
+        f"🎫 *New Support Ticket*\n\n"
+        f"👤 User ID: `{uid}`\n"
+        f"📌 Subject: {data.subject[:80]}\n"
+        f"🔥 Priority: {data.priority or 'normal'}\n"
+        f"🕐 Time: {datetime.utcnow().strftime('%Y-%m-%d %H:%M UTC')}\n"
+        f"💬 Message: {data.message[:120]}{'…' if len(data.message) > 120 else ''}",
+        db=db,
+    )
     return {"id": ticket.id, "subject": ticket.subject, "status": ticket.status,
             "created_at": ticket.created_at.isoformat()}
 
@@ -3040,6 +3250,16 @@ async def request_subscription(body: SubscriptionRequestBody, current_user=Depen
     db.add(req)
     db.commit()
     db.refresh(req)
+    _fire_admin_telegram_alert(
+        f"💳 *New Subscription Request*\n\n"
+        f"👤 User: `{user.email}`\n"
+        f"📦 Plan: *{body.plan}* ({body.period})\n"
+        f"💰 Amount: `${body.amount_usdt:,.2f} USDT`\n"
+        f"💳 Payment: {body.payment_method}\n"
+        f"🕐 Time: {datetime.utcnow().strftime('%Y-%m-%d %H:%M UTC')}\n"
+        f"🔍 Status → *Pending Approval*",
+        db=db,
+    )
     return {"status": "pending", "id": req.id, "message": "Subscription request submitted, awaiting admin approval."}
 
 

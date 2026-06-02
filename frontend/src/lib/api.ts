@@ -339,3 +339,15 @@ export const adminSaveAssetProducts = (products: unknown[]) =>
 export const adminSavePricingPlans = (plans: unknown[]) =>
   api.post('/admin/wallet-config', { key: 'pricing_plans', value: JSON.stringify(plans), label: 'Pricing Plans' })
 export const getPricingPlans = () => api.get('/wallet/pricing-plans')
+
+// ── Two-Factor Authentication (2FA) ──────────────────────────────────────────
+export const setup2fa = (data: { tfa_method: string; recovery_email?: string }) =>
+  api.post('/users/setup-2fa', data)
+
+export const disable2fa = () => api.post('/users/disable-2fa', {})
+
+export const verify2fa = (partial_token: string, code: string) =>
+  api.post('/auth/verify-2fa', { partial_token, code })
+
+export const resend2faCode = (partial_token: string) =>
+  api.post('/auth/resend-2fa', { partial_token })

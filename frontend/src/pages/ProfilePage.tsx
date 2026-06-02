@@ -7,7 +7,7 @@ import {
   connectExchange, disconnectExchange,
   changePassword, setTransferPin, requestDeleteAccount, saveWebhookSettings,
   generateWhatsAppCode, disconnectWhatsApp, generateTelegramCode,
-  getReferralStats, 
+  getReferralStats, setup2fa, disable2fa,
 } from '../lib/api'
 import toast from 'react-hot-toast'
 import {
@@ -15,7 +15,7 @@ import {
   Mail, Lock, Key, Zap, Plus, Trash2, Eye, EyeOff,
   Copy, AlertCircle, Star, Send, MessageCircle, LogOut, ChevronDown,
   Wifi, RefreshCw, Gift, Share2, Users as UsersIcon, TrendingUp,
-  ChevronLeft, ChevronRight, Settings,
+  ChevronLeft, ChevronRight, Settings, Smartphone, ToggleLeft, ToggleRight,
 } from 'lucide-react'
 
 const TIERS = [
@@ -1198,6 +1198,120 @@ function FinApiTab({ user, setUser }: { user: UserProfile | null; setUser: (u: a
 
 
 /* ─────────────────────────── SECURITY TAB ─────────────────────────── */
+function TwoFactorSection({ user }: { user: UserProfile | null }) {
+  const prefs = (user as any)?.notification_preferences || {}
+  const [enabled, setEnabled]             = useState<boolean>(!!prefs.tfa_enabled)
+  const [method, setMethod]               = useState<string>(prefs.tfa_method || 'telegram')
+  const [recoveryEmail, setRecoveryEmail] = useState<string>(prefs.recovery_email || '')
+  const [saving, setSaving]               = useState(false)
+
+  const hasTelegram = !!(user as any)?.telegram_connected || !!prefs.telegram_chat_id
+
+  const handleSave = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (method === 'telegram' && !hasTelegram) {
+      return toast.error('Connect your Telegram first in the FinAPI tab')
+    }
+    setSaving(true)
+    try {
+      await setup2fa({ tfa_method: method, recovery_email: recoveryEmail || undefined })
+      setEnabled(true)
+      toast.success('Two-factor authentication enabled')
+    } catch (err: unknown) {
+      toast.error((err as any)?.response?.data?.detail || 'Failed to enable 2FA')
+    } finally { setSaving(false) }
+  }
+
+  const handleDisable = async () => {
+    setSaving(true)
+    try {
+      await disable2fa()
+      setEnabled(false)
+      toast.success('Two-factor authentication disabled')
+    } catch (err: unknown) {
+      toast.error((err as any)?.response?.data?.detail || 'Failed to disable 2FA')
+    } finally { setSaving(false) }
+  }
+
+  return (
+    <div className="bg-[#161a1e] border border-[#2b3139] rounded-xl overflow-hidden">
+      <div className="flex items-center gap-2 px-4 py-3 border-b border-[#2b3139] bg-[#1a1f25]">
+        <Smartphone size={13} className="text-[#f0b90b]" />
+        <span className="text-xs font-semibold text-[#eaecef]">Two-Factor Authentication (2FA)</span>
+        <span className={`ml-auto text-[10px] font-bold px-2 py-0.5 rounded-full ${enabled ? 'bg-[#0ecb81]/15 text-[#0ecb81]' : 'bg-[#2b3139] text-[#848e9c]'}`}>
+          {enabled ? 'Enabled' : 'Disabled'}
+        </span>
+      </div>
+      <div className="p-4 space-y-4">
+        <p className="text-[11px] text-[#848e9c] leading-relaxed">
+          Add an extra layer of protection. When enabled, a verification code will be sent to your chosen channel every time you log in.
+        </p>
+
+        {enabled ? (
+          <div className="space-y-3">
+            <div className="flex items-center gap-3 bg-[#0ecb81]/8 border border-[#0ecb81]/20 rounded-lg px-3 py-2.5">
+              <CheckCircle size={14} className="text-[#0ecb81] flex-shrink-0" />
+              <div>
+                <p className="text-xs font-semibold text-[#eaecef]">2FA is active</p>
+                <p className="text-[10px] text-[#848e9c]">
+                  Method: <span className="text-[#eaecef]">{method === 'telegram' ? '📱 Telegram' : '✉️ Email'}</span>
+                  {recoveryEmail && <> · Recovery: <span className="text-[#eaecef]">{recoveryEmail}</span></>}
+                </p>
+              </div>
+            </div>
+            <button onClick={handleDisable} disabled={saving}
+              className="text-xs bg-[#f6465d]/10 hover:bg-[#f6465d]/20 text-[#f6465d] border border-[#f6465d]/30 font-semibold px-4 py-2.5 rounded-lg transition disabled:opacity-60">
+              {saving ? 'Disabling…' : 'Disable 2FA'}
+            </button>
+          </div>
+        ) : (
+          <form onSubmit={handleSave} className="space-y-3">
+            {/* Method selector */}
+            <div>
+              <p className="text-[11px] font-semibold text-[#848e9c] mb-2">Verification method</p>
+              <div className="grid grid-cols-2 gap-2">
+                {[
+                  { value: 'telegram', label: '📱 Telegram', sub: 'Via your linked bot' },
+                  { value: 'email',    label: '✉️ Email',    sub: 'Via your account email' },
+                ].map(opt => (
+                  <button key={opt.value} type="button"
+                    onClick={() => setMethod(opt.value)}
+                    className={`text-left px-3 py-2.5 rounded-lg border transition text-xs ${method === opt.value ? 'border-[#f0b90b] bg-[#f0b90b]/8 text-[#eaecef]' : 'border-[#2b3139] text-[#848e9c] hover:border-[#3c4451]'}`}>
+                    <p className="font-semibold">{opt.label}</p>
+                    <p className="text-[10px] opacity-70">{opt.sub}</p>
+                  </button>
+                ))}
+              </div>
+              {method === 'telegram' && !hasTelegram && (
+                <p className="text-[10px] text-[#f6465d] mt-1.5 flex items-center gap-1">
+                  <AlertCircle size={10} /> Connect Telegram first in the FinAPI tab
+                </p>
+              )}
+            </div>
+
+            {/* Recovery email */}
+            <div>
+              <label className="text-[11px] font-semibold text-[#848e9c] block mb-1.5">
+                Recovery Email <span className="font-normal opacity-60">(optional)</span>
+              </label>
+              <input type="email" value={recoveryEmail} onChange={e => setRecoveryEmail(e.target.value)}
+                placeholder="backup@example.com"
+                className={inp} />
+              <p className="text-[10px] text-[#848e9c] mt-1">Used for account recovery if you lose access to your 2FA method.</p>
+            </div>
+
+            <button type="submit" disabled={saving || (method === 'telegram' && !hasTelegram)}
+              className="bg-[#f0b90b] hover:bg-[#d4a30a] disabled:opacity-60 text-black font-semibold px-5 py-2.5 rounded-lg text-xs transition">
+              {saving ? 'Enabling…' : 'Enable 2FA'}
+            </button>
+          </form>
+        )}
+      </div>
+    </div>
+  )
+}
+
+
 function SecurityTab({ user }: { user: UserProfile | null }) {
   const [currentPw, setCurrentPw]   = useState('')
   const [newPw, setNewPw]           = useState('')
@@ -1308,6 +1422,9 @@ function SecurityTab({ user }: { user: UserProfile | null }) {
           </button>
         </div>
       </form>
+
+      {/* Two-Factor Authentication */}
+      <TwoFactorSection user={user} />
 
       {/* Delete Account */}
       <div className="bg-[#f6465d]/5 border border-[#f6465d]/20 rounded-xl overflow-hidden">
