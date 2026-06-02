@@ -22,7 +22,9 @@ def get_llm(model: str = "grok", temperature: float = 0.6, **kwargs):
 
     openai_key = os.getenv("OPENAI_API_KEY")
     if not openai_key:
-        raise ValueError("No AI API keys configured. Fin is temporarily unavailable.")
+        logger.warning("No AI API keys found → switching to FinAi Local Intelligence Engine")
+        from src.utils.local_llm import LocalAI
+        return LocalAI()
     return ChatOpenAI(
         model="gpt-4o-mini",
         temperature=temperature,

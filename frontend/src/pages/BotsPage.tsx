@@ -541,25 +541,53 @@ export default function BotsPage() {
             {/* Strategy */}
             <div>
               <label className="text-xs text-[#848e9c] mb-1.5 block">Strategy</label>
-              <div className="grid grid-cols-2 gap-1 bg-[#0b0e11] p-1 rounded-xl border border-[#2b3139]">
-                {([
-                  ['sma',    'SMA'],
-                  ['finlux', 'FinLux'],
-                  ['auto',   'AUTO'],
-                  ['live',   'LIVE'],
-                ] as const).map(([s, label]) => (
-                  <button key={s} onClick={() => setParams(p => ({ ...p, strategy: s }))}
-                    className={`py-2 rounded-lg text-xs font-semibold transition ${params.strategy === s ? 'bg-[#f0b90b] text-black' : 'text-[#848e9c] hover:text-[#eaecef]'}`}>
-                    {label}
-                  </button>
-                ))}
-              </div>
-              <p className="text-[10px] text-[#4a5568] mt-1">
-                {params.strategy === 'sma'    ? 'SMA-6 momentum crossover' :
-                 params.strategy === 'finlux' ? 'LuxAlgo Trendlines with Breaks' :
-                 params.strategy === 'auto'   ? 'AI selects best strategy dynamically' :
-                                               'Immediate execution — no strategy filter'}
-              </p>
+              {(() => {
+                const isSubscriber = user?.subscription && user.subscription !== 'free'
+                return (
+                  <>
+                    <div className="grid grid-cols-2 gap-1 bg-[#0b0e11] p-1 rounded-xl border border-[#2b3139]">
+                      {([
+                        ['sma',    'SMA',    true],
+                        ['finlux', 'FinLux', true],
+                        ['auto',   'AUTO',   false],
+                        ['live',   'LIVE',   false],
+                      ] as const).map(([s, label, premiumOnly]) => {
+                        const locked = premiumOnly && !isSubscriber
+                        return (
+                          <button key={s}
+                            onClick={() => {
+                              if (locked) {
+                                toast.error('FinLux & SMA require a paid subscription. Upgrade your plan.')
+                                navigate('/app/pricing')
+                                return
+                              }
+                              setParams(p => ({ ...p, strategy: s }))
+                            }}
+                            className={`relative py-2 rounded-lg text-xs font-semibold transition flex items-center justify-center gap-1.5
+                              ${params.strategy === s && !locked ? 'bg-[#f0b90b] text-black' :
+                                locked ? 'text-[#4a5568] cursor-pointer' :
+                                'text-[#848e9c] hover:text-[#eaecef]'}`}>
+                            {locked && <Lock size={9} className="shrink-0" />}
+                            {label}
+                            {locked && <Crown size={9} className="shrink-0 text-[#f0b90b]" />}
+                          </button>
+                        )
+                      })}
+                    </div>
+                    {!isSubscriber && (
+                      <p className="text-[10px] text-[#f0b90b]/70 mt-1 flex items-center gap-1">
+                        <Crown size={9} /> FinLux & SMA are subscriber-only strategies
+                      </p>
+                    )}
+                    <p className="text-[10px] text-[#4a5568] mt-0.5">
+                      {params.strategy === 'sma'    ? 'SMA-6 momentum crossover' :
+                       params.strategy === 'finlux' ? 'LuxAlgo Trendlines with Breaks' :
+                       params.strategy === 'auto'   ? 'AI selects best strategy dynamically' :
+                                                     'Immediate execution — no strategy filter'}
+                    </p>
+                  </>
+                )
+              })()}
             </div>
 
             {/* Direction */}

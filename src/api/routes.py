@@ -1686,6 +1686,13 @@ async def jwt_start_bot(body: BotStartRequestV2, current_user=Depends(get_curren
             detail=f"Bot limit reached for your plan ({limits['bots']} max). Upgrade to run more bots.",
         )
 
+    # FinLux and SMA strategies are subscriber-only
+    if body.strategy in ("finlux", "sma") and (user.subscription or "free") == "free":
+        raise HTTPException(
+            status_code=403,
+            detail="FinLux and SMA strategies require a paid subscription. Upgrade your plan to access them.",
+        )
+
     # If a specific exchange label is provided, validate it exists
     if not body.paper and body.exchange_label:
         connections = user.exchange_connections or []
@@ -2941,14 +2948,19 @@ class AIChatRequest(BaseModel):
 
 @router.post("/ai/chat")
 async def ai_chat(body: AIChatRequest, current_user=Depends(get_current_user)):
-    """Chat with the FinAi AI assistant using Grok/GPT."""
+    """Chat with the FinAi AI assistant — uses Grok/GPT or falls back to local engine."""
     try:
         from src.conversation.agent import chat_with_agent
-        reply = chat_with_agent(body.message)
+        reply = chat_with_agent(body.message, user_email=current_user.get("email"))
         return {"reply": reply}
     except Exception as e:
         logger.error(f"AI chat error: {e}")
-        return {"reply": "I'm Fin, probably under maintenance. Please check back soon."}
+        try:
+            from src.utils.local_llm import local_chat
+            reply = local_chat(body.message, current_user.get("email"))
+            return {"reply": reply}
+        except Exception:
+            return {"reply": "I'm Fin, your FinAi assistant. I'm having a moment — try again shortly!"}
 
 
 # ===================== Subscriptions (User) =====================
@@ -3044,6 +3056,13 @@ async def admin_approve_subscription(body: SubActionBody, current_user=Depends(g
         user.subscription_period = req.period
         if hasattr(user, 'subscription_auto_renew'):
             user.subscription_auto_renew = getattr(req, 'auto_renew', True)
+
+        # Auto tier upgrade based on subscription plan
+        _plan_tier = {"pro": 1, "elite": 2, "elite+": 3, "elite plus": 3, "custom": 3}
+        _min_tier = _plan_tier.get((req.plan or "free").lower(), 0)
+        if (user.account_tier or 0) < _min_tier:
+            user.account_tier = _min_tier
+            logger.info(f"Auto-upgraded user {user.email} to Tier {_min_tier} for {req.plan} subscription")
 
         # ── Deduct wallet balance if paid via wallet ──────────────────────
         payment_method = getattr(req, 'payment_method', None)
@@ -3643,6 +3662,62 @@ async def delete_bonus(bonus_id: int, db: Session = Depends(get_db)):
     db.delete(b)
     db.commit()
     return {"status": "deleted"}
+
+
+# ─────────────────────── ADMIN: BONUS COMPLETION TRACKER ──────────────────
+
+@router.get("/admin/bonus-claims", dependencies=[Depends(require_admin)])
+async def get_bonus_claims(db: Session = Depends(get_db)):
+    """Return every claimable bonus with the full list of user claim records."""
+    from src.database.models import Bonus as _Bonus, UserBonusClaim as _Claim
+    bonuses = (
+        db.query(_Bonus)
+        .filter(_Bonus.require_claim == True)
+        .order_by(_Bonus.created_at.desc())
+        .all()
+    )
+    result = []
+    for b in bonuses:
+        claims = db.query(_Claim).filter(_Claim.bonus_id == b.id).all()
+        claim_rows = []
+        for c in claims:
+            u = c.user
+            claim_rows.append({
+                "claim_id":   c.id,
+                "user_id":    c.user_id,
+                "user_email": u.email if u else None,
+                "user_name":  (u.first_name or u.username or u.email.split("@")[0]) if u else "—",
+                "status":     c.status,
+                "assigned_at": c.assigned_at.isoformat() if c.assigned_at else None,
+                "claimed_at":  c.claimed_at.isoformat() if c.claimed_at else None,
+            })
+        result.append({
+            "bonus_id":         b.id,
+            "title":            b.title,
+            "amount_usdt":      b.amount_usdt,
+            "task_description": b.task_description,
+            "active":           b.active,
+            "created_at":       b.created_at.isoformat() if b.created_at else None,
+            "claims":           claim_rows,
+            "total_claims":     len(claim_rows),
+            "claimed_count":    sum(1 for c in claim_rows if c["status"] == "claimed"),
+            "pending_count":    sum(1 for c in claim_rows if c["status"] == "pending"),
+        })
+    return result
+
+
+@router.delete("/admin/bonus-claims/{claim_id}", dependencies=[Depends(require_admin)])
+async def revoke_bonus_claim(claim_id: int, db: Session = Depends(get_db)):
+    """Revoke a pending bonus claim — removes it so the user loses access to this task."""
+    from src.database.models import UserBonusClaim as _Claim
+    claim = db.query(_Claim).filter(_Claim.id == claim_id).first()
+    if not claim:
+        raise HTTPException(status_code=404, detail="Claim not found")
+    if claim.status == "claimed":
+        raise HTTPException(status_code=400, detail="Cannot revoke an already-claimed reward.")
+    db.delete(claim)
+    db.commit()
+    return {"status": "revoked", "claim_id": claim_id}
 
 
 # ─────────────────────── ADMIN: REFERRAL MANAGEMENT ───────────────────────

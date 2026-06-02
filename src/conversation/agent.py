@@ -9,7 +9,12 @@ from src.rag.vector_store import FinancialRAG
 from src.ingestion.news_fetcher import NewsFetcher
 
 
-llm = get_llm(model="grok", temperature=0.7)
+try:
+    llm = get_llm(model="grok", temperature=0.7)
+except Exception as _e:
+    logger.warning(f"LLM init failed ({_e}) → using Local Intelligence Engine")
+    from src.utils.local_llm import LocalAI
+    llm = LocalAI()
 
 rag = FinancialRAG()
 full_analyzer = FullAnalyzer()
@@ -100,9 +105,17 @@ Rules:
 - Give clear insights with confidence levels and actionable recommendations."""
 
 
-def chat_with_agent(message: str) -> str:
-    """Simple chat function using the LLM directly with tool descriptions."""
+def chat_with_agent(message: str, user_email: str = None) -> str:
+    """Chat with FinAi agent. Falls back to local intelligence when no API keys."""
     global chat_history
+
+    # If llm is LocalAI, route directly to context-aware local engine
+    from src.utils.local_llm import LocalAI, local_chat
+    if isinstance(llm, LocalAI):
+        reply = local_chat(message, user_email)
+        chat_history.append({"role": "user", "content": message})
+        chat_history.append({"role": "assistant", "content": reply})
+        return reply
 
     tool_descriptions = "\n".join([
         f"- {t.name}: {t.description}" for t in tools
@@ -146,7 +159,11 @@ def chat_with_agent(message: str) -> str:
 
     except Exception as e:
         logger.error(f"Agent chat error: {e}")
-        return f"⚠️ Sorry, something went wrong: {str(e)}"
+        # Final fallback to local intelligence
+        try:
+            return local_chat(message, user_email)
+        except Exception:
+            return f"⚠️ FinAi assistant is temporarily unavailable."
 
 
 logger.success("🤖 FinAi Agent is ready!")

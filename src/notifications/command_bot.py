@@ -27,6 +27,7 @@ HELP_TEXT = """
 8️⃣ /pnl — Show today's realized P&L
 9️⃣ /bots — List all running bots
 🔟 /help — Show this help message
+1️⃣1️⃣ /ask <question> — Ask FinAi anything (e.g. /ask What is my balance?)
 """.strip()
 
 # ===================== TELEGRAM COMMANDS =====================
@@ -129,6 +130,43 @@ async def cmd_bots(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def cmd_help(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(HELP_TEXT, parse_mode="Markdown")
 
+async def cmd_ask(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Ask the FinAi AI assistant a question — uses local intelligence with full user context."""
+    if not context.args:
+        await update.message.reply_text(
+            "💬 Usage: /ask <your question>\n\nExamples:\n"
+            "• /ask What is my portfolio worth?\n"
+            "• /ask Should I buy BTC now?\n"
+            "• /ask How are my bots performing?"
+        )
+        return
+    question = " ".join(context.args)
+    # Resolve user email from Telegram chat ID stored in notification_preferences
+    user_email = None
+    try:
+        chat_id = str(update.effective_chat.id)
+        from src.database.session import SessionLocal
+        from src.database.models import User
+        db = SessionLocal()
+        try:
+            users = db.query(User).all()
+            for u in users:
+                prefs = dict(u.notification_preferences or {})
+                if str(prefs.get("telegram_chat_id", "")) == chat_id:
+                    user_email = u.email
+                    break
+        finally:
+            db.close()
+    except Exception:
+        pass
+    try:
+        from src.conversation.agent import chat_with_agent
+        reply = chat_with_agent(question, user_email=user_email)
+    except Exception:
+        from src.utils.local_llm import local_chat
+        reply = local_chat(question, user_email)
+    await update.message.reply_text(reply, parse_mode="Markdown")
+
 
 # ===================== WHATSAPP COMMAND HANDLER (via Twilio Webhook) =====================
 WHATSAPP_HELP = """
@@ -143,6 +181,8 @@ WHATSAPP_HELP = """
 8 /pnl — P&L summary
 9 /bots — List running bots
 10 /help — Show commands
+11 /ask <question> — Ask FinAi anything
+   e.g. /ask What is my balance?
 """.strip()
 
 def handle_whatsapp_command(body: str, from_number: str) -> str:
@@ -230,6 +270,35 @@ def handle_whatsapp_command(body: str, from_number: str) -> str:
     elif command in ["/help", "10", "help"]:
         reply = WHATSAPP_HELP
 
+    elif command in ["/ask", "11"]:
+        question = " ".join(parts[1:]) if len(parts) > 1 else ""
+        if not question:
+            reply = "Usage: /ask <your question>\nExample: /ask What is my portfolio worth?"
+        else:
+            # Resolve user from WhatsApp number
+            user_email = None
+            try:
+                from src.database.session import SessionLocal
+                from src.database.models import User as _User
+                _db = SessionLocal()
+                try:
+                    _users = _db.query(_User).all()
+                    for _u in _users:
+                        _prefs = dict(_u.notification_preferences or {})
+                        if _prefs.get("whatsapp_number") == from_number.replace("whatsapp:", ""):
+                            user_email = _u.email
+                            break
+                finally:
+                    _db.close()
+            except Exception:
+                pass
+            try:
+                from src.conversation.agent import chat_with_agent
+                reply = chat_with_agent(question, user_email=user_email)
+            except Exception:
+                from src.utils.local_llm import local_chat
+                reply = local_chat(question, user_email)
+
     # Send reply back via WhatsApp
     if notifier.twilio_client and from_number:
         try:
@@ -266,6 +335,7 @@ def start_telegram_bot():
     app.add_handler(CommandHandler("pnl",       cmd_pnl))
     app.add_handler(CommandHandler("bots",      cmd_bots))
     app.add_handler(CommandHandler("help",      cmd_help))
+    app.add_handler(CommandHandler("ask",       cmd_ask))
 
-    logger.success("🤖 Telegram Command Bot started (10 commands)")
+    logger.success("🤖 Telegram Command Bot started (11 commands)")
     app.run_polling()

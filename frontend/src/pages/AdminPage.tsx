@@ -6,6 +6,7 @@ import {
   adminUpdateTicketStatus, adminHealthCheck, adminUpdateUser,
   adminGetSubscriptions, adminApproveSubscription, adminRejectSubscription,
   getAdminBonuses, adminGrantBonus, toggleAdminBonus, deleteAdminBonus,
+  adminGetBonusClaims, adminRevokeBonusClaim,
   getAdminReferrals, adminUpdateReferralCode, adminResetReferralCode,
   adminGetAds, adminCreateAd, adminToggleAd, adminDeleteAd,
   adminGetUserDepositConfig, adminSetUserDepositConfig,
@@ -56,6 +57,9 @@ export default function AdminPage() {
     note: '', task_description: '', require_claim: false, grant_now: true,
   })
   const [bonusLoading, setBonusLoading] = useState(false)
+  const [bonusClaims, setBonusClaims] = useState<any[]>([])
+  const [expandedBonus, setExpandedBonus] = useState<number | null>(null)
+  const [claimsLoading, setClaimsLoading] = useState(false)
 
   // Ads
   const [ads, setAds] = useState<any[]>([])
@@ -143,8 +147,12 @@ export default function AdminPage() {
     }
     if (t === 'health') runHealthCheck()
     if (t === 'bonuses') {
-      const res = await getAdminBonuses().catch(() => null)
-      if (res) setBonuses(Array.isArray(res.data) ? res.data : [])
+      const [bRes, cRes] = await Promise.all([
+        getAdminBonuses().catch(() => null),
+        adminGetBonusClaims().catch(() => null),
+      ])
+      if (bRes) setBonuses(Array.isArray(bRes.data) ? bRes.data : [])
+      if (cRes) setBonusClaims(Array.isArray(cRes.data) ? cRes.data : [])
     }
     if (t === 'referrals') {
       const res = await getAdminReferrals().catch(() => null)
@@ -1505,6 +1513,131 @@ export default function AdminPage() {
                     ))}
                   </tbody>
                 </table>
+              </div>
+            )}
+          </div>
+
+          {/* Completion Tracker */}
+          <div className="bg-[#161a1e] border border-[#2b3139] rounded-xl overflow-hidden">
+            <div className="px-5 py-3 border-b border-[#2b3139] flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <CheckCircle size={14} className="text-[#0ecb81]" />
+                <h2 className="text-sm font-semibold text-[#eaecef]">Task Completion Tracker</h2>
+                <span className="text-[10px] text-[#848e9c]">— claimable bonuses only</span>
+              </div>
+              <button
+                onClick={async () => {
+                  setClaimsLoading(true)
+                  const r = await adminGetBonusClaims().catch(() => null)
+                  if (r) setBonusClaims(Array.isArray(r.data) ? r.data : [])
+                  setClaimsLoading(false)
+                }}
+                className="flex items-center gap-1 text-xs text-[#848e9c] hover:text-[#eaecef] transition">
+                <RefreshCw size={11} className={claimsLoading ? 'animate-spin' : ''} /> Refresh
+              </button>
+            </div>
+            {bonusClaims.length === 0 ? (
+              <div className="py-10 text-center text-[#848e9c] text-sm">
+                No claimable tasks found — create a bonus with "Require user to claim" enabled
+              </div>
+            ) : (
+              <div className="divide-y divide-[#2b3139]/60">
+                {bonusClaims.map((b: any) => (
+                  <div key={b.bonus_id} className="px-5 py-3">
+                    <button
+                      onClick={() => setExpandedBonus(expandedBonus === b.bonus_id ? null : b.bonus_id)}
+                      className="w-full flex items-center justify-between text-left group">
+                      <div className="flex items-center gap-3">
+                        <Gift size={13} className="text-[#f0b90b] shrink-0" />
+                        <div>
+                          <p className="text-sm font-semibold text-[#eaecef]">{b.title}</p>
+                          <p className="text-[10px] text-[#848e9c]">${b.amount_usdt?.toFixed(2)} USDT · {b.total_claims} assigned</p>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-3 shrink-0">
+                        <div className="flex gap-2 text-[10px]">
+                          <span className="px-2 py-0.5 rounded-full bg-[#0ecb81]/10 text-[#0ecb81] font-semibold">
+                            ✓ {b.claimed_count} claimed
+                          </span>
+                          <span className="px-2 py-0.5 rounded-full bg-[#f0b90b]/10 text-[#f0b90b] font-semibold">
+                            ⏳ {b.pending_count} pending
+                          </span>
+                          {b.total_claims - b.claimed_count - b.pending_count > 0 && (
+                            <span className="px-2 py-0.5 rounded-full bg-[#2b3139] text-[#848e9c] font-semibold">
+                              {b.total_claims - b.claimed_count - b.pending_count} unclaimed
+                            </span>
+                          )}
+                        </div>
+                        <ChevronDown size={13} className={`text-[#848e9c] transition-transform ${expandedBonus === b.bonus_id ? 'rotate-180' : ''}`} />
+                      </div>
+                    </button>
+
+                    {expandedBonus === b.bonus_id && (
+                      <div className="mt-3 rounded-lg border border-[#2b3139] overflow-hidden">
+                        {b.claims.length === 0 ? (
+                          <p className="text-xs text-[#848e9c] py-3 px-4">No claims yet</p>
+                        ) : (
+                          <table className="w-full text-xs">
+                            <thead>
+                              <tr className="bg-[#0b0e11] text-[#848e9c] border-b border-[#2b3139]">
+                                <th className="text-left px-4 py-2 font-medium">User</th>
+                                <th className="text-left px-4 py-2 font-medium">Assigned</th>
+                                <th className="text-left px-4 py-2 font-medium">Claimed</th>
+                                <th className="text-right px-4 py-2 font-medium">Status</th>
+                                <th className="text-right px-4 py-2 font-medium">Action</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {b.claims.map((c: any) => (
+                                <tr key={c.claim_id} className="border-b border-[#2b3139]/50 hover:bg-[#1e2329] transition">
+                                  <td className="px-4 py-2">
+                                    <p className="font-medium text-[#eaecef]">{c.user_name}</p>
+                                    <p className="text-[10px] text-[#848e9c]">{c.user_email}</p>
+                                  </td>
+                                  <td className="px-4 py-2 text-[#848e9c]">
+                                    {c.assigned_at ? new Date(c.assigned_at).toLocaleDateString() : '—'}
+                                  </td>
+                                  <td className="px-4 py-2 text-[#848e9c]">
+                                    {c.claimed_at ? new Date(c.claimed_at).toLocaleDateString() : '—'}
+                                  </td>
+                                  <td className="px-4 py-2 text-right">
+                                    <span className={`px-2 py-0.5 rounded-full text-[10px] font-semibold ${
+                                      c.status === 'claimed'
+                                        ? 'bg-[#0ecb81]/10 text-[#0ecb81]'
+                                        : 'bg-[#f0b90b]/10 text-[#f0b90b]'
+                                    }`}>
+                                      {c.status === 'claimed' ? '✓ Claimed' : '⏳ Pending'}
+                                    </span>
+                                  </td>
+                                  <td className="px-4 py-2 text-right">
+                                    {c.status === 'pending' ? (
+                                      <button
+                                        title="Revoke this pending claim"
+                                        onClick={async () => {
+                                          if (!confirm(`Revoke task for ${c.user_email}?`)) return
+                                          try {
+                                            await adminRevokeBonusClaim(c.claim_id)
+                                            toast.success('Claim revoked')
+                                            const r = await adminGetBonusClaims().catch(() => null)
+                                            if (r) setBonusClaims(Array.isArray(r.data) ? r.data : [])
+                                          } catch { toast.error('Failed to revoke') }
+                                        }}
+                                        className="flex items-center gap-1 px-2 py-1 rounded-lg text-[10px] text-[#f6465d] border border-[#f6465d]/30 hover:bg-[#f6465d]/10 transition ml-auto">
+                                        <XCircle size={10} /> Revoke
+                                      </button>
+                                    ) : (
+                                      <span className="text-[10px] text-[#4a5568]">—</span>
+                                    )}
+                                  </td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                ))}
               </div>
             )}
           </div>
