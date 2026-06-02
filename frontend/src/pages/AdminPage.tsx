@@ -21,7 +21,7 @@ import {
   Key, MessageSquare, Activity, Wallet, Save, RefreshCw,
   Edit3, CreditCard, Eye, Gift, Trash2, ToggleLeft, ToggleRight,
   Share2, Copy, RotateCcw, Megaphone, Image, Plus, Link2, ExternalLink,
-  Server, ShoppingBag, Package, DollarSign, X, Star,
+  Server, ShoppingBag, Package, DollarSign, X, Star, ChevronDown,
 } from 'lucide-react'
 
 type Tab = 'users' | 'transactions' | 'notifications' | 'wallet-config' | 'api-users' | 'support' | 'health' | 'subscriptions' | 'visitors' | 'bonuses' | 'referrals' | 'ads' | 'products' | 'testimonials'
