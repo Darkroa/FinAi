@@ -162,40 +162,27 @@ export default function DashboardLayout() {
           <div className="flex items-center justify-between px-4 py-3 gap-3">
 
             {/* LEFT — Profile pic (opens nav drawer) */}
-            <div className="flex items-center gap-4">
-              {/* Your existing Profile Button */}
-              <button 
+            <div className="flex items-center gap-3 min-w-0">
+              <button
                 onClick={() => setNavOpen(v => !v)}
-                className="w-11 h-11 rounded-full overflow-hidden border-2 border-[#f0b90b]/30 hover:border-[#f0b90b] flex-shrink-0 transition"
+                className="w-10 h-10 rounded-full overflow-hidden border-2 border-[#f0b90b]/30 hover:border-[#f0b90b] flex-shrink-0 transition"
               >
                 {user?.profile_photo
                   ? <img src={user.profile_photo} alt="" className="w-full h-full object-cover" />
-                  : <div className="w-full h-full bg-[#f0b90b] flex items-center justify-center text-black font-bold">
+                  : <div className="w-full h-full bg-[#f0b90b] flex items-center justify-center text-black font-bold text-sm">
                       {user?.email?.[0]?.toUpperCase() ?? 'U'}
                     </div>
                 }
               </button>
-              {/* Greeting Section - Opposite the Profile Icon */}
-                  
-                    <div className="flex flex-col items-left">   
-                      {/* 👋 Hi + Name Line */}
-                      <div className="flex items-left ">
-                        <span className="text-white font-medium opacity-95 text-[10px] tracking-wide">Hi,  </span>
-                        <span className="text-white text-1xl text-[10px] font-semibold">{user?.first_name || user?.email?.split('@')[0] || 'User'}
-                        </span>
-                      </div>
-
-                      {/* Greeting Below - Small & Faded */}
-                      <span className="text-[#f0b90b] text-xs font-medium opacity-75  text-[8px] tracking-wide">
-                        {getGreeting()}
-                      </span>
-
-                    </div>
+              <div className="flex flex-col items-start min-w-0">
+                <p className="text-[#eaecef] text-xs font-semibold leading-tight truncate">
+                  Hi, {user?.first_name || user?.email?.split('@')[0] || 'User'}
+                </p>
+                <p className="text-[#f0b90b] text-[10px] font-medium opacity-80 leading-tight">
+                  {getGreeting()}
+                </p>
               </div>
-           
-              
-          
-            
+            </div>
 
             {/* RIGHT — Chat + Bell + Brightness */}
             <div className="flex items-center gap-2 flex-shrink-0">

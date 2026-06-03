@@ -324,10 +324,10 @@ export default function AdminPage() {
       </div>
 
       {/* Tabs */}
-      <div className="flex flex-wrap gap-1 bg-[#161a1e] border border-[#2b3139] rounded-xl p-1">
+      <div className="flex gap-1 bg-[#161a1e] border border-[#2b3139] rounded-xl p-1 overflow-x-auto scrollbar-hide">
         {tabs.map(({ id, label, icon: Icon }) => (
           <button key={id} onClick={() => loadTabData(id as Tab)}
-            className={`flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-medium transition whitespace-nowrap ${tab === id ? 'bg-[#2b3139] text-[#eaecef]' : 'text-[#848e9c] hover:text-[#eaecef]'}`}>
+            className={`flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-medium transition whitespace-nowrap flex-shrink-0 ${tab === id ? 'bg-[#2b3139] text-[#eaecef]' : 'text-[#848e9c] hover:text-[#eaecef]'}`}>
             <Icon size={12} />{label}
           </button>
         ))}
