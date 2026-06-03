@@ -295,6 +295,7 @@ export default function AdminPage() {
   ] as const
 
   const inp = 'w-full bg-[#0b0e11] border border-[#2b3139] rounded-xl px-3 py-2 text-sm text-[#eaecef] placeholder-[#4a5568] focus:outline-none focus:border-[#f0b90b] transition'
+  const sel = inp + ' appearance-none pr-9 cursor-pointer'
 
   return (
     <div className="space-y-5">
@@ -345,29 +346,38 @@ export default function AdminPage() {
                 <div><label className="text-xs text-[#848e9c] mb-1 block">Phone</label><input value={editForm.phone ?? ''} onChange={e => setEditForm((f: any) => ({ ...f, phone: e.target.value }))} className={inp} /></div>
                 <div><label className="text-xs text-[#848e9c] mb-1 block">Balance (USDT)</label><input type="number" step="0.01" value={editForm.balance_usdt ?? ''} onChange={e => setEditForm((f: any) => ({ ...f, balance_usdt: parseFloat(e.target.value) }))} className={inp} /></div>
                 <div><label className="text-xs text-[#848e9c] mb-1 block">Account Tier</label>
-                  <select value={editForm.account_tier ?? 0} onChange={e => setEditForm((f: any) => ({ ...f, account_tier: parseInt(e.target.value) }))} className={inp}>
-                    <option value={0}>Tier 0 (Unverified)</option>
-                    <option value={1}>Tier 1</option>
-                    <option value={2}>Tier 2</option>
-                    <option value={3}>Tier 3</option>
-                  </select>
+                  <div className="relative">
+                    <select value={editForm.account_tier ?? 0} onChange={e => setEditForm((f: any) => ({ ...f, account_tier: parseInt(e.target.value) }))} className={sel}>
+                      <option value={0}>Tier 0 (Unverified)</option>
+                      <option value={1}>Tier 1</option>
+                      <option value={2}>Tier 2</option>
+                      <option value={3}>Tier 3</option>
+                    </select>
+                    <ChevronDown size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-[#848e9c] pointer-events-none" />
+                  </div>
                 </div>
                 <div><label className="text-xs text-[#848e9c] mb-1 block">KYC Status</label>
-                  <select value={editForm.kyc_status ?? 'pending'} onChange={e => setEditForm((f: any) => ({ ...f, kyc_status: e.target.value }))} className={inp}>
-                    <option value="pending">Pending</option>
-                    <option value="submitted">Submitted</option>
-                    <option value="approved">Approved</option>
-                    <option value="rejected">Rejected</option>
-                  </select>
+                  <div className="relative">
+                    <select value={editForm.kyc_status ?? 'pending'} onChange={e => setEditForm((f: any) => ({ ...f, kyc_status: e.target.value }))} className={sel}>
+                      <option value="pending">Pending</option>
+                      <option value="submitted">Submitted</option>
+                      <option value="approved">Approved</option>
+                      <option value="rejected">Rejected</option>
+                    </select>
+                    <ChevronDown size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-[#848e9c] pointer-events-none" />
+                  </div>
                 </div>
                 <div className="col-span-2"><label className="text-xs text-[#848e9c] mb-1 block">Subscription Plan</label>
-                  <select value={editForm.subscription ?? 'free'} onChange={e => setEditForm((f: any) => ({ ...f, subscription: e.target.value }))} className={inp}>
-                    <option value="free">Free</option>
-                    <option value="pro">Pro — $500/mo</option>
-                    <option value="elite">Elite — $1,000/mo</option>
-                    <option value="elite+">Elite+ — $2,000/mo</option>
-                    <option value="custom">Custom — Unlimited</option>
-                  </select>
+                  <div className="relative">
+                    <select value={editForm.subscription ?? 'free'} onChange={e => setEditForm((f: any) => ({ ...f, subscription: e.target.value }))} className={sel}>
+                      <option value="free">Free</option>
+                      <option value="pro">Pro — $500/mo</option>
+                      <option value="elite">Elite — $1,000/mo</option>
+                      <option value="elite+">Elite+ — $2,000/mo</option>
+                      <option value="custom">Custom — Unlimited</option>
+                    </select>
+                    <ChevronDown size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-[#848e9c] pointer-events-none" />
+                  </div>
                 </div>
               </div>
               <div className="flex flex-wrap gap-3">
@@ -1004,7 +1014,15 @@ export default function AdminPage() {
                 <button type="button" onClick={() => setNotifTarget('all')} className={`flex items-center justify-center gap-1.5 py-2 rounded-xl text-xs font-medium border transition ${notifTarget === 'all' ? 'bg-[#f0b90b] text-black border-[#f0b90b]' : 'border-[#2b3139] text-[#848e9c]'}`}><Globe size={11} /> All Users</button>
                 <button type="button" onClick={() => setNotifTarget('user')} className={`flex items-center justify-center gap-1.5 py-2 rounded-xl text-xs font-medium border transition ${notifTarget === 'user' ? 'bg-[#f0b90b] text-black border-[#f0b90b]' : 'border-[#2b3139] text-[#848e9c]'}`}><User size={11} /> Specific</button>
               </div>
-              {notifTarget === 'user' && <select value={notifUserId} onChange={e => setNotifUserId(e.target.value)} required className="w-full bg-[#0b0e11] border border-[#2b3139] rounded-xl px-3 py-2 text-sm text-[#eaecef] focus:outline-none focus:border-[#f0b90b]"><option value="">Select user...</option>{users.map(u => <option key={u.id} value={u.id}>{u.email}</option>)}</select>}
+              {notifTarget === 'user' && (
+                <div className="relative">
+                  <select value={notifUserId} onChange={e => setNotifUserId(e.target.value)} required className={sel}>
+                    <option value="">Select user...</option>
+                    {users.map(u => <option key={u.id} value={u.id}>{u.email}</option>)}
+                  </select>
+                  <ChevronDown size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-[#848e9c] pointer-events-none" />
+                </div>
+              )}
               <button type="submit" disabled={sending} className="w-full flex items-center justify-center gap-2 bg-[#f0b90b] hover:bg-[#d4a30a] disabled:opacity-60 text-black font-semibold py-2.5 rounded-xl text-sm transition"><Send size={13} />{sending ? 'Sending...' : 'Send'}</button>
             </form>
           </div>
@@ -1349,12 +1367,15 @@ export default function AdminPage() {
                 </div>
                 <div>
                   <label className="text-xs text-[#848e9c] mb-1.5 block">Bonus Type</label>
-                  <select value={bonusForm.bonus_type} onChange={e => setBonusForm(f => ({ ...f, bonus_type: e.target.value }))}
-                    className={inp}>
-                    <option value="manual_grant">Manual Grant (credit now)</option>
-                    <option value="tier_achievement">Tier Achievement (auto on tier up)</option>
-                    <option value="referral_signup">Referral Signup (auto on referral)</option>
-                  </select>
+                  <div className="relative">
+                    <select value={bonusForm.bonus_type} onChange={e => setBonusForm(f => ({ ...f, bonus_type: e.target.value }))}
+                      className={sel}>
+                      <option value="manual_grant">Manual Grant (credit now)</option>
+                      <option value="tier_achievement">Tier Achievement (auto on tier up)</option>
+                      <option value="referral_signup">Referral Signup (auto on referral)</option>
+                    </select>
+                    <ChevronDown size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-[#848e9c] pointer-events-none" />
+                  </div>
                 </div>
                 <div>
                   <label className="text-xs text-[#848e9c] mb-1.5 block">Amount (USDT)</label>
@@ -1367,12 +1388,15 @@ export default function AdminPage() {
                 </div>
                 <div>
                   <label className="text-xs text-[#848e9c] mb-1.5 block">Target Recipients</label>
-                  <select value={bonusForm.target} onChange={e => setBonusForm(f => ({ ...f, target: e.target.value }))}
-                    className={inp}>
-                    <option value="all">All Users</option>
-                    <option value="new_users">New Users (last 30 days)</option>
-                    <option value="specific">Specific User</option>
-                  </select>
+                  <div className="relative">
+                    <select value={bonusForm.target} onChange={e => setBonusForm(f => ({ ...f, target: e.target.value }))}
+                      className={sel}>
+                      <option value="all">All Users</option>
+                      <option value="new_users">New Users (last 30 days)</option>
+                      <option value="specific">Specific User</option>
+                    </select>
+                    <ChevronDown size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-[#848e9c] pointer-events-none" />
+                  </div>
                 </div>
                 {bonusForm.target === 'specific' && (
                   <div>
@@ -1386,13 +1410,16 @@ export default function AdminPage() {
                 {bonusForm.bonus_type === 'tier_achievement' && (
                   <div>
                     <label className="text-xs text-[#848e9c] mb-1.5 block">Trigger at Tier</label>
-                    <select value={bonusForm.tier_required}
-                      onChange={e => setBonusForm(f => ({ ...f, tier_required: Number(e.target.value) }))}
-                      className={inp}>
-                      <option value={1}>Tier 1</option>
-                      <option value={2}>Tier 2</option>
-                      <option value={3}>Tier 3</option>
-                    </select>
+                    <div className="relative">
+                      <select value={bonusForm.tier_required}
+                        onChange={e => setBonusForm(f => ({ ...f, tier_required: Number(e.target.value) }))}
+                        className={sel}>
+                        <option value={1}>Tier 1</option>
+                        <option value={2}>Tier 2</option>
+                        <option value={3}>Tier 3</option>
+                      </select>
+                      <ChevronDown size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-[#848e9c] pointer-events-none" />
+                    </div>
                   </div>
                 )}
                 <div>

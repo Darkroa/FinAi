@@ -1080,13 +1080,16 @@ export default function BotsPage() {
                   </div>
                   <div>
                     <label className="text-xs text-[#848e9c] mb-1.5 block">Sentiment Filter</label>
-                    <select value={feParams.sentiment_filter}
-                      onChange={e => setFeParams(p => ({ ...p, sentiment_filter: e.target.value }))}
-                      className="w-full bg-[#0b0e11] border border-[#2b3139] rounded-xl px-3 py-2.5 text-sm text-[#eaecef] focus:outline-none focus:border-[#f0b90b]">
-                      <option value="both">Both (Bullish + Bearish)</option>
-                      <option value="bullish">Bullish only (BUY)</option>
-                      <option value="bearish">Bearish only (SELL)</option>
-                    </select>
+                    <div className="relative">
+                      <select value={feParams.sentiment_filter}
+                        onChange={e => setFeParams(p => ({ ...p, sentiment_filter: e.target.value }))}
+                        className="w-full bg-[#0b0e11] border border-[#2b3139] rounded-xl px-3 py-2.5 text-sm text-[#eaecef] focus:outline-none focus:border-[#f0b90b] appearance-none pr-9 cursor-pointer">
+                        <option value="both">Both (Bullish + Bearish)</option>
+                        <option value="bullish">Bullish only (BUY)</option>
+                        <option value="bearish">Bearish only (SELL)</option>
+                      </select>
+                      <ChevronDown size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-[#848e9c] pointer-events-none" />
+                    </div>
                   </div>
                 </div>
                 <div className="flex items-center gap-3 pt-1">

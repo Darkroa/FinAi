@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback } from 'react'
 import { listAlerts, createAlert, deleteAlert, toggleAlert } from '../lib/api'
 import { useAuthStore } from '../store/authStore'
 import toast from 'react-hot-toast'
-import { Bell, Plus, Trash2, TrendingUp, TrendingDown, ToggleLeft, ToggleRight, RefreshCw, AlertCircle } from 'lucide-react'
+import { Bell, Plus, Trash2, TrendingUp, TrendingDown, ToggleLeft, ToggleRight, RefreshCw, AlertCircle, ChevronDown } from 'lucide-react'
 
 interface PriceAlert {
   id: number
@@ -134,10 +134,13 @@ export default function AlertsPage() {
             {/* Symbol */}
             <div>
               <label className="text-xs text-[#848e9c] mb-1.5 block">Asset</label>
-              <select value={form.symbol} onChange={e => setForm(f => ({ ...f, symbol: e.target.value }))}
-                className="w-full bg-[#0b0e11] border border-[#2b3139] rounded-xl px-3 py-2.5 text-sm text-[#eaecef] focus:outline-none focus:border-[#f0b90b] transition">
-                {SYMBOLS.map(s => <option key={s} value={s}>{s}</option>)}
-              </select>
+              <div className="relative">
+                <select value={form.symbol} onChange={e => setForm(f => ({ ...f, symbol: e.target.value }))}
+                  className="w-full bg-[#0b0e11] border border-[#2b3139] rounded-xl px-3 py-2.5 text-sm text-[#eaecef] focus:outline-none focus:border-[#f0b90b] transition appearance-none pr-9 cursor-pointer">
+                  {SYMBOLS.map(s => <option key={s} value={s}>{s}</option>)}
+                </select>
+                <ChevronDown size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-[#848e9c] pointer-events-none" />
+              </div>
             </div>
 
             {/* Target price */}

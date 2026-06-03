@@ -8,7 +8,7 @@ import {
 import toast from 'react-hot-toast';
 import {
   Bell, Mail, MessageCircle, Send, Zap, Shield, Globe,
-  Check, Activity, Eye, EyeOff,
+  Check, Activity, Eye, EyeOff, ChevronDown,
 } from 'lucide-react';
 import { useLanguage } from '../contexts/LanguageContext';
 import type { LangCode } from '../lib/i18n';
@@ -400,34 +400,40 @@ export default function SettingsPage() {
         <div className="p-5 space-y-4">
           <div>
             <label className="text-xs text-[#848e9c] mb-1.5 block">Language</label>
-            <select
-              value={language}
-              onChange={e => setLang(e.target.value as LangCode)}
-              className="w-full bg-[#0b0e11] border border-[#2b3139] rounded-xl px-3 py-2.5 text-sm text-[#eaecef] focus:outline-none focus:border-[#f0b90b] transition"
-            >
-              <option value="en-US">English (US)</option>
-              <option value="en-GB">English (UK)</option>
-              <option value="fr">Français</option>
-              <option value="es">Español</option>
-              <option value="de">Deutsch</option>
-              <option value="ar">العربية</option>
-              <option value="zh">中文</option>
-              <option value="pt">Português</option>
-            </select>
+            <div className="relative">
+              <select
+                value={language}
+                onChange={e => setLang(e.target.value as LangCode)}
+                className="w-full bg-[#0b0e11] border border-[#2b3139] rounded-xl px-3 py-2.5 text-sm text-[#eaecef] focus:outline-none focus:border-[#f0b90b] transition appearance-none pr-9 cursor-pointer"
+              >
+                <option value="en-US">English (US)</option>
+                <option value="en-GB">English (UK)</option>
+                <option value="fr">Français</option>
+                <option value="es">Español</option>
+                <option value="de">Deutsch</option>
+                <option value="ar">العربية</option>
+                <option value="zh">中文</option>
+                <option value="pt">Português</option>
+              </select>
+              <ChevronDown size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-[#848e9c] pointer-events-none" />
+            </div>
           </div>
           <div>
             <label className="text-xs text-[#848e9c] mb-1.5 block">Currency display</label>
-            <select
-              value={currency}
-              onChange={e => setCtxCurrency(e.target.value)}
-              className="w-full bg-[#0b0e11] border border-[#2b3139] rounded-xl px-3 py-2.5 text-sm text-[#eaecef] focus:outline-none focus:border-[#f0b90b] transition"
-            >
-              <option value="USD">USD — US Dollar</option>
-              <option value="EUR">EUR — Euro</option>
-              <option value="GBP">GBP — British Pound</option>
-              <option value="AED">AED — UAE Dirham</option>
-              <option value="BTC">BTC — Bitcoin</option>
-            </select>
+            <div className="relative">
+              <select
+                value={currency}
+                onChange={e => setCtxCurrency(e.target.value)}
+                className="w-full bg-[#0b0e11] border border-[#2b3139] rounded-xl px-3 py-2.5 text-sm text-[#eaecef] focus:outline-none focus:border-[#f0b90b] transition appearance-none pr-9 cursor-pointer"
+              >
+                <option value="USD">USD — US Dollar</option>
+                <option value="EUR">EUR — Euro</option>
+                <option value="GBP">GBP — British Pound</option>
+                <option value="AED">AED — UAE Dirham</option>
+                <option value="BTC">BTC — Bitcoin</option>
+              </select>
+              <ChevronDown size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-[#848e9c] pointer-events-none" />
+            </div>
           </div>
           <button
             onClick={saveLocale}

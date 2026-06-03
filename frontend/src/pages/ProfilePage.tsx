@@ -887,12 +887,15 @@ function FinApiTab({ user, setUser }: { user: UserProfile | null; setUser: (u: a
             <input value={newKeyName} onChange={e => setNewKeyName(e.target.value)} required disabled={!canCreateKey}
               placeholder="Key name (e.g. My Bot)"
               className="flex-1 min-w-0 bg-[#0b0e11] border border-[#2b3139] rounded-lg px-3 py-2 text-xs text-[#eaecef] placeholder-[#4a5568] focus:outline-none focus:border-[#f0b90b] transition disabled:opacity-50" />
-            <select value={newKeyPurpose} onChange={e => setNewKeyPurpose(e.target.value)} disabled={!canCreateKey}
-              className="bg-[#0b0e11] border border-[#2b3139] rounded-lg px-3 py-2 text-xs text-[#eaecef] focus:outline-none focus:border-[#f0b90b] transition disabled:opacity-50">
-              <option value="bot">Bot</option>
-              <option value="vps">VPS</option>
-              <option value="asset">Asset</option>
-            </select>
+            <div className="relative">
+              <select value={newKeyPurpose} onChange={e => setNewKeyPurpose(e.target.value)} disabled={!canCreateKey}
+                className="bg-[#0b0e11] border border-[#2b3139] rounded-lg px-3 py-2 text-xs text-[#eaecef] focus:outline-none focus:border-[#f0b90b] transition disabled:opacity-50 appearance-none pr-8 cursor-pointer">
+                <option value="bot">Bot</option>
+                <option value="vps">VPS</option>
+                <option value="asset">Asset</option>
+              </select>
+              <ChevronDown size={13} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[#848e9c] pointer-events-none" />
+            </div>
             <button type="submit" disabled={creatingKey || !canCreateKey}
               className="flex items-center gap-1.5 bg-[#f0b90b] hover:bg-[#d4a30a] disabled:opacity-60 text-black font-semibold px-3 py-2 rounded-lg text-xs transition">
               <Plus size={12}/>{creatingKey ? '…' : 'Create Key'}

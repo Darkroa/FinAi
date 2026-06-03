@@ -676,13 +676,16 @@ export default function TradePage() {
             ))}
           </div>
 
-          <select value={selExchange} onChange={e => setSelExch(e.target.value)}
-            className="bg-[#0b0e11] border border-[#2b3139] focus:border-[#f0b90b] rounded-lg px-3 py-2 text-xs text-[#eaecef] focus:outline-none transition">
-            <option value="__balance__">Platform Balance</option>
-            {exchanges.map(ex => (
-              <option key={ex.label} value={ex.label}>{ex.exchange.toUpperCase()} — {ex.label}</option>
-            ))}
-          </select>
+          <div className="relative">
+            <select value={selExchange} onChange={e => setSelExch(e.target.value)}
+              className="bg-[#0b0e11] border border-[#2b3139] focus:border-[#f0b90b] rounded-lg px-3 py-2 text-xs text-[#eaecef] focus:outline-none transition appearance-none pr-8 cursor-pointer">
+              <option value="__balance__">Platform Balance</option>
+              {exchanges.map(ex => (
+                <option key={ex.label} value={ex.label}>{ex.exchange.toUpperCase()} — {ex.label}</option>
+              ))}
+            </select>
+            <ChevronDown size={13} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[#848e9c] pointer-events-none" />
+          </div>
           <p className="text-[9px] text-[#848e9c] flex items-center gap-1">
             {usingBalance ? 'Internal wallet' : <><Link2 size={9} /> Live on {selectedConn?.exchange?.toUpperCase()}</>}
           </p>
