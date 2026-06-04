@@ -399,68 +399,73 @@ export default function AdminPage() {
 
       {/* USERS */}
       {tab === 'users' && (
-        <div className="bg-[#161a1e] border border-[#2b3139] rounded-xl overflow-hidden">
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm min-w-[700px]">
-              <thead>
-                <tr className="text-[#848e9c] text-xs border-b border-[#2b3139]">
-                  <th className="text-left px-4 py-3 font-medium">User</th>
-                  <th className="text-left px-4 py-3 font-medium">Tier / KYC</th>
-                  <th className="text-right px-4 py-3 font-medium">Balance</th>
-                  <th className="text-left px-4 py-3 font-medium">Status</th>
-                  <th className="text-right px-4 py-3 font-medium">Actions</th>
-                </tr>
-              </thead>
-              <tbody>
-                {loading ? <tr><td colSpan={5} className="px-4 py-8 text-center text-[#848e9c]">Loading...</td></tr>
-                  : users.length === 0 ? <tr><td colSpan={5} className="px-4 py-8 text-center text-[#848e9c]">No users</td></tr>
-                  : users.map(u => (
-                  <tr key={u.id} className="border-b border-[#2b3139]/50 hover:bg-[#1e2329] transition">
-                    <td className="px-4 py-3">
-                      <div className="flex items-center gap-2">
-                        <div className="w-8 h-8 rounded-full bg-[#f0b90b]/10 flex items-center justify-center flex-shrink-0 overflow-hidden">
-                          {u.profile_photo ? <img src={u.profile_photo} className="w-full h-full object-cover" /> : <span className="text-xs font-bold text-[#f0b90b]">{u.email?.[0]?.toUpperCase()}</span>}
-                        </div>
-                        <div className="min-w-0">
-                          <p className="text-xs font-medium text-[#eaecef] truncate">{u.email}</p>
-                          <p className="text-[10px] text-[#848e9c]">#{u.id} · {u.full_name || 'No name'}</p>
-                        </div>
-                      </div>
-                    </td>
-                    <td className="px-4 py-3">
-                      <span className={`text-xs font-bold ${tierColor(u.account_tier || 0)}`}>Tier {u.account_tier || 0}</span>
-                      <span className={`ml-2 text-[10px] px-1.5 py-0.5 rounded-full ${u.kyc_status === 'approved' ? 'bg-[#0ecb81]/10 text-[#0ecb81]' : u.kyc_status === 'submitted' ? 'bg-[#f0b90b]/10 text-[#f0b90b]' : 'bg-[#2b3139] text-[#848e9c]'}`}>{u.kyc_status || 'pending'}</span>
-                      <div className="mt-1">
-                        <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-semibold ${
-                          u.subscription === 'custom' ? 'bg-[#a78bfa]/10 text-[#a78bfa]' :
-                          u.subscription === 'elite+' ? 'bg-[#38bdf8]/10 text-[#38bdf8]' :
-                          u.subscription === 'elite'  ? 'bg-[#0ecb81]/10 text-[#0ecb81]' :
-                          u.subscription === 'pro'    ? 'bg-[#f0b90b]/10 text-[#f0b90b]' :
-                                                        'bg-[#2b3139] text-[#848e9c]'
-                        }`}>{(u.subscription || 'free').toUpperCase()}</span>
-                      </div>
-                    </td>
-                    <td className="px-4 py-3 text-right font-mono text-xs text-[#eaecef]">${(u.balance_usdt || 0).toFixed(2)}</td>
-                    <td className="px-4 py-3">
-                      <div className="flex flex-wrap gap-1">
-                        {u.is_admin && <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-[#f0b90b]/10 text-[#f0b90b]">Admin</span>}
-                        {u.is_banned && <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-[#f6465d]/10 text-[#f6465d]">Banned</span>}
-                        {!u.is_banned && u.is_active && <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-[#0ecb81]/10 text-[#0ecb81]">Active</span>}
-                        {u.profile_locked && <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-[#848e9c]/20 text-[#848e9c]">Locked</span>}
-                      </div>
-                    </td>
-                    <td className="px-4 py-3 text-right">
-                      <button onClick={() => { setEditingUser(u); setEditForm({ first_name: u.first_name, last_name: u.last_name, email: u.email, phone: u.phone, balance_usdt: u.balance_usdt, account_tier: u.account_tier, kyc_status: u.kyc_status, is_active: u.is_active, is_banned: u.is_banned, is_admin: u.is_admin, profile_locked: u.profile_locked, subscription: u.subscription || 'free' }) }}
-                        className="p-1.5 rounded-lg text-[#848e9c] hover:text-[#f0b90b] hover:bg-[#f0b90b]/10 transition">
-                        <Edit3 size={13} />
-                      </button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+        loading ? (
+          <div className="py-12 text-center text-[#848e9c] text-sm">Loading...</div>
+        ) : users.length === 0 ? (
+          <div className="py-12 text-center text-[#848e9c] text-sm">No users found</div>
+        ) : (
+          <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3">
+            {users.map(u => (
+              <div key={u.id} className="bg-[#161a1e] border border-[#2b3139] rounded-xl p-4 hover:border-[#f0b90b]/20 transition group">
+                {/* Avatar + email + edit */}
+                <div className="flex items-start gap-3">
+                  <div className="w-10 h-10 rounded-full bg-[#f0b90b]/10 flex items-center justify-center flex-shrink-0 overflow-hidden border border-[#2b3139]">
+                    {u.profile_photo
+                      ? <img src={u.profile_photo} className="w-full h-full object-cover" />
+                      : <span className="text-sm font-bold text-[#f0b90b]">{u.email?.[0]?.toUpperCase()}</span>}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-xs font-semibold text-[#eaecef] truncate">{u.email}</p>
+                    <p className="text-[10px] text-[#848e9c] mt-0.5">#{u.id} · {u.full_name || 'No name'}</p>
+                  </div>
+                  <button
+                    onClick={() => { setEditingUser(u); setEditForm({ first_name: u.first_name, last_name: u.last_name, email: u.email, phone: u.phone, balance_usdt: u.balance_usdt, account_tier: u.account_tier, kyc_status: u.kyc_status, is_active: u.is_active, is_banned: u.is_banned, is_admin: u.is_admin, profile_locked: u.profile_locked, subscription: u.subscription || 'free' }) }}
+                    className="p-1.5 rounded-lg text-[#848e9c] hover:text-[#f0b90b] hover:bg-[#f0b90b]/10 transition flex-shrink-0 opacity-0 group-hover:opacity-100">
+                    <Edit3 size={13} />
+                  </button>
+                </div>
+
+                {/* Balance */}
+                <div className="mt-3 flex items-center justify-between">
+                  <span className="text-[10px] text-[#848e9c]">Balance</span>
+                  <span className="text-xs font-mono font-bold text-[#eaecef]">${(u.balance_usdt || 0).toFixed(2)}</span>
+                </div>
+
+                {/* Tier + KYC + Subscription row */}
+                <div className="mt-2 flex flex-wrap gap-1.5">
+                  <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${
+                    u.account_tier === 3 ? 'border-[#a78bfa]/30 text-[#a78bfa] bg-[#a78bfa]/10' :
+                    u.account_tier === 2 ? 'border-[#0ecb81]/30 text-[#0ecb81] bg-[#0ecb81]/10' :
+                    u.account_tier === 1 ? 'border-[#f0b90b]/30 text-[#f0b90b] bg-[#f0b90b]/10' :
+                    'border-[#2b3139] text-[#848e9c] bg-[#2b3139]/40'
+                  }`}>Tier {u.account_tier || 0}</span>
+
+                  <span className={`text-[10px] px-1.5 py-0.5 rounded-full ${
+                    u.kyc_status === 'approved' ? 'bg-[#0ecb81]/10 text-[#0ecb81]' :
+                    u.kyc_status === 'submitted' ? 'bg-[#f0b90b]/10 text-[#f0b90b]' :
+                    'bg-[#2b3139] text-[#848e9c]'
+                  }`}>{u.kyc_status || 'pending'}</span>
+
+                  <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-semibold ${
+                    u.subscription === 'custom' ? 'bg-[#a78bfa]/10 text-[#a78bfa]' :
+                    u.subscription === 'elite+' ? 'bg-[#38bdf8]/10 text-[#38bdf8]' :
+                    u.subscription === 'elite'  ? 'bg-[#0ecb81]/10 text-[#0ecb81]' :
+                    u.subscription === 'pro'    ? 'bg-[#f0b90b]/10 text-[#f0b90b]' :
+                    'bg-[#2b3139] text-[#848e9c]'
+                  }`}>{(u.subscription || 'free').toUpperCase()}</span>
+                </div>
+
+                {/* Status flags */}
+                <div className="mt-2 flex flex-wrap gap-1">
+                  {u.is_admin    && <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-[#f0b90b]/10 text-[#f0b90b]">Admin</span>}
+                  {u.is_banned   && <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-[#f6465d]/10 text-[#f6465d]">Banned</span>}
+                  {!u.is_banned && u.is_active && <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-[#0ecb81]/10 text-[#0ecb81]">Active</span>}
+                  {u.profile_locked && <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-[#848e9c]/20 text-[#848e9c]">Locked</span>}
+                </div>
+              </div>
+            ))}
           </div>
-        </div>
+        )
       )}
 
       {/* TRANSACTIONS */}

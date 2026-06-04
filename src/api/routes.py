@@ -776,6 +776,83 @@ async def verify_2fa(body: TFAVerifyRequest, db: Session = Depends(get_db)):
     return {"access_token": create_access_token({"sub": user.email}), "token_type": "bearer"}
 
 
+@router.post("/auth/resend-2fa")
+async def resend_2fa(body: dict, db: Session = Depends(get_db)):
+    """Generate and re-send a fresh 2FA code using the existing partial token."""
+    from jose import jwt as _jose_jwt, JWTError as _JWTError
+    import random as _rnd2, threading as _thr2r, requests as _rq2r
+    _SECRET = os.getenv("JWT_SECRET_KEY", "super-secret-key-change-in-production")
+    partial_token = body.get("partial_token", "")
+    try:
+        payload = _jose_jwt.decode(partial_token, _SECRET, algorithms=["HS256"])
+        if payload.get("purpose") != "2fa_pending":
+            raise HTTPException(status_code=400, detail="Invalid token")
+        email = payload.get("sub")
+    except _JWTError:
+        raise HTTPException(status_code=400, detail="Invalid or expired 2FA session. Please log in again.")
+
+    user = get_user_by_email(db, email)
+    if not user:
+        raise HTTPException(status_code=400, detail="User not found")
+
+    prefs = dict(user.notification_preferences or {})
+    _code2r = str(_rnd2.randint(100000, 999999))
+    from datetime import timedelta as _td2r
+    prefs["tfa_pending_code"]  = _code2r
+    prefs["tfa_code_expires"]  = (datetime.utcnow() + _td2r(minutes=10)).isoformat()
+    user.notification_preferences = prefs
+    db.commit()
+
+    _method2r = prefs.get("tfa_method", "telegram")
+    _tg_tok2r = os.getenv("TELEGRAM_BOT_TOKEN", "")
+    _tg_cid2r = user.telegram_chat_id or prefs.get("telegram_chat_id")
+    _msg2r = (
+        f"🔐 *FinAi Login Verification*\n\n"
+        f"Your new 2FA code: `{_code2r}`\n\n"
+        f"This code expires in 10 minutes."
+    )
+
+    if _method2r == "telegram" and _tg_tok2r and _tg_cid2r:
+        def _tg_resend(tok=_tg_tok2r, cid=_tg_cid2r, txt=_msg2r):
+            try:
+                _rq2r.post(
+                    f"https://api.telegram.org/bot{tok}/sendMessage",
+                    json={"chat_id": cid, "text": txt, "parse_mode": "Markdown"},
+                    timeout=8,
+                )
+            except Exception as _e:
+                logger.warning(f"2FA resend Telegram failed: {_e}")
+        _thr2r.Thread(target=_tg_resend, daemon=True).start()
+    elif _method2r == "email":
+        try:
+            import resend as _resend2r
+            _resend2r.api_key = os.getenv("RESEND_API_KEY", "")
+            _from2r = os.getenv("RESEND_FROM_EMAIL", "onboarding@resend.dev")
+            _resend2r.Emails.send({
+                "from": f"FinAi <{_from2r}>",
+                "to": [user.email],
+                "subject": "FinAi — New Login Verification Code",
+                "html": f"""
+                <div style="font-family:Arial,sans-serif;max-width:500px;margin:0 auto;background:#0b0e11;padding:32px;border-radius:12px">
+                  <div style="text-align:center;margin-bottom:24px">
+                    <span style="font-size:28px;font-weight:900;color:#f0b90b">⚡ FinAi</span>
+                  </div>
+                  <h2 style="color:#eaecef;font-size:20px;margin:0 0 12px">New Login Code</h2>
+                  <p style="color:#848e9c;font-size:14px;margin:0 0 24px">Your previous code has been replaced. Use this new code:</p>
+                  <div style="background:#1e2329;border:1px solid #2b3139;border-radius:10px;padding:28px;text-align:center;margin-bottom:24px">
+                    <span style="font-size:44px;font-weight:900;letter-spacing:14px;color:#f0b90b;font-family:monospace">{_code2r}</span>
+                  </div>
+                  <p style="color:#4a5568;font-size:12px;text-align:center;margin:0">Expires in 10 minutes.</p>
+                </div>
+                """,
+            })
+            logger.info(f"✉️  2FA resend code sent via email to {user.email}")
+        except Exception as _e:
+            logger.warning(f"2FA resend email failed for {user.email}: {_e}")
+
+    return {"message": "New 2FA code sent", "method": _method2r}
+
+
 @router.get("/users/me")
 async def get_me(current_user=Depends(get_current_user), db: Session = Depends(get_db)):
     user = db.query(User).filter(User.email == current_user["email"]).first()

@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { useAuthStore } from '../store/authStore'
-import { login, signup, verify2fa, forgotPassword, resetPassword } from '../lib/api'
+import { login, signup, verify2fa, resend2faCode, forgotPassword, resetPassword } from '../lib/api'
 import toast from 'react-hot-toast'
 import { Zap, Eye, EyeOff, ArrowLeft, Mail, Gift, CheckCircle, Shield, RefreshCw, Lock, KeyRound } from 'lucide-react'
 import axios from 'axios'
@@ -23,6 +23,8 @@ export default function LoginPage() {
   const [partialToken, setPartialToken] = useState('')
   const [tfaMethod, setTfaMethod] = useState('')
   const [tfaLoading, setTfaLoading] = useState(false)
+  const [tfaResending, setTfaResending] = useState(false)
+  const [tfaCooldown, setTfaCooldown] = useState(0)
 
   // Password reset state
   const [resetCode, setResetCode] = useState('')
@@ -121,10 +123,32 @@ export default function LoginPage() {
     }
   }
 
+  useEffect(() => {
+    if (tfaCooldown <= 0) return
+    const t = setTimeout(() => setTfaCooldown(c => c - 1), 1000)
+    return () => clearTimeout(t)
+  }, [tfaCooldown])
+
+  const handleResend2FA = async () => {
+    if (tfaCooldown > 0 || tfaResending) return
+    setTfaResending(true)
+    try {
+      await resend2faCode(partialToken)
+      toast.success(`New code sent via ${tfaMethod === 'email' ? 'email' : 'Telegram'}`)
+      setTfaCooldown(30)
+      setTfaCode('')
+    } catch {
+      toast.error('Failed to resend. Please log in again.')
+    } finally {
+      setTfaResending(false)
+    }
+  }
+
   const handleBackFromTFA = () => {
     setTfaMode(false)
     setTfaCode('')
     setPartialToken('')
+    setTfaCooldown(0)
   }
 
   const goBackToLogin = () => {
@@ -186,10 +210,15 @@ export default function LoginPage() {
               </button>
               <p className="text-center text-xs text-[#848e9c]">
                 Didn't receive the code?{' '}
-                <button type="button" onClick={() => toast('Please log in again to resend')}
-                  className="text-[#f0b90b] hover:text-[#d4a30a] transition inline-flex items-center gap-1">
-                  <RefreshCw size={10} /> Resend
-                </button>
+                {tfaCooldown > 0 ? (
+                  <span className="text-[#4a5568]">Resend in {tfaCooldown}s</span>
+                ) : (
+                  <button type="button" onClick={handleResend2FA} disabled={tfaResending}
+                    className="text-[#f0b90b] hover:text-[#d4a30a] transition inline-flex items-center gap-1 disabled:opacity-60">
+                    <RefreshCw size={10} className={tfaResending ? 'animate-spin' : ''} />
+                    {tfaResending ? 'Sending…' : 'Resend'}
+                  </button>
+                )}
               </p>
             </form>
           </>
