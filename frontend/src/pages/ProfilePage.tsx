@@ -454,17 +454,9 @@ function PersonalTab({ user, setUser }: { user: UserProfile | null; setUser: (u:
   const handleSendCode = async () => {
     setSendingCode(true)
     try {
-      const res = await sendVerifyEmail()
-      const code  = res.data.dev_code   || null
-      const sent  = res.data.email_sent ?? false
-      setDevCode(code)
-      setEmailSent(sent)
+      await sendVerifyEmail()
       setShowVerify(true)
-      if (sent) {
-        toast.success('Verification code sent to your email')
-      } else {
-        toast.success('Code generated — use it below to verify')
-      }
+      toast.success('Verification code sent to your email')
     } catch { toast.error('Failed to send code') }
     finally { setSendingCode(false) }
   }

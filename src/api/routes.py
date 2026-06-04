@@ -610,14 +610,30 @@ async def login(request: Request, user_data: UserCreate2, db: Session = Depends(
             _thr2fa.Thread(target=_send_2fa_tg, daemon=True).start()
         elif _method == "email":
             try:
-                from src.notifications.notifier import Notifier as _N2fa
-                _n2fa = _N2fa()
-                _n2fa._send_email(
-                    f"Your FinAi login verification code is: {_code}\n\nExpires in 10 minutes.",
-                    "FinAi — Login Verification Code"
-                )
+                import resend as _resend2fa
+                _resend2fa.api_key = os.getenv("RESEND_API_KEY", "")
+                _from2fa = os.getenv("RESEND_FROM_EMAIL", "onboarding@resend.dev")
+                _resend2fa.Emails.send({
+                    "from": f"FinAi <{_from2fa}>",
+                    "to": [db_user.email],
+                    "subject": "FinAi — Login Verification Code",
+                    "html": f"""
+                    <div style="font-family:Arial,sans-serif;max-width:500px;margin:0 auto;background:#0b0e11;padding:32px;border-radius:12px">
+                      <div style="text-align:center;margin-bottom:24px">
+                        <span style="font-size:28px;font-weight:900;color:#f0b90b">⚡ FinAi</span>
+                      </div>
+                      <h2 style="color:#eaecef;font-size:20px;margin:0 0 12px">Login Verification Code</h2>
+                      <p style="color:#848e9c;font-size:14px;margin:0 0 24px">Enter this 6-digit code to complete your login:</p>
+                      <div style="background:#1e2329;border:1px solid #2b3139;border-radius:10px;padding:28px;text-align:center;margin-bottom:24px">
+                        <span style="font-size:44px;font-weight:900;letter-spacing:14px;color:#f0b90b;font-family:monospace">{_code}</span>
+                      </div>
+                      <p style="color:#4a5568;font-size:12px;text-align:center;margin:0">This code expires in 10 minutes. If you didn't request this, change your password immediately.</p>
+                    </div>
+                    """,
+                })
+                logger.info(f"✉️  2FA code sent via email to {db_user.email}")
             except Exception as _e:
-                logger.warning(f"2FA email send failed: {_e}")
+                logger.warning(f"2FA email send failed for {db_user.email}: {_e}")
 
         from jose import jwt as _jose_jwt
         _SECRET = os.getenv("JWT_SECRET_KEY", "super-secret-key-change-in-production")
