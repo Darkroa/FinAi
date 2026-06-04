@@ -402,7 +402,8 @@ function PersonalTab({ user, setUser }: { user: UserProfile | null; setUser: (u:
   const [showVerify, setShowVerify]   = useState(false)
   const [verifyCode, setVerifyCode]   = useState('')
   const [verifying, setVerifying]     = useState(false)
-  const [_devCode, setDevCode]        = useState<string | null>(null)   
+  const [devCode, setDevCode]         = useState<string | null>(null)
+  const [emailSent, setEmailSent]     = useState<boolean>(false)
   const [photoLoading, setPhotoLoading] = useState(false)
   const fileRef = useRef<HTMLInputElement>(null)
   const set = (k: string) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) =>
@@ -454,9 +455,16 @@ function PersonalTab({ user, setUser }: { user: UserProfile | null; setUser: (u:
     setSendingCode(true)
     try {
       const res = await sendVerifyEmail()
-      setDevCode(res.data.dev_code || null)
+      const code  = res.data.dev_code   || null
+      const sent  = res.data.email_sent ?? false
+      setDevCode(code)
+      setEmailSent(sent)
       setShowVerify(true)
-      toast.success('Verification code sent')
+      if (sent) {
+        toast.success('Verification code sent to your email')
+      } else {
+        toast.success('Code generated — use it below to verify')
+      }
     } catch { toast.error('Failed to send code') }
     finally { setSendingCode(false) }
   }
@@ -579,8 +587,18 @@ function PersonalTab({ user, setUser }: { user: UserProfile | null; setUser: (u:
                 <Mail size={11}/>{sendingCode ? 'Sending…' : 'Send Code'}
               </button>
             ) : (
-              <div className="flex flex-col gap-2">
-                <p className="text-[11px] text-[#848e9c]">Check your email for the 6-digit code</p>
+              <div className="flex flex-col gap-2 w-full sm:w-auto">
+                {emailSent ? (
+                  <p className="text-[11px] text-[#848e9c]">Check your email for the 6-digit code</p>
+                ) : devCode ? (
+                  <div className="bg-[#f0b90b]/10 border border-[#f0b90b]/30 rounded-lg px-3 py-2">
+                    <p className="text-[10px] text-[#848e9c] mb-1">Email delivery unavailable — use this code:</p>
+                    <p className="text-xl font-black font-mono tracking-[0.3em] text-[#f0b90b]">{devCode}</p>
+                    <p className="text-[10px] text-[#4a5568] mt-1">Expires in 15 minutes</p>
+                  </div>
+                ) : (
+                  <p className="text-[11px] text-[#848e9c]">Enter the 6-digit code below</p>
+                )}
                 <div className="flex items-center gap-2">
                   <input value={verifyCode} onChange={e => setVerifyCode(e.target.value)}
                     placeholder="6-digit code" maxLength={6}

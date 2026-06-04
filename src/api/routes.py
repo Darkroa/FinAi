@@ -860,7 +860,12 @@ async def send_verify_email(current_user=Depends(get_current_user), db: Session 
             email_sent = True
             logger.info(f"✉️  Verification email sent via Resend to {user.email}")
         except Exception as e:
-            logger.error(f"Resend email failed: {e}")
+            logger.error(f"Resend email failed for {user.email}: {e}")
+            logger.warning(
+                "⚠️  Email not delivered. Using onboarding@resend.dev only sends to the Resend account owner. "
+                "To send to any user: verify a domain at resend.com/domains and set the "
+                "RESEND_FROM_EMAIL environment variable (e.g. noreply@yourdomain.com)."
+            )
 
     # Also send to WhatsApp if user has a verified WhatsApp number
     prefs = dict(user.notification_preferences or {})
