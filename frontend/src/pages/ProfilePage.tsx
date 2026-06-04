@@ -6,7 +6,7 @@ import {
   submitKYC, getMe, createApiKey, listApiKeys, revokeApiKey,
   connectExchange, disconnectExchange,
   changePassword, setTransferPin, requestDeleteAccount, saveWebhookSettings,
-  generateWhatsAppCode, disconnectWhatsApp, generateTelegramCode,
+  generateWhatsAppCode, disconnectWhatsApp, disconnectTelegram, generateTelegramCode,
   getReferralStats, setup2fa, disable2fa,
 } from '../lib/api'
 import toast from 'react-hot-toast'
@@ -817,7 +817,7 @@ function FinApiTab({ user, setUser }: { user: UserProfile | null; setUser: (u: a
 
   const handleDisconnectTelegram = async () => {
     try {
-      await saveWebhookSettings({ telegram_bot_token: '', telegram_chat_id: '' })
+      await disconnectTelegram()
       const res = await getMe()
       setUser(res.data)
       setTgCode(null)

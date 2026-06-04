@@ -1058,8 +1058,15 @@ async def verify_whatsapp(data: WhatsAppVerifyRequest, current_user=Depends(get_
         raise HTTPException(status_code=400, detail="Invalid verification code")
     if expires_str and datetime.utcnow() > datetime.fromisoformat(expires_str):
         raise HTTPException(status_code=400, detail="Code has expired. Request a new one.")
+    # Uniqueness: reject if another account already has this number
+    all_users_wa = db.query(User).filter(User.email != current_user["email"]).all()
+    for _wu in all_users_wa:
+        _wp = dict(_wu.notification_preferences or {})
+        if _wp.get("whatsapp_number") == stored_phone and _wp.get("whatsapp_verified"):
+            raise HTTPException(status_code=400, detail="This WhatsApp number is already linked to another FinAi account.")
     prefs["whatsapp_verified"] = True
     prefs["whatsapp_number"]   = stored_phone
+    user.whatsapp_connected    = True
     for k in ["whatsapp_otp_code", "whatsapp_otp_phone", "whatsapp_otp_expires"]:
         prefs.pop(k, None)
     user.notification_preferences = prefs
@@ -2701,6 +2708,16 @@ async def telegram_webhook(request: Request, db: Session = Depends(get_db)):
             await send_reply("❌ Invalid or expired code. Generate a new one from Profile → FinAPI tab.")
             return {"ok": True}
         prefs = dict(code_user.notification_preferences or {})
+        # Uniqueness: reject if another account already has this Telegram chat_id
+        for _tu in all_users:
+            if _tu.id != code_user.id:
+                _tp = dict(_tu.notification_preferences or {})
+                if _tp.get("telegram_chat_id") == chat_id or _tu.telegram_chat_id == chat_id:
+                    await send_reply(
+                        "❌ This Telegram account is already linked to another FinAi account.\n\n"
+                        "Please disconnect it from the other account first, or contact support."
+                    )
+                    return {"ok": True}
         prefs["telegram_chat_id"]     = chat_id
         prefs["telegram_verified"]    = True
         prefs["telegram_first_name"]  = first_name
@@ -3969,17 +3986,34 @@ async def admin_reject_subscription(body: SubActionBody, current_user=Depends(ge
 # ===================== WhatsApp — Disconnect =====================
 
 
+@router.post("/users/disconnect-telegram")
+async def disconnect_telegram(current_user=Depends(get_current_user), db: Session = Depends(get_db)):
+    user = db.query(User).filter(User.email == current_user["email"]).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    prefs: dict = dict(user.notification_preferences or {})
+    for k in ("telegram_chat_id", "telegram_verified", "telegram_first_name",
+              "telegram_bot_token", "telegram_link_code", "telegram_link_expires"):
+        prefs.pop(k, None)
+    user.notification_preferences = prefs
+    user.telegram_chat_id   = None
+    user.telegram_connected = False
+    db.commit()
+    return {"status": "disconnected"}
+
+
 @router.post("/users/disconnect-whatsapp")
 async def disconnect_whatsapp(current_user=Depends(get_current_user), db: Session = Depends(get_db)):
     user = db.query(User).filter(User.email == current_user["email"]).first()
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
-    prefs: dict = user.notification_preferences or {}
-    prefs.pop("whatsapp_verified", None)
-    prefs.pop("whatsapp_number", None)
-    prefs.pop("whatsapp_pending_code", None)
-    prefs.pop("whatsapp_code_expires", None)
+    prefs: dict = dict(user.notification_preferences or {})
+    for k in ("whatsapp_verified", "whatsapp_number", "whatsapp_pending_code",
+              "whatsapp_otp_code", "whatsapp_otp_phone", "whatsapp_otp_expires",
+              "whatsapp_code_expires"):
+        prefs.pop(k, None)
     user.notification_preferences = prefs
+    user.whatsapp_connected = False
     db.commit()
     return {"status": "disconnected"}
 

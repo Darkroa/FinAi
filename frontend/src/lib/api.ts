@@ -198,6 +198,8 @@ export const saveWebhookSettings = (data: {
 // WhatsApp — generate code (user sends code to +14155238886 on WhatsApp)
 export const generateWhatsAppCode = () =>
   api.post('/users/whatsapp-generate-code')
+export const disconnectTelegram = () =>
+  api.post('/users/disconnect-telegram')
 export const disconnectWhatsApp = () =>
   api.post('/users/disconnect-whatsapp')
 
