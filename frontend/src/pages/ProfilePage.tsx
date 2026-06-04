@@ -5,7 +5,7 @@ import {
   updateProfile, uploadPhoto, sendVerifyEmail, verifyEmail,
   submitKYC, getMe, createApiKey, listApiKeys, revokeApiKey,
   connectExchange, disconnectExchange,
-  changePassword, setTransferPin, requestDeleteAccount, saveWebhookSettings,
+  changePassword, setTransferPin, requestDeleteAccount,
   generateWhatsAppCode, disconnectWhatsApp, disconnectTelegram, generateTelegramCode,
   getReferralStats, setup2fa, disable2fa,
 } from '../lib/api'
