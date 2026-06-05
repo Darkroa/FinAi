@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { Search, TrendingUp, TrendingDown, LayoutGrid, LayoutList, RefreshCw } from 'lucide-react'
 import { LineChart, Line, ResponsiveContainer, Tooltip } from 'recharts'
 import { useNavigate } from 'react-router-dom'
@@ -60,48 +60,97 @@ const ASSET_META: Record<string, { name: string; vol: string; mcap: string }> = 
 
 type Tab = 'all' | 'crypto' | 'stocks' | 'metals' | 'heatmap'
 
-function TvHeatMap() {
-  const containerRef = useRef<HTMLDivElement>(null)
+// Relative market-cap weights used to size heatmap blocks
+const HEAT_WEIGHTS: Record<string, number> = {
+  'BTC/USDT': 4.5, 'ETH/USDT': 3.0, 'NVDA': 2.6, 'MSFT': 2.5,
+  'AAPL': 2.5, 'XAU/USD': 2.2, 'AMZN': 2.0, 'GOOGL': 2.0,
+  'META': 1.8, 'SPY': 1.8, 'TSLA': 1.6, 'SOL/USDT': 1.4,
+  'BNB/USDT': 1.2, 'XRP/USDT': 1.1, 'OIL/WTI': 1.1, 'XAG/USD': 1.0,
+  'JPM': 0.9, 'WMT': 0.8, 'XOM': 0.8, 'BRK': 0.8,
+  'DOGE/USDT': 0.7, 'V': 0.7, 'GLD': 0.7, 'AVAX/USDT': 0.6,
+  'LINK/USDT': 0.5, 'MATIC/USDT': 0.5, 'JNJ': 0.5, 'DOT/USDT': 0.5,
+  'ADA/USDT': 0.5, 'LTC/USDT': 0.4, 'XPT/USD': 0.4, 'NATGAS': 0.4,
+  'COPPER': 0.4, 'UNI/USDT': 0.3, 'XLM/USDT': 0.3, 'XPD/USD': 0.3,
+}
 
-  useEffect(() => {
-    const el = containerRef.current
-    if (!el) return
-    el.innerHTML = ''
-    const wrapper = document.createElement('div')
-    wrapper.className = 'tradingview-widget-container__widget'
-    el.appendChild(wrapper)
-    const script = document.createElement('script')
-    script.type = 'text/javascript'
-    script.src =
-      'https://s3.tradingview.com/external-embedding/embed-widget-market-heat-map.js'
-    script.async = true
-    script.textContent = JSON.stringify({
-      exchanges: [],
-      dataSource: 'Crypto',
-      grouping: 'sector',
-      blockSize: 'market_cap_calc',
-      blockColor: 'change',
-      locale: 'en',
-      colorTheme: 'dark',
-      hasTopBar: false,
-      isDataSetEnabled: true,
-      isZoomEnabled: true,
-      hasSymbolTooltip: true,
-      width: '100%',
-      height: '500',
-    })
-    el.appendChild(script)
-    return () => {
-      if (el) el.innerHTML = ''
-    }
-  }, [])
+function CryptoHeatMap({ markets }: { markets: MarketItem[] }) {
+  if (markets.length === 0) {
+    return (
+      <div className="flex items-center justify-center bg-[#161a1e] border border-[#2b3139] rounded-xl" style={{ minHeight: 400 }}>
+        <div className="text-center">
+          <div className="w-8 h-8 border-2 border-[#f0b90b] border-t-transparent rounded-full animate-spin mx-auto mb-3" />
+          <p className="text-sm text-[#848e9c]">Loading market data…</p>
+        </div>
+      </div>
+    )
+  }
+
+  const sorted = [...markets].sort((a, b) => (HEAT_WEIGHTS[b.symbol] || 0.3) - (HEAT_WEIGHTS[a.symbol] || 0.3))
+
+  const getStyle = (change: number, weight: number) => {
+    const abs   = Math.abs(change)
+    const alpha = Math.min(0.15 + (abs / 6) * 0.65, 0.80)
+    const bg    = change >= 0
+      ? `rgba(14, 203, 129, ${alpha})`
+      : `rgba(246, 70, 93, ${alpha})`
+    const border = change >= 0
+      ? `rgba(14, 203, 129, ${alpha * 0.5})`
+      : `rgba(246, 70, 93, ${alpha * 0.5})`
+    const minH = weight >= 2.0 ? 110 : weight >= 1.0 ? 80 : 64
+    const basis = Math.max(weight * 90, 80)
+    return { backgroundColor: bg, borderColor: border, minHeight: minH, flexGrow: weight, flexBasis: basis }
+  }
+
+  const fmtPrice = (p: number) => {
+    if (p >= 1000) return '$' + (p / 1000).toFixed(1) + 'K'
+    if (p >= 1)    return '$' + p.toFixed(2)
+    return '$' + p.toFixed(4)
+  }
+
+  const fmtSym = (sym: string) => sym.split('/')[0]
 
   return (
-    <div
-      ref={containerRef}
-      className="tradingview-widget-container w-full rounded-xl overflow-hidden border border-[#2b3139]"
-      style={{ minHeight: 500 }}
-    />
+    <div className="bg-[#161a1e] border border-[#2b3139] rounded-xl p-3">
+      <div className="flex items-center justify-between mb-3">
+        <h3 className="text-xs font-semibold text-[#848e9c] uppercase tracking-widest">Market Heat Map</h3>
+        <div className="flex items-center gap-3 text-[10px] text-[#848e9c]">
+          <span className="flex items-center gap-1"><span className="inline-block w-3 h-3 rounded-sm bg-[#f6465d]/60" />Bearish</span>
+          <span className="flex items-center gap-1"><span className="inline-block w-3 h-3 rounded-sm bg-[#0ecb81]/60" />Bullish</span>
+        </div>
+      </div>
+      <div className="flex flex-wrap gap-1.5">
+        {sorted.map(m => {
+          const w     = HEAT_WEIGHTS[m.symbol] || 0.3
+          const style = getStyle(m.change, w)
+          const isLarge = w >= 1.5
+          const isMid   = w >= 0.7
+          return (
+            <div
+              key={m.symbol}
+              style={style}
+              className="rounded-xl border flex flex-col justify-between p-2 cursor-pointer hover:brightness-110 transition-all duration-150 overflow-hidden"
+            >
+              <div className={`font-bold text-white truncate ${isLarge ? 'text-sm' : 'text-[11px]'}`}>
+                {fmtSym(m.symbol)}
+              </div>
+              {isMid && (
+                <div className={`text-white/70 truncate ${isLarge ? 'text-[11px]' : 'text-[9px]'}`}>
+                  {m.name.split(' ')[0]}
+                </div>
+              )}
+              <div>
+                {isLarge && (
+                  <div className="text-white/80 font-mono text-[11px] mb-0.5">{fmtPrice(m.price)}</div>
+                )}
+                <div className={`font-bold ${isLarge ? 'text-sm' : isMid ? 'text-xs' : 'text-[10px]'} ${m.change >= 0 ? 'text-white' : 'text-white'}`}>
+                  {m.change >= 0 ? '+' : ''}{m.change.toFixed(2)}%
+                </div>
+              </div>
+            </div>
+          )
+        })}
+      </div>
+    </div>
   )
 }
 
@@ -239,7 +288,7 @@ export default function MarketsPage() {
       </div>
 
       {/* Heat Map tab */}
-      {tab === 'heatmap' && <TvHeatMap />}
+      {tab === 'heatmap' && <CryptoHeatMap markets={markets} />}
 
       {/* Grid view */}
       {tab !== 'heatmap' && view === 'grid' && (

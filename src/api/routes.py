@@ -2329,24 +2329,35 @@ async def get_open_positions(current_user=Depends(get_current_user), db: Session
     from src.trading.trade_bot import _fetch_live_price
     result = []
     for t, effective_qty in open_buys_filtered:
+        entry_price = t.price or 0
+        lev = max(float(t.leverage or 1), 1.0)
         try:
-            ticker = t.ticker
-            current_price = _fetch_live_price(ticker)
-            unrealized_pnl = (current_price - (t.price or 0)) * effective_qty
+            current_price  = _fetch_live_price(t.ticker)
+            # PnL is on full notional position (not just margin)
+            unrealized_pnl = (current_price - entry_price) * effective_qty
+            # Margin at risk
+            margin         = (entry_price * effective_qty) / lev
+            # Return on margin (for display)
+            pnl_pct        = round(unrealized_pnl / margin * 100, 2) if margin > 0 else 0.0
         except Exception:
-            current_price = t.price or 0
+            current_price  = entry_price
             unrealized_pnl = 0.0
+            pnl_pct        = 0.0
+            margin         = (entry_price * effective_qty) / lev
         result.append({
             "id":             t.id,
             "ticker":         t.ticker,
             "action":         t.action,
-            "price":          t.price,
+            "price":          entry_price,
             "qty":            effective_qty,
+            "leverage":       lev,
+            "margin":         round(margin, 2),
             "exchange":       t.exchange,
             "paper":          t.paper,
             "created_at":     t.created_at.isoformat() if t.created_at else None,
             "current_price":  round(current_price, 4),
             "unrealized_pnl": round(unrealized_pnl, 2),
+            "pnl_pct":        pnl_pct,
         })
     return {"positions": result}
 
@@ -2367,8 +2378,14 @@ async def close_manual_trade(trade_id: int, current_user=Depends(get_current_use
         raise HTTPException(status_code=404, detail="Open position not found")
     from src.trading.trade_bot import _fetch_live_price
     current_price = _fetch_live_price(trade.ticker)
-    pnl           = (current_price - (trade.price or 0)) * (trade.qty or 0)
-    proceeds      = (trade.qty or 0) * current_price
+    entry_price   = trade.price or 0
+    qty           = trade.qty or 0
+    lev           = max(float(trade.leverage or 1), 1.0)
+    # PnL on full notional position
+    pnl           = (current_price - entry_price) * qty
+    # Return margin + pnl to wallet (margin was what was originally deducted)
+    margin        = (entry_price * qty) / lev
+    proceeds      = max(margin + pnl, 0.0)  # floor at 0 (liquidation)
 
     # Credit proceeds back to wallet
     user.balance_usdt = round((user.balance_usdt or 0) + proceeds, 8)
@@ -2481,19 +2498,23 @@ async def execute_trade(body: TradeExecuteRequest, current_user=Depends(get_curr
         if not conn:
             raise HTTPException(status_code=400, detail=f"Exchange '{body.exchange_label}' not found in your connections.")
 
+    leverage   = max(float(body.leverage or 1), 1.0)
     total_cost = round(body.price * body.amount, 8)
+    # Margin = notional / leverage (what's actually deducted from balance)
+    margin_cost = round(total_cost / leverage, 8)
 
-    # Always update platform balance (whether using internal balance or routing to exchange)
     if body.side == "buy":
-        if (user.balance_usdt or 0) < total_cost:
-            raise HTTPException(status_code=400, detail=f"Insufficient balance. Need ${total_cost:,.2f} USDT.")
-        user.balance_usdt = round((user.balance_usdt or 0) - total_cost, 8)
+        if (user.balance_usdt or 0) < margin_cost:
+            raise HTTPException(status_code=400, detail=f"Insufficient balance. Need ${margin_cost:,.2f} USDT margin ({leverage}x leverage).")
+        user.balance_usdt = round((user.balance_usdt or 0) - margin_cost, 8)
     elif body.side == "sell":
-        user.balance_usdt = round((user.balance_usdt or 0) + total_cost, 8)
+        user.balance_usdt = round((user.balance_usdt or 0) + margin_cost, 8)
     else:
         raise HTTPException(status_code=400, detail="side must be 'buy' or 'sell'")
 
+    # Normalize ticker: BTC/USDT → BTC-USD (compatible with price lookup maps)
     ticker = body.pair.replace("/", "-").replace("_", "-")
+    ticker = ticker.replace("-USDT", "-USD").replace("-usdt", "-USD")
     exchange_name = conn.get("exchange", "live") if conn else "internal"
 
     log = TradeLog(
@@ -3484,52 +3505,89 @@ def _get_live_crypto_prices() -> dict:
 
 
 def _get_live_stock_prices() -> dict:
-    import time as _time
+    """Fetch real-time stock prices via Yahoo Finance REST API (no yfinance package)."""
+    import time as _time, requests as _req
     now = _time.time()
-    if now - _stock_cache["ts"] < 300 and _stock_cache["data"]:
+    if now - _stock_cache["ts"] < 60 and _stock_cache["data"]:
         return _stock_cache["data"]
-    try:
-        import yfinance as yf
-        raw = yf.download(
-            _STOCK_TICKERS, period="2d", interval="1d",
-            progress=False, auto_adjust=True, threads=True,
-        )
-        close = raw["Close"].iloc[-1]
-        prev  = raw["Close"].iloc[-2]
-        result = {}
-        for t in _STOCK_TICKERS:
-            try:
-                p   = float(close[t])
-                p0  = float(prev[t])
-                chg = round((p - p0) / p0 * 100, 2) if p0 else 0.0
-                key = "BRK" if t == "BRK-B" else t
-                result[key] = {"usd": round(p, 2), "usd_24h_change": chg}
-            except Exception:
-                pass
-        if result:
-            _stock_cache["data"] = result
-            _stock_cache["ts"]   = now
-            return result
-    except Exception:
-        pass
-    # fallback
+
+    _YF_HEADERS = {"User-Agent": "Mozilla/5.0 (compatible; FinAi/1.0)"}
+    # Yahoo Finance symbols (BRK-B for Berkshire)
+    _YF_SYMBOLS = {
+        "AAPL": "AAPL", "TSLA": "TSLA", "NVDA": "NVDA", "SPY": "SPY",
+        "MSFT": "MSFT", "GOOGL": "GOOGL", "AMZN": "AMZN", "META": "META",
+        "BRK": "BRK-B", "JPM": "JPM", "V": "V", "JNJ": "JNJ",
+        "WMT": "WMT", "XOM": "XOM", "GLD": "GLD",
+    }
+    result = {}
+    for key, sym in _YF_SYMBOLS.items():
+        try:
+            url = f"https://query1.finance.yahoo.com/v8/finance/chart/{sym}?interval=1d&range=2d"
+            r = _req.get(url, headers=_YF_HEADERS, timeout=6)
+            if r.status_code == 200:
+                data = r.json()
+                meta = data["chart"]["result"][0]["meta"]
+                price = meta.get("regularMarketPrice") or meta.get("previousClose", 0)
+                prev  = meta.get("chartPreviousClose") or meta.get("previousClose", price)
+                chg   = round((price - prev) / prev * 100, 2) if prev else 0.0
+                if price and float(price) > 0:
+                    result[key] = {"usd": round(float(price), 2), "usd_24h_change": chg}
+        except Exception:
+            pass
+
+    if result:
+        _stock_cache["data"] = result
+        _stock_cache["ts"]   = now
+        return result
+
     return _stock_cache["data"] or {
-        "AAPL":  {"usd": 293.32, "usd_24h_change": 2.05},
-        "TSLA":  {"usd": 428.35, "usd_24h_change": 4.02},
-        "NVDA":  {"usd": 215.20, "usd_24h_change": 1.75},
-        "SPY":   {"usd": 737.62, "usd_24h_change": 0.83},
-        "MSFT":  {"usd": 415.12, "usd_24h_change": -1.34},
+        "AAPL":  {"usd": 195.32, "usd_24h_change": 0.45},
+        "TSLA":  {"usd": 175.35, "usd_24h_change": 1.02},
+        "NVDA":  {"usd": 875.20, "usd_24h_change": 1.75},
+        "SPY":   {"usd": 526.62, "usd_24h_change": 0.43},
+        "MSFT":  {"usd": 415.12, "usd_24h_change": -0.34},
         "GOOGL": {"usd": 400.80, "usd_24h_change": 0.71},
         "AMZN":  {"usd": 272.68, "usd_24h_change": 0.56},
-        "META":  {"usd": 609.63, "usd_24h_change": -1.16},
+        "META":  {"usd": 609.63, "usd_24h_change": -0.46},
         "BRK":   {"usd": 475.94, "usd_24h_change": 0.18},
-        "JPM":   {"usd": 302.10, "usd_24h_change": -1.37},
-        "V":     {"usd": 318.79, "usd_24h_change": -0.78},
-        "JNJ":   {"usd": 221.32, "usd_24h_change": -0.53},
-        "WMT":   {"usd": 130.43, "usd_24h_change": 0.37},
-        "XOM":   {"usd": 144.57, "usd_24h_change": -1.37},
-        "GLD":   {"usd": 433.77, "usd_24h_change": 0.49},
+        "JPM":   {"usd": 302.10, "usd_24h_change": -0.37},
+        "V":     {"usd": 318.79, "usd_24h_change": -0.28},
+        "JNJ":   {"usd": 221.32, "usd_24h_change": -0.13},
+        "WMT":   {"usd": 130.43, "usd_24h_change": 0.27},
+        "XOM":   {"usd": 144.57, "usd_24h_change": -0.37},
+        "GLD":   {"usd": 301.77, "usd_24h_change": 0.39},
     }
+
+
+def _get_live_metals_prices() -> dict:
+    """Fetch real-time metals/commodities prices via Yahoo Finance futures REST API."""
+    import time as _time, requests as _req
+    _YF_HEADERS = {"User-Agent": "Mozilla/5.0 (compatible; FinAi/1.0)"}
+    _METALS_YF = {
+        "gold":      "GC=F",
+        "silver":    "SI=F",
+        "platinum":  "PL=F",
+        "palladium": "PA=F",
+        "copper":    "HG=F",
+        "oil_wti":   "CL=F",
+        "nat_gas":   "NG=F",
+    }
+    result = {}
+    for key, sym in _METALS_YF.items():
+        try:
+            url = f"https://query1.finance.yahoo.com/v8/finance/chart/{sym}?interval=1d&range=2d"
+            r = _req.get(url, headers=_YF_HEADERS, timeout=6)
+            if r.status_code == 200:
+                data = r.json()
+                meta = data["chart"]["result"][0]["meta"]
+                price = meta.get("regularMarketPrice") or meta.get("previousClose", 0)
+                prev  = meta.get("chartPreviousClose") or meta.get("previousClose", price)
+                chg   = round((price - prev) / prev * 100, 2) if prev else 0.0
+                if price and float(price) > 0:
+                    result[key] = {"usd": round(float(price), 2), "usd_24h_change": chg}
+        except Exception:
+            pass
+    return result
 
 
 @router.get("/public/prices")
@@ -3540,14 +3598,15 @@ async def get_live_prices():
     HEADERS = {"User-Agent": "Mozilla/5.0 (compatible; FinAi/1.0)", "Accept": "application/json"}
     metals_data: dict = {}
 
-    # ── Run crypto (Binance.US) + stocks (yfinance) + metals in parallel ──
+    # ── Run crypto + stocks + metals in parallel via thread pool ──
     loop = asyncio.get_event_loop()
-    with ThreadPoolExecutor(max_workers=2) as pool:
-        crypto_fut = loop.run_in_executor(pool, _get_live_crypto_prices)
-        stocks_fut = loop.run_in_executor(pool, _get_live_stock_prices)
+    with ThreadPoolExecutor(max_workers=3) as pool:
+        crypto_fut  = loop.run_in_executor(pool, _get_live_crypto_prices)
+        stocks_fut  = loop.run_in_executor(pool, _get_live_stock_prices)
+        metals_fut  = loop.run_in_executor(pool, _get_live_metals_prices)
 
-        # Metals via metals.live (async)
-        async with httpx.AsyncClient(timeout=8, follow_redirects=True) as client:
+        # Also try metals.live as supplemental (async, low timeout)
+        async with httpx.AsyncClient(timeout=5, follow_redirects=True) as client:
             try:
                 r = await client.get("https://api.metals.live/v1/spot", headers=HEADERS)
                 if r.status_code == 200:
@@ -3560,49 +3619,45 @@ async def get_live_prices():
             except Exception:
                 pass
 
-        crypto_data = await crypto_fut
-        stocks_data = await stocks_fut
+        crypto_data  = await crypto_fut
+        stocks_data  = await stocks_fut
+        metals_yahoo = await metals_fut
 
-    # ── Crypto hard fallback (only if Binance.US also failed) ──
+    # ── Crypto hard fallback ──
     if not crypto_data:
         crypto_data = {
-            "bitcoin":       {"usd": 80359.0, "usd_24h_change": 0.91},
-            "ethereum":      {"usd": 2312.0,  "usd_24h_change": 1.61},
-            "binancecoin":   {"usd": 648.0,   "usd_24h_change": 1.42},
-            "solana":        {"usd": 93.31,   "usd_24h_change": 5.64},
-            "ripple":        {"usd": 1.419,   "usd_24h_change": 2.30},
-            "cardano":       {"usd": 0.272,   "usd_24h_change": 3.26},
-            "dogecoin":      {"usd": 0.1088,  "usd_24h_change": 1.85},
-            "polkadot":      {"usd": 1.35,    "usd_24h_change": 2.27},
-            "chainlink":     {"usd": 10.42,   "usd_24h_change": 4.95},
-            "avalanche-2":   {"usd": 9.93,    "usd_24h_change": 4.09},
+            "bitcoin":       {"usd": 97000.0, "usd_24h_change": 0.91},
+            "ethereum":      {"usd": 3200.0,  "usd_24h_change": 1.61},
+            "binancecoin":   {"usd": 628.0,   "usd_24h_change": 1.42},
+            "solana":        {"usd": 155.0,   "usd_24h_change": 5.64},
+            "ripple":        {"usd": 2.40,    "usd_24h_change": 2.30},
+            "cardano":       {"usd": 0.75,    "usd_24h_change": 3.26},
+            "dogecoin":      {"usd": 0.18,    "usd_24h_change": 1.85},
+            "polkadot":      {"usd": 6.50,    "usd_24h_change": 2.27},
+            "chainlink":     {"usd": 13.20,   "usd_24h_change": 4.95},
+            "avalanche-2":   {"usd": 22.40,   "usd_24h_change": 4.09},
             "matic-network": {"usd": 0.38,    "usd_24h_change": 1.50},
-            "litecoin":      {"usd": 57.97,   "usd_24h_change": 2.46},
-            "uniswap":       {"usd": 3.634,   "usd_24h_change": 10.72},
-            "stellar":       {"usd": 0.1627,  "usd_24h_change": 2.58},
+            "litecoin":      {"usd": 90.0,    "usd_24h_change": 2.46},
+            "uniswap":       {"usd": 6.50,    "usd_24h_change": 10.72},
+            "stellar":       {"usd": 0.29,    "usd_24h_change": 2.58},
         }
 
-    # ── Metals prices ──
-    def _mval(key: str, fb: float) -> float:
-        return float(metals_data.get(key, metals_data.get(key.upper(), fb)))
-
-    gold_price   = _mval("gold",      3290.0)
-    silver_price = _mval("silver",    32.80)
-    plat_price   = _mval("platinum",  1020.0)
-    pall_price   = _mval("palladium", 1050.0)
-    copper_price = _mval("copper",    4.58)
+    # ── Merge metals: Yahoo Finance primary, metals.live supplement ──
+    _METALS_FB = {
+        "gold": 3290.0, "silver": 32.80, "platinum": 1020.0,
+        "palladium": 1050.0, "copper": 4.58, "oil_wti": 78.40, "nat_gas": 2.18,
+    }
+    def _mval(key: str) -> dict:
+        if key in metals_yahoo:
+            return metals_yahoo[key]
+        raw = float(metals_data.get(key, metals_data.get(key.upper(), 0.0)))
+        fb = _METALS_FB.get(key, 0.0)
+        price = raw if raw > 0 else fb
+        return {"usd": round(price, 2), "usd_24h_change": 0.0}
 
     return {
         **crypto_data,
-        "metals": {
-            "gold":      {"usd": round(gold_price,   2), "usd_24h_change": round((gold_price   / 3278.0 - 1) * 100, 2)},
-            "silver":    {"usd": round(silver_price, 2), "usd_24h_change": round((silver_price / 32.50  - 1) * 100, 2)},
-            "platinum":  {"usd": round(plat_price,   2), "usd_24h_change": round((plat_price   / 1015.0 - 1) * 100, 2)},
-            "palladium": {"usd": round(pall_price,   2), "usd_24h_change": round((pall_price   / 1040.0 - 1) * 100, 2)},
-            "copper":    {"usd": round(copper_price, 2), "usd_24h_change": round((copper_price / 4.55   - 1) * 100, 2)},
-            "oil_wti":   {"usd": 78.40,  "usd_24h_change": -0.35},
-            "nat_gas":   {"usd": 2.18,   "usd_24h_change":  0.12},
-        },
+        "metals": {k: _mval(k) for k in _METALS_FB},
         "stocks": stocks_data,
     }
 

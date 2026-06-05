@@ -433,7 +433,8 @@ export default function TradePage() {
   const asset        = pair.split('/')[0]
   const numPrice     = parseFloat(price.replace(/,/g, '')) || 0
   const qty          = parseFloat(amount) || 0
-  const orderTotal   = numPrice && qty ? numPrice * qty : 0
+  const orderNotional = numPrice && qty ? numPrice * qty : 0
+  const orderTotal    = leverage > 1 ? orderNotional / leverage : orderNotional  // margin deducted
   const high24       = livePrice > 0 ? (livePrice * 1.022).toLocaleString('en-US', { maximumFractionDigits: 2 }) : '—'
   const low24        = livePrice > 0 ? (livePrice * 0.978).toLocaleString('en-US', { maximumFractionDigits: 2 }) : '—'
   const availCrypto  = livePrice > 0 ? liveBalance / livePrice : 0
@@ -447,8 +448,8 @@ export default function TradePage() {
     e.preventDefault()
     if (!qty || qty <= 0)           return toast.error('Enter a valid amount')
     if (!numPrice || numPrice <= 0) return toast.error('Price must be greater than 0')
-    if (usingBalance && side === 'buy' && numPrice * qty > liveBalance)
-      return toast.error(`Insufficient balance. Available: $${liveBalance.toFixed(2)} USDT`)
+    if (usingBalance && side === 'buy' && orderTotal > liveBalance)
+      return toast.error(`Insufficient balance. Need $${orderTotal.toFixed(2)} USDT margin (${leverage}x leverage).`)
     setLoading(true)
     try {
       const res = await executeTrade({ pair, side, order_type: orderType, price: numPrice, amount: qty, paper: false,
@@ -801,7 +802,14 @@ export default function TradePage() {
 
         {/* Row 4: Cost line (separate to avoid overlap) */}
         <div className="flex items-center justify-between py-2 border-t border-b border-[#2b3139] mb-3">
-          <span className="text-xs text-[#848e9c]">{side==='buy' ? 'Cost' : 'Proceeds'}</span>
+          <div>
+            <span className="text-xs text-[#848e9c]">{side==='buy' ? (leverage > 1 ? 'Margin Required' : 'Cost') : 'Proceeds'}</span>
+            {leverage > 1 && side === 'buy' && (
+              <span className="ml-2 text-[10px] text-[#f0b90b]">
+                Notional: ${orderNotional > 0 ? orderNotional.toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2}) : '0.00'}
+              </span>
+            )}
+          </div>
           <span className={`text-sm font-mono font-bold ${side==='buy' ? 'text-[#f6465d]' : 'text-[#0ecb81]'}`}>
             {side==='buy' ? '−' : '+'}${orderTotal > 0 ? orderTotal.toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2}) : '0.00'} USDT
           </span>
@@ -898,26 +906,31 @@ export default function TradePage() {
             </div>
           ) : (
             <>
-              <div className="hidden sm:grid grid-cols-7 gap-2 px-5 py-2 text-[10px] text-[#4a5568] uppercase tracking-widest border-b border-[#2b3139]/50">
+              <div className="hidden sm:grid grid-cols-8 gap-2 px-5 py-2 text-[10px] text-[#4a5568] uppercase tracking-widest border-b border-[#2b3139]/50">
                 <span>Pair</span><span className="text-right">Entry</span><span className="text-right">Qty</span>
-                <span className="text-right">Current</span><span className="text-right col-span-2">Unrealized P&L</span><span className="text-right">Action</span>
+                <span className="text-right">Current</span><span className="text-right">Lev</span>
+                <span className="text-right col-span-2">Unrealized P&L</span><span className="text-right">Action</span>
               </div>
               <div className="divide-y divide-[#2b3139]/50 max-h-64 overflow-y-auto">
                 {openPositions.map(pos => {
-                  const pairFmt = pos.ticker.replace('-', '/')
+                  const pairFmt  = pos.ticker.replace(/-USD$/, '/USD').replace('-', '/')
                   const pnlColor = pos.unrealized_pnl >= 0 ? 'text-[#0ecb81]' : 'text-[#f6465d]'
                   const pnlBg   = pos.unrealized_pnl >= 0 ? 'bg-[#0ecb81]/5 border-[#0ecb81]/20' : 'bg-[#f6465d]/5 border-[#f6465d]/20'
                   const timeStr = pos.created_at ? new Date(pos.created_at).toLocaleString(undefined, { month:'short', day:'numeric', hour:'2-digit', minute:'2-digit' }) : '—'
+                  const lev     = pos.leverage ?? 1
+                  const pnlPct  = pos.pnl_pct ?? 0
                   return (
                     <div key={pos.id}>
-                      <div className={`hidden sm:grid grid-cols-7 gap-2 px-5 py-2.5 text-xs items-center border-l-2 ${pnlBg} border-b border-[#2b3139]/50`}
+                      <div className={`hidden sm:grid grid-cols-8 gap-2 px-5 py-2.5 text-xs items-center border-l-2 ${pnlBg} border-b border-[#2b3139]/50`}
                         style={{ borderLeftColor: pos.unrealized_pnl >= 0 ? '#0ecb81' : '#f6465d' }}>
                         <span className="font-mono font-semibold text-[#eaecef]">{pairFmt}</span>
                         <span className="font-mono text-right text-[#848e9c]">${(pos.price??0).toLocaleString('en-US',{maximumFractionDigits:2})}</span>
                         <span className="font-mono text-right text-[#eaecef]">{(pos.qty??0).toFixed(6)}</span>
                         <span className="font-mono text-right text-[#eaecef]">${(pos.current_price??0).toLocaleString('en-US',{maximumFractionDigits:2})}</span>
+                        <span className="font-mono text-right text-[#f0b90b] text-[11px]">{lev > 1 ? `${lev}x` : '—'}</span>
                         <span className={`font-mono font-semibold text-right col-span-2 ${pnlColor}`}>
                           {pos.unrealized_pnl>=0?'+':''}${pos.unrealized_pnl.toFixed(2)}
+                          {lev > 1 && <span className="text-[10px] ml-1 opacity-70">({pnlPct>=0?'+':''}{pnlPct.toFixed(1)}%)</span>}
                         </span>
                         <div className="flex justify-end">
                           <button onClick={() => handleClosePosition(pos.id)} disabled={closingId === pos.id}
@@ -930,11 +943,15 @@ export default function TradePage() {
                         <div className="flex items-center justify-between mb-2">
                           <div>
                             <span className="text-sm font-bold font-mono text-[#eaecef]">{pairFmt}</span>
+                            {lev > 1 && <span className="ml-2 text-[10px] font-bold text-[#f0b90b] bg-[#f0b90b]/10 px-1.5 py-0.5 rounded-md">{lev}x</span>}
                             <p className="text-[10px] text-[#848e9c]">{timeStr}</p>
                           </div>
-                          <span className={`text-sm font-bold font-mono ${pnlColor}`}>
-                            {pos.unrealized_pnl>=0?'+':''}${pos.unrealized_pnl.toFixed(2)}
-                          </span>
+                          <div className="text-right">
+                            <span className={`text-sm font-bold font-mono ${pnlColor}`}>
+                              {pos.unrealized_pnl>=0?'+':''}${pos.unrealized_pnl.toFixed(2)}
+                            </span>
+                            {lev > 1 && <p className={`text-[10px] font-semibold ${pnlColor}`}>{pnlPct>=0?'+':''}{pnlPct.toFixed(1)}% on margin</p>}
+                          </div>
                         </div>
                         <div className="flex items-center justify-between">
                           <div className="text-xs text-[#848e9c] space-y-0.5">

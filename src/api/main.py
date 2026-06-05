@@ -98,6 +98,10 @@ async def startup_event():
             for stmt in [
                 "ALTER TABLE users ADD COLUMN IF NOT EXISTS transfer_pin VARCHAR(255)",
                 "ALTER TABLE users ADD COLUMN IF NOT EXISTS pending_deletion BOOLEAN DEFAULT FALSE",
+                "ALTER TABLE trade_logs ADD COLUMN IF NOT EXISTS user_id INTEGER REFERENCES users(id)",
+                "ALTER TABLE trade_logs ADD COLUMN IF NOT EXISTS reason VARCHAR(200)",
+                "ALTER TABLE trade_logs ADD COLUMN IF NOT EXISTS paper BOOLEAN DEFAULT TRUE",
+                "ALTER TABLE trade_logs ADD COLUMN IF NOT EXISTS exchange VARCHAR(50)",
                 "ALTER TABLE trade_logs ADD COLUMN IF NOT EXISTS stop_loss FLOAT",
                 "ALTER TABLE trade_logs ADD COLUMN IF NOT EXISTS take_profit FLOAT",
                 "ALTER TABLE trade_logs ADD COLUMN IF NOT EXISTS leverage FLOAT DEFAULT 1.0",

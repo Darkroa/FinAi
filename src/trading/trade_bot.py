@@ -21,10 +21,20 @@ COINGECKO_ID_MAP = {
 }
 
 BINANCE_US_SYMBOL_MAP = {
-    "BTC-USD": "BTCUSDT", "ETH-USD": "ETHUSDT", "SOL-USD": "SOLUSDT",
-    "XRP-USD": "XRPUSDT", "BNB-USD": "BNBUSDT", "ADA-USD": "ADAUSDT",
-    "AVAX-USD": "AVAXUSDT", "DOGE-USD": "DOGEUSDT", "MATIC-USD": "MATICUSDT",
-    "LTC-USD": "LTCUSDT", "LINK-USD": "LINKUSDT", "DOT-USD": "DOTUSDT",
+    "BTC-USD": "BTCUSDT",  "BTC-USDT": "BTCUSDT",
+    "ETH-USD": "ETHUSDT",  "ETH-USDT": "ETHUSDT",
+    "SOL-USD": "SOLUSDT",  "SOL-USDT": "SOLUSDT",
+    "XRP-USD": "XRPUSDT",  "XRP-USDT": "XRPUSDT",
+    "BNB-USD": "BNBUSDT",  "BNB-USDT": "BNBUSDT",
+    "ADA-USD": "ADAUSDT",  "ADA-USDT": "ADAUSDT",
+    "AVAX-USD": "AVAXUSDT","AVAX-USDT": "AVAXUSDT",
+    "DOGE-USD": "DOGEUSDT","DOGE-USDT": "DOGEUSDT",
+    "MATIC-USD":"MATICUSDT","MATIC-USDT":"MATICUSDT",
+    "LTC-USD": "LTCUSDT",  "LTC-USDT": "LTCUSDT",
+    "LINK-USD": "LINKUSDT","LINK-USDT": "LINKUSDT",
+    "DOT-USD": "DOTUSDT",  "DOT-USDT": "DOTUSDT",
+    "UNI-USD": "UNIUSDT",  "UNI-USDT": "UNIUSDT",
+    "XLM-USD": "XLMUSDT",  "XLM-USDT": "XLMUSDT",
 }
 
 KRAKEN_PAIR_MAP = {
@@ -34,7 +44,38 @@ KRAKEN_PAIR_MAP = {
     "AVAX-USD": "AVAXUSD",
 }
 
+# Yahoo Finance symbols for metals futures and stocks
+YAHOO_SYMBOL_MAP = {
+    "XAU-USD": "GC=F",  "XAU/USD": "GC=F",
+    "XAG-USD": "SI=F",  "XAG/USD": "SI=F",
+    "XPT-USD": "PL=F",  "XPT/USD": "PL=F",
+    "XPD-USD": "PA=F",  "XPD/USD": "PA=F",
+    "COPPER":  "HG=F",
+    "OIL-WTI": "CL=F",  "OIL/WTI": "CL=F",
+    "NATGAS":  "NG=F",
+    "AAPL": "AAPL", "TSLA": "TSLA", "NVDA": "NVDA", "SPY": "SPY",
+    "MSFT": "MSFT", "GOOGL": "GOOGL", "AMZN": "AMZN", "META": "META",
+    "BRK": "BRK-B", "JPM": "JPM", "V": "V", "JNJ": "JNJ",
+    "WMT": "WMT", "XOM": "XOM", "GLD": "GLD",
+}
+
 _price_cache: Dict[str, tuple] = {}
+_YF_HEADERS = {"User-Agent": "Mozilla/5.0 (compatible; FinAi/1.0)"}
+
+
+def _fetch_yahoo_price(yahoo_sym: str) -> Optional[float]:
+    """Fetch current price from Yahoo Finance REST API (no yfinance package)."""
+    try:
+        url = f"https://query1.finance.yahoo.com/v8/finance/chart/{yahoo_sym}?interval=1d&range=2d"
+        r = requests.get(url, headers=_YF_HEADERS, timeout=6)
+        if r.status_code == 200:
+            meta = r.json()["chart"]["result"][0]["meta"]
+            price = meta.get("regularMarketPrice") or meta.get("previousClose")
+            if price and float(price) > 0:
+                return float(price)
+    except Exception:
+        pass
+    return None
 
 
 def _fetch_live_price(ticker: str) -> float:
@@ -45,6 +86,7 @@ def _fetch_live_price(ticker: str) -> float:
     price = None
     t_upper = ticker.upper()
 
+    # 1. Try Binance US (crypto pairs — handles both -USD and -USDT format)
     bsym = BINANCE_US_SYMBOL_MAP.get(t_upper)
     if bsym:
         try:
@@ -54,6 +96,7 @@ def _fetch_live_price(ticker: str) -> float:
         except Exception:
             pass
 
+    # 2. Try Kraken (crypto fallback)
     if price is None:
         kpair = KRAKEN_PAIR_MAP.get(t_upper)
         if kpair:
@@ -67,24 +110,29 @@ def _fetch_live_price(ticker: str) -> float:
             except Exception:
                 pass
 
-    if price is None and t_upper not in BINANCE_US_SYMBOL_MAP:
-        try:
-            import yfinance as yf
-            data = yf.download(ticker, period="5d", interval="1d", progress=False, auto_adjust=True)
-            if not data.empty:
-                price = float(data["Close"].iloc[-1])
-        except Exception:
-            pass
+    # 3. Try Yahoo Finance REST API (metals, stocks, futures)
+    if price is None:
+        yahoo_sym = YAHOO_SYMBOL_MAP.get(t_upper) or YAHOO_SYMBOL_MAP.get(ticker)
+        if yahoo_sym is None and t_upper not in BINANCE_US_SYMBOL_MAP and t_upper not in KRAKEN_PAIR_MAP:
+            yahoo_sym = t_upper  # try bare ticker (e.g. AAPL, MSFT)
+        if yahoo_sym:
+            price = _fetch_yahoo_price(yahoo_sym)
 
     if price is None:
         fallbacks = {
-            "BTC-USD": 80365.0, "ETH-USD": 3050.0, "SOL-USD": 93.0,
-            "XRP-USD": 0.52,    "BNB-USD": 600.0,  "ADA-USD": 0.44,
+            "BTC-USD": 97000.0, "BTC-USDT": 97000.0,
+            "ETH-USD": 3200.0,  "ETH-USDT": 3200.0,
+            "SOL-USD": 155.0,   "BNB-USD": 628.0,
+            "XRP-USD": 0.52,    "ADA-USD": 0.44,
             "AVAX-USD": 34.0,   "DOGE-USD": 0.17,
-            "NVDA": 215.0, "AAPL": 293.0, "TSLA": 428.0, "MSFT": 415.0,
-            "GOOGL": 400.0, "AMZN": 272.0, "META": 609.0,
+            "XAU-USD": 3290.0,  "XAU/USD": 3290.0,
+            "XAG-USD": 32.80,   "XAG/USD": 32.80,
+            "OIL-WTI": 78.40,   "OIL/WTI": 78.40,
+            "NATGAS": 2.18,
+            "NVDA": 875.0, "AAPL": 195.0, "TSLA": 175.0, "MSFT": 415.0,
+            "GOOGL": 400.0, "AMZN": 272.0, "META": 609.0, "SPY": 526.0,
         }
-        price = fallbacks.get(t_upper, 100.0)
+        price = fallbacks.get(t_upper, fallbacks.get(ticker, 100.0))
     else:
         logger.debug(f"Live price {ticker}: ${price:,.4f}")
 
