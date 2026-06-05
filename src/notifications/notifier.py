@@ -1,7 +1,13 @@
 import os
-import resend
 from datetime import datetime
 from loguru import logger
+
+try:
+    import resend as _resend_mod
+    _HAS_RESEND = True
+except ImportError:
+    _resend_mod = None
+    _HAS_RESEND = False
 
 try:
     from twilio.rest import Client as TwilioClient
@@ -53,8 +59,8 @@ class Notifier:
 
         # Resend (email) — from FinAi
         resend_key = os.getenv("RESEND_API_KEY", "")
-        if resend_key:
-            resend.api_key = resend_key
+        if _HAS_RESEND and resend_key:
+            _resend_mod.api_key = resend_key
         self.resend_api_key = resend_key
         self.email_from = "FinAi <onboarding@resend.dev>"
         self.email_to = os.getenv("EMAIL_TO", "")
@@ -148,10 +154,10 @@ class Notifier:
                 logger.error(f"Slack failed: {e}")
 
     def _send_email(self, message: str, subject: str = "FinAi Alert"):
-        if not self.resend_api_key or not self.email_to:
+        if not _HAS_RESEND or not self.resend_api_key or not self.email_to:
             return
         try:
-            resend.Emails.send({
+            _resend_mod.Emails.send({
                 "from": self.email_from,
                 "to": [self.email_to],
                 "subject": subject,

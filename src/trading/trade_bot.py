@@ -567,8 +567,7 @@ class TradingBotInstance:
             self.entry_price = price
             self.trail_high  = price
 
-            if not self.paper:
-                self._update_user_balance(-cost)
+            self._update_user_balance(-cost)
 
             trade = {
                 "time":   datetime.now(),
@@ -600,8 +599,7 @@ class TradingBotInstance:
 
             self.capital += max(proceeds, 0.0)
 
-            if not self.paper:
-                self._update_user_balance(proceeds)  # return margin + P&L to user balance
+            self._update_user_balance(max(proceeds, 0.0))  # return margin + P&L to user balance
 
             trade = {
                 "time":   datetime.now(),

@@ -115,6 +115,9 @@ async def startup_event():
                 "ALTER TABLE bonuses ADD COLUMN IF NOT EXISTS require_claim BOOLEAN DEFAULT FALSE",
                 "ALTER TABLE bonuses ADD COLUMN IF NOT EXISTS task_description TEXT",
                 "ALTER TABLE users ADD COLUMN IF NOT EXISTS withdrawal_methods TEXT",
+                "ALTER TABLE users ADD COLUMN IF NOT EXISTS subscription_expires_at TIMESTAMP",
+                "ALTER TABLE users ADD COLUMN IF NOT EXISTS subscription_period VARCHAR(20) DEFAULT 'monthly'",
+                "ALTER TABLE users ADD COLUMN IF NOT EXISTS subscription_auto_renew BOOLEAN DEFAULT TRUE",
             ]:
                 _conn.execute(_text(stmt))
             _conn.commit()
