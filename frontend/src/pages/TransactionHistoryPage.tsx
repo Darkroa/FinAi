@@ -5,7 +5,7 @@ import { formatCurrency } from '../lib/i18n';
 import {
   ArrowDownLeft, ArrowUpRight, RefreshCw, Clock,
   CheckCircle, XCircle, Search, SlidersHorizontal,
-  Bot, TrendingUp, Zap
+  Bot, TrendingUp, Zap, TrendingDown
 } from 'lucide-react';
 
 interface Tx {
@@ -94,7 +94,6 @@ export default function TransactionHistoryPage() {
     return matchAction && matchSearch;
   });
 
-  // Separate trade-type txs from wallet txs
   const tradeTxs = txs.filter(t => ['trade'].includes(t.tx_type));
   const filteredTradeTxs = tradeTxs.filter(t =>
     !search || t.tx_type.toLowerCase().includes(search.toLowerCase()) || t.note?.toLowerCase().includes(search.toLowerCase())
@@ -269,46 +268,54 @@ export default function TransactionHistoryPage() {
             </div>
           </div>
 
-          <div className="bg-[#161a1e] border border-[#2b3139] rounded-xl overflow-hidden">
-            <div className="px-4 py-3 border-b border-[#2b3139] flex items-center gap-2">
-              <Bot size={13} className="text-[#f0b90b]" />
-              <h2 className="text-sm font-semibold text-[#eaecef]">AI Bot Trade History</h2>
-              <span className="text-xs text-[#848e9c] ml-auto">{filteredBotTrades.length} trades</span>
-            </div>
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm min-w-[600px]">
-                <thead>
-                  <tr className="text-[#848e9c] text-xs border-b border-[#2b3139] bg-[#0b0e11]/40">
-                    <th className="text-left px-4 py-3 font-medium">Time</th>
-                    <th className="text-left px-4 py-3 font-medium">Asset</th>
-                    <th className="text-left px-4 py-3 font-medium">Action</th>
-                    <th className="text-right px-4 py-3 font-medium">Price</th>
-                    <th className="text-right px-4 py-3 font-medium">Qty</th>
-                    <th className="text-right px-4 py-3 font-medium">P&L</th>
-                    <th className="text-left px-4 py-3 font-medium hidden md:table-cell">Reason</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {botLoading ? (
-                    <tr><td colSpan={7} className="py-12 text-center"><RefreshCw size={20} className="animate-spin mx-auto mb-2 text-[#f0b90b]" /><p className="text-[#848e9c] text-sm mt-1">Loading…</p></td></tr>
-                  ) : filteredBotTrades.length === 0 ? (
-                    <tr><td colSpan={7} className="py-12 text-center"><Bot size={28} className="text-[#2b3139] mx-auto mb-2" /><p className="text-sm text-[#848e9c]">No bot trades yet</p></td></tr>
-                  ) : filteredBotTrades.map((t, i) => (
-                    <tr key={t.id ?? i} className="border-b border-[#2b3139]/50 hover:bg-[#1e2329] transition">
-                      <td className="px-4 py-3 text-xs text-[#848e9c] whitespace-nowrap">{t.created_at ? new Date(t.created_at).toLocaleString() : '—'}</td>
-                      <td className="px-4 py-3"><span className="text-xs font-mono font-semibold text-[#f0b90b]">{t.ticker}</span></td>
-                      <td className="px-4 py-3"><span className={`text-xs font-bold px-2 py-0.5 rounded ${t.action === 'BUY' ? 'bg-[#0ecb81]/10 text-[#0ecb81]' : 'bg-[#f6465d]/10 text-[#f6465d]'}`}>{t.action}</span></td>
-                      <td className="px-4 py-3 text-right font-mono text-xs text-[#eaecef]">${t.price < 1 ? t.price.toFixed(5) : fmt(t.price)}</td>
-                      <td className="px-4 py-3 text-right font-mono text-xs text-[#eaecef]">{t.qty.toFixed(6)}</td>
-                      <td className="px-4 py-3 text-right font-mono text-xs">
-                        {t.pnl !== null ? <span className={t.pnl >= 0 ? 'text-[#0ecb81] font-semibold' : 'text-[#f6465d] font-semibold'}>{t.pnl >= 0 ? '+' : ''}${fmt(t.pnl)}</span> : <span className="text-[#848e9c]">Open</span>}
-                      </td>
-                      <td className="px-4 py-3 text-xs text-[#848e9c] hidden md:table-cell">{(t.reason ?? '').replace(/_/g, ' ')}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+          {/* Card list */}
+          <div className="space-y-2">
+            {botLoading
+              ? [1,2,3].map(i => <div key={i} className="h-20 rounded-xl bg-[#161a1e] border border-[#2b3139] animate-pulse" />)
+              : filteredBotTrades.length === 0
+              ? (
+                <div className="py-16 flex flex-col items-center gap-2">
+                  <Bot size={28} className="text-[#2b3139]" />
+                  <p className="text-sm text-[#848e9c]">No AI bot trades yet</p>
+                </div>
+              )
+              : filteredBotTrades.map((t, i) => {
+                const isBuy = t.action === 'BUY';
+                const hasPnl = t.pnl !== null;
+                const pnlPos = (t.pnl ?? 0) >= 0;
+                return (
+                  <div key={t.id ?? i} className="bg-[#161a1e] border border-[#2b3139] rounded-xl p-4 flex items-start gap-3 hover:border-[#f0b90b]/30 transition">
+                    <div className={`w-9 h-9 rounded-full border flex items-center justify-center flex-shrink-0 ${isBuy ? 'bg-[#0ecb81]/10 border-[#0ecb81]/20' : 'bg-[#f6465d]/10 border-[#f6465d]/20'}`}>
+                      {isBuy ? <TrendingUp size={14} className="text-[#0ecb81]" /> : <TrendingDown size={14} className="text-[#f6465d]" />}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center justify-between gap-2">
+                        <div className="flex items-center gap-2">
+                          <span className="text-sm font-bold text-[#eaecef] font-mono">{t.ticker}</span>
+                          <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${isBuy ? 'bg-[#0ecb81]/10 text-[#0ecb81]' : 'bg-[#f6465d]/10 text-[#f6465d]'}`}>{t.action}</span>
+                          <Bot size={10} className="text-[#f0b90b]" />
+                        </div>
+                        <div className="text-right">
+                          {hasPnl
+                            ? <p className={`text-sm font-bold font-mono ${pnlPos ? 'text-[#0ecb81]' : 'text-[#f6465d]'}`}>{pnlPos ? '+' : ''}${fmt(t.pnl!)}</p>
+                            : <span className="text-[10px] px-2 py-0.5 rounded-full bg-[#f0b90b]/10 text-[#f0b90b] font-medium">Open</span>
+                          }
+                        </div>
+                      </div>
+                      <div className="flex items-center justify-between gap-2 mt-1.5">
+                        <p className="text-[10px] text-[#848e9c]">
+                          ${t.price < 1 ? t.price.toFixed(5) : fmt(t.price)} · {t.qty.toFixed(4)} qty
+                          {t.reason ? ` · ${t.reason.replace(/_/g, ' ').slice(0, 40)}` : ''}
+                        </p>
+                        <p className="text-[10px] text-[#848e9c] whitespace-nowrap">
+                          {t.created_at ? new Date(t.created_at).toLocaleString() : '—'}
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })
+            }
           </div>
         </>
       )}
@@ -337,47 +344,41 @@ export default function TransactionHistoryPage() {
               className="w-full bg-[#161a1e] border border-[#2b3139] rounded-xl pl-9 pr-3 py-2.5 text-sm text-[#eaecef] placeholder-[#4a5568] focus:outline-none focus:border-[#f0b90b] transition" />
           </div>
 
-          <div className="bg-[#161a1e] border border-[#2b3139] rounded-xl overflow-hidden">
-            <div className="px-4 py-3 border-b border-[#2b3139] flex items-center gap-2">
-              <TrendingUp size={13} className="text-[#f0b90b]" />
-              <h2 className="text-sm font-semibold text-[#eaecef]">Manual Trade History</h2>
-              <span className="text-xs text-[#848e9c] ml-auto">{filteredTradeTxs.length} trades</span>
-            </div>
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm min-w-[500px]">
-                <thead>
-                  <tr className="text-[#848e9c] text-xs border-b border-[#2b3139] bg-[#0b0e11]/40">
-                    <th className="text-left px-5 py-3 font-medium">Type</th>
-                    <th className="text-left px-5 py-3 font-medium">Method</th>
-                    <th className="text-right px-5 py-3 font-medium">Amount</th>
-                    <th className="text-right px-5 py-3 font-medium">Status</th>
-                    <th className="text-left px-5 py-3 font-medium hidden md:table-cell">Note</th>
-                    <th className="text-right px-5 py-3 font-medium">Date</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {loading ? (
-                    <tr><td colSpan={6} className="py-12 text-center"><RefreshCw size={20} className="animate-spin mx-auto mb-2 text-[#f0b90b]" /><p className="text-[#848e9c] text-sm mt-1">Loading…</p></td></tr>
-                  ) : filteredTradeTxs.length === 0 ? (
-                    <tr><td colSpan={6} className="py-14 text-center"><Zap size={24} className="text-[#2b3139] mx-auto mb-2" /><p className="text-[#848e9c] text-sm">No manual trades found</p></td></tr>
-                  ) : filteredTradeTxs.map(tx => (
-                    <tr key={tx.id} className="border-b border-[#2b3139]/50 hover:bg-[#1e2329] transition">
-                      <td className="px-5 py-3.5">
-                        <div className="flex items-center gap-2.5">
-                          <div className={`w-7 h-7 rounded-full border flex items-center justify-center ${txIconBg(tx.tx_type)}`}>{txIcon(tx.tx_type)}</div>
-                          <span className="text-xs font-semibold text-[#eaecef]">{TYPE_LABELS[tx.tx_type] || tx.tx_type}</span>
-                        </div>
-                      </td>
-                      <td className="px-5 py-3.5 text-xs text-[#848e9c] capitalize">{tx.method?.replace(/_/g, ' ')}</td>
-                      <td className="px-5 py-3.5 text-right font-mono text-sm font-bold text-[#eaecef]">${fmt(tx.amount_usdt)}</td>
-                      <td className="px-5 py-3.5 text-right">{statusBadge(tx.status)}</td>
-                      <td className="px-5 py-3.5 text-xs text-[#848e9c] hidden md:table-cell">{tx.note || '—'}</td>
-                      <td className="px-5 py-3.5 text-right text-[10px] text-[#848e9c] whitespace-nowrap">{new Date(tx.created_at).toLocaleString()}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+          {/* Card list */}
+          <div className="space-y-2">
+            {loading
+              ? [1,2,3].map(i => <div key={i} className="h-20 rounded-xl bg-[#161a1e] border border-[#2b3139] animate-pulse" />)
+              : filteredTradeTxs.length === 0
+              ? (
+                <div className="py-16 flex flex-col items-center gap-2">
+                  <Zap size={28} className="text-[#2b3139]" />
+                  <p className="text-sm text-[#848e9c]">No manual trades found</p>
+                </div>
+              )
+              : filteredTradeTxs.map(tx => (
+                <div key={tx.id} className="bg-[#161a1e] border border-[#2b3139] rounded-xl p-4 flex items-start gap-3 hover:border-[#f0b90b]/30 transition">
+                  <div className="w-9 h-9 rounded-full border flex items-center justify-center flex-shrink-0 bg-[#f0b90b]/10 border-[#f0b90b]/20">
+                    <TrendingUp size={14} className="text-[#f0b90b]" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="flex items-center gap-2">
+                        <p className="text-sm font-semibold text-[#eaecef]">{TYPE_LABELS[tx.tx_type] || tx.tx_type}</p>
+                        <span className="text-[10px] text-[#848e9c] capitalize bg-[#2b3139] px-1.5 py-0.5 rounded">{tx.method?.replace(/_/g, ' ')}</span>
+                      </div>
+                      <p className="text-sm font-bold font-mono text-[#eaecef]">${fmt(tx.amount_usdt)}</p>
+                    </div>
+                    <div className="flex items-center justify-between gap-2 mt-1.5">
+                      <div className="flex items-center gap-2">
+                        {statusBadge(tx.status)}
+                        {tx.note && <p className="text-[10px] text-[#4a5568] truncate max-w-[140px]">{tx.note}</p>}
+                      </div>
+                      <p className="text-[10px] text-[#848e9c] whitespace-nowrap">{new Date(tx.created_at).toLocaleString()}</p>
+                    </div>
+                  </div>
+                </div>
+              ))
+            }
           </div>
         </>
       )}

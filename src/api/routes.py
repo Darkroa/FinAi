@@ -1355,6 +1355,16 @@ async def request_withdrawal(data: WithdrawRequest, current_user=Depends(get_cur
     db.add(tx)
     db.commit()
     db.refresh(tx)
+    _fire_admin_telegram_alert(
+        f"💸 *New Withdrawal Request*\n\n"
+        f"👤 User: `{user.email}`\n"
+        f"💰 Amount: `${data.amount_usdt:,.2f} USDT` via {data.method}\n"
+        f"🪙 Asset: {data.asset or '—'}\n"
+        f"🏦 Address: `{data.wallet_address or data.bank_ref or '—'}`\n"
+        f"🕐 Time: {datetime.utcnow().strftime('%Y-%m-%d %H:%M UTC')}\n"
+        f"🔍 Status → *Pending Approval*",
+        db=db,
+    )
     return _tx_dict(tx)
 
 

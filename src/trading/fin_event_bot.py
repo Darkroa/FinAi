@@ -221,29 +221,46 @@ class FinEventBot:
 
     def _notify_trade(self, ticker: str, action: str, price: float, qty: float, reason: str):
         import os, threading
+        from src.database.models import Notification
         tok = os.getenv("TELEGRAM_BOT_TOKEN")
-        with SessionLocal() as db:
-            user = db.query(User).filter(User.id == self.user_id).first()
-            if not user:
-                return
-            prefs    = dict(user.notification_preferences or {})
-            cid      = user.telegram_chat_id
-        if not (prefs.get("telegram") and cid and tok):
-            return
+        emoji = "🟢" if action == "BUY" else "🔴"
+        mode  = "PAPER" if self.paper else "LIVE"
+        notif_title = f"{emoji} FinEventAI — {ticker} {action}"
+        notif_msg   = (
+            f"{mode} {action} {qty:.6f} {ticker} @ ${price:,.4f}\n"
+            f"Reason: {reason[:120]}"
+        )
         msg = (
-            f"{'🟢' if action == 'BUY' else '🔴'} FinEventAI {'PAPER' if self.paper else 'LIVE'} {action}\n"
+            f"{emoji} FinEventAI {mode} {action}\n"
             f"Ticker: {ticker}\n"
             f"Price: ${price:,.4f} | Qty: {qty:.6f}\n"
             f"Reason: {reason[:120]}"
         )
-        def _send():
-            try:
-                import requests as _r
-                _r.post(f"https://api.telegram.org/bot{tok}/sendMessage",
-                        json={"chat_id": cid, "text": msg}, timeout=5)
-            except Exception:
-                pass
-        threading.Thread(target=_send, daemon=True).start()
+        with SessionLocal() as db:
+            user = db.query(User).filter(User.id == self.user_id).first()
+            if not user:
+                return
+            prefs = dict(user.notification_preferences or {})
+            cid   = user.telegram_chat_id or prefs.get("telegram_chat_id")
+            # Always create in-app notification
+            db.add(Notification(
+                title=notif_title,
+                message=notif_msg,
+                target_all=False,
+                target_user_id=user.id,
+                created_by=None,
+                read_by_user_ids=[],
+            ))
+            db.commit()
+        if tok and cid:
+            def _send():
+                try:
+                    import requests as _r
+                    _r.post(f"https://api.telegram.org/bot{tok}/sendMessage",
+                            json={"chat_id": cid, "text": msg}, timeout=5)
+                except Exception:
+                    pass
+            threading.Thread(target=_send, daemon=True).start()
 
     def get_status(self) -> dict:
         return {

@@ -671,17 +671,18 @@ class TradingBotInstance:
             logger.error(f"Failed to close {self.ticker}: {e}")
 
     def _notify_trade(self, trade: dict):
-        """Send Telegram + WhatsApp notification for every trade open/close."""
+        """Send in-app + Telegram + WhatsApp notification for every trade open/close."""
         if not self.user_id:
             return
 
         def _send():
+            from src.database.models import Notification
             db = SessionLocal()
             try:
                 user = db.query(User).filter(User.id == self.user_id).first()
                 if not user:
                     return
-                prefs   = user.notification_preferences or {}
+                prefs   = dict(user.notification_preferences or {})
                 action  = trade["action"]
                 ticker  = trade["ticker"]
                 price   = trade["price"]
@@ -691,6 +692,12 @@ class TradingBotInstance:
                            if isinstance(trade["time"], datetime) else str(trade["time"]))
 
                 if action == "BUY":
+                    notif_title = f"🟢 AI Bot — {ticker} Position Opened"
+                    notif_msg   = (
+                        f"BUY {qty:.6f} {ticker} @ ${price:,.4f}\n"
+                        f"Leverage: {self.leverage:.0f}x | Signal: {trade.get('reason', 'Signal')}\n"
+                        f"Time: {ts}"
+                    )
                     msg = (
                         f"🟢 FIN BOT — Position Opened\n"
                         f"Pair: {ticker}\n"
@@ -703,6 +710,12 @@ class TradingBotInstance:
                 else:
                     pnl_str = f"${pnl:+.2f}" if pnl is not None else "N/A"
                     emoji   = "📈" if (pnl or 0) >= 0 else "📉"
+                    notif_title = f"{emoji} AI Bot — {ticker} Position Closed"
+                    notif_msg   = (
+                        f"SELL {qty:.6f} {ticker} @ ${price:,.4f}\n"
+                        f"P&L: {pnl_str} | Reason: {trade.get('reason', 'Signal')}\n"
+                        f"Time: {ts}"
+                    )
                     msg = (
                         f"{emoji} FIN BOT — Position Closed\n"
                         f"Pair: {ticker}\n"
@@ -713,8 +726,19 @@ class TradingBotInstance:
                         f"Time: {ts}"
                     )
 
-                # Telegram
-                telegram_chat_id = prefs.get("telegram_chat_id")
+                # 1. In-app notification (always)
+                db.add(Notification(
+                    title=notif_title,
+                    message=notif_msg,
+                    target_all=False,
+                    target_user_id=user.id,
+                    created_by=None,
+                    read_by_user_ids=[],
+                ))
+                db.commit()
+
+                # 2. Telegram — use telegram_chat_id field first, then prefs fallback
+                telegram_chat_id = user.telegram_chat_id or prefs.get("telegram_chat_id")
                 bot_token        = os.environ.get("TELEGRAM_BOT_TOKEN")
                 if telegram_chat_id and bot_token:
                     try:
@@ -726,8 +750,8 @@ class TradingBotInstance:
                     except Exception as ex:
                         logger.warning(f"Telegram notify failed: {ex}")
 
-                # WhatsApp
-                whatsapp_number = prefs.get("whatsapp_number")
+                # 3. WhatsApp
+                whatsapp_number = user.whatsapp_number or prefs.get("whatsapp_number")
                 if whatsapp_number and notifier.twilio_client:
                     try:
                         notifier.twilio_client.messages.create(
