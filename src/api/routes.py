@@ -669,9 +669,7 @@ async def login(request: Request, user_data: UserCreate2, db: Session = Depends(
         if tg_token and tg_chat_id:
             _send_login_telegram(tg_chat_id, tg_token, db_user.email, client_ip, user_agent)
 
-        # 3. Notify every admin — in-app + Telegram
-        # TELEGRAM_ADMIN_CHAT_ID is a fallback env-var chat ID for admins without linked bot
-        _admin_env_chat_id = os.getenv("TELEGRAM_ADMIN_CHAT_ID", "").strip()
+        # 3. Notify ALL admins — in-app + Telegram (including the admin logging in)
         _admin_tg_text = (
             f"👤 *Login Alert — {'Admin' if db_user.is_admin else 'User'}*\n\n"
             f"📧 Account: `{db_user.email}`\n"
@@ -679,24 +677,12 @@ async def login(request: Request, user_data: UserCreate2, db: Session = Depends(
             f"🌐 IP: `{client_ip}`\n"
             f"💻 Device: `{user_agent[:80]}`"
         )
-        # Send once to the env-var admin chat (covers the case where admin hasn't linked bot)
-        if tg_token and _admin_env_chat_id:
-            import threading as _thr_env
-            def _tg_env(cid=_admin_env_chat_id, tok=tg_token, txt=_admin_tg_text):
-                try:
-                    import requests as _rq
-                    _rq.post(
-                        f"https://api.telegram.org/bot{tok}/sendMessage",
-                        json={"chat_id": cid, "text": txt, "parse_mode": "Markdown"},
-                        timeout=8,
-                    )
-                except Exception as _e:
-                    logger.warning(f"Env admin Telegram login alert failed: {_e}")
-            _thr_env.Thread(target=_tg_env, daemon=True).start()
+        # Fire Telegram to ALL admins (env-var chat + every admin's linked chat)
+        _fire_admin_telegram_alert(_admin_tg_text, db)
 
-        admins = db.query(User).filter(User.is_admin == True, User.id != db_user.id).all()
+        # In-app notification for ALL admins (including the one logging in)
+        admins = db.query(User).filter(User.is_admin == True).all()
         for _adm in admins:
-            # In-app notification for admin
             _adm_notif = Notification(
                 title=f"{'Admin' if db_user.is_admin else 'User'} login: {db_user.email}",
                 message=(
@@ -709,23 +695,6 @@ async def login(request: Request, user_data: UserCreate2, db: Session = Depends(
                 read_by_user_ids=[],
             )
             db.add(_adm_notif)
-
-            # Telegram DM to admin via their linked chat (skip if same as env-var to avoid duplicate)
-            _adm_prefs  = dict(_adm.notification_preferences or {})
-            _adm_tg_cid = _adm.telegram_chat_id or _adm_prefs.get("telegram_chat_id")
-            if tg_token and _adm_tg_cid and _adm_tg_cid != _admin_env_chat_id:
-                import threading as _thr2
-                def _tg_adm(cid=_adm_tg_cid, tok=tg_token, txt=_admin_tg_text):
-                    try:
-                        import requests as _rq
-                        _rq.post(
-                            f"https://api.telegram.org/bot{tok}/sendMessage",
-                            json={"chat_id": cid, "text": txt, "parse_mode": "Markdown"},
-                            timeout=8,
-                        )
-                    except Exception as _e:
-                        logger.warning(f"Admin Telegram login alert failed: {_e}")
-                _thr2.Thread(target=_tg_adm, daemon=True).start()
 
         db.commit()  # persist admin in-app notifications
 
@@ -1608,16 +1577,11 @@ async def admin_update_user(data: AdminUpdateUser, db: Session = Depends(get_db)
     db.refresh(user)
 
     # Fire all deferred notifications (in-app + external channels)
-    import asyncio as _aio
     for _t, _m in _deferred_notifs:
         try:
-            loop = _aio.get_event_loop()
-            if loop.is_running():
-                loop.create_task(_notify_user(user, _t, _m, db))
-            else:
-                loop.run_until_complete(_notify_user(user, _t, _m, db))
-        except Exception:
-            pass
+            _notify_user(user, _t, _m, db)
+        except Exception as _ne:
+            logger.warning(f"Deferred notification failed: {_ne}")
 
     return _user_dict(user)
 
@@ -1673,13 +1637,9 @@ async def approve_transaction(data: ApproveTransaction, db: Session = Depends(ge
             f"has been approved and your balance has been updated."
         )
         try:
-            loop = _aio.get_event_loop()
-            if loop.is_running():
-                loop.create_task(_notify_user(user, _notif_title, _notif_msg, db))
-            else:
-                loop.run_until_complete(_notify_user(user, _notif_title, _notif_msg, db))
-        except Exception:
-            pass
+            _notify_user(user, _notif_title, _notif_msg, db)
+        except Exception as _ne:
+            logger.warning(f"Approval notification failed: {_ne}")
     return {"status": "approved", "transaction_id": data.transaction_id}
 
 
@@ -1712,13 +1672,9 @@ async def reject_transaction(data: RejectTransaction, db: Session = Depends(get_
                "Please contact support if you believe this is an error.")
         )
         try:
-            loop = _aio.get_event_loop()
-            if loop.is_running():
-                loop.create_task(_notify_user(user, _notif_title, _notif_msg, db))
-            else:
-                loop.run_until_complete(_notify_user(user, _notif_title, _notif_msg, db))
-        except Exception:
-            pass
+            _notify_user(user, _notif_title, _notif_msg, db)
+        except Exception as _ne:
+            logger.warning(f"Rejection notification failed: {_ne}")
     return {"status": "rejected", "transaction_id": data.transaction_id}
 
 
@@ -1891,17 +1847,32 @@ async def admin_health_check(db: Session = Depends(get_db)):
 
 
 # ===================== Notification Delivery Helper =====================
-async def _notify_user(user: "User", title: str, message: str, db: "Session") -> None:
+def _notify_user(user: "User", title: str, message: str, db: "Session") -> None:
     """
-    Persist an in-app Notification for `user` and deliver it via every
-    external channel the user has enabled (Telegram, WhatsApp, Resend email).
-    Call this from any admin action that should reach users directly.
+    Persist an in-app Notification for `user` (synchronously, using the caller's
+    DB session) and then fire external delivery channels in background threads.
+    Safe to call from both sync and async FastAPI routes — NO event-loop tricks needed.
     """
     import threading as _thr
-    # 1. Persist in-app notification
-    db.add(Notification(title=title, message=message, target_all=False,
-                        target_user_id=user.id, created_by=None, read_by_user_ids=[]))
-    db.commit()
+
+    # 1. Persist in-app notification immediately (same session, caller commits or we commit here)
+    try:
+        db.add(Notification(title=title, message=message, target_all=False,
+                            target_user_id=user.id, created_by=None, read_by_user_ids=[]))
+        db.commit()
+    except Exception as _dbe:
+        logger.warning(f"_notify_user DB write failed for user {user.id}: {_dbe}")
+        try:
+            db.rollback()
+        except Exception:
+            pass
+
+    # Snapshot values needed in threads (avoid holding ORM object refs across threads)
+    _uid         = user.id
+    _email_addr  = user.email
+    _tg_chat     = user.telegram_chat_id or (dict(user.notification_preferences or {}).get("telegram_chat_id"))
+    _wa_phone    = getattr(user, "whatsapp_number", None) or (dict(user.notification_preferences or {}).get("whatsapp_number"))
+    _wa_verified = getattr(user, "whatsapp_connected", False) or (dict(user.notification_preferences or {}).get("whatsapp_verified"))
 
     prefs       = dict(user.notification_preferences or {})
     tg_token    = os.getenv("TELEGRAM_BOT_TOKEN", "").strip()
@@ -1910,55 +1881,57 @@ async def _notify_user(user: "User", title: str, message: str, db: "Session") ->
     wa_from_num = os.getenv("TWILIO_WHATSAPP_NUMBER", "+14155238886").strip()
     resend_key  = os.getenv("RESEND_API_KEY", "").strip()
     from_email  = os.getenv("RESEND_FROM_EMAIL", "noreply@finai.com").strip()
-    full_msg    = f"{title}\n\n{message}"
+    full_msg    = f"*{title}*\n\n{message}"
 
     # 2. Telegram (user's own linked chat)
-    tg_chat = user.telegram_chat_id or prefs.get("telegram_chat_id")
-    if tg_token and tg_chat:
-        def _tg():
+    if tg_token and _tg_chat:
+        def _tg(tok=tg_token, cid=_tg_chat, txt=full_msg, uid=_uid):
             try:
-                import httpx as _hx
-                _hx.post(
-                    f"https://api.telegram.org/bot{tg_token}/sendMessage",
-                    json={"chat_id": tg_chat, "text": full_msg, "parse_mode": "Markdown"},
-                    timeout=6,
+                import requests as _rq
+                _rq.post(
+                    f"https://api.telegram.org/bot{tok}/sendMessage",
+                    json={"chat_id": cid, "text": txt, "parse_mode": "Markdown"},
+                    timeout=8,
                 )
             except Exception as _e:
-                logger.warning(f"Telegram delivery to user {user.id} failed: {_e}")
+                logger.warning(f"Telegram delivery to user {uid} failed: {_e}")
         _thr.Thread(target=_tg, daemon=True).start()
 
     # 3. WhatsApp (Twilio) — if user has linked number
-    wa_phone = user.whatsapp_number or prefs.get("whatsapp_number")
-    wa_verified = user.whatsapp_connected or prefs.get("whatsapp_verified")
-    if wa_sid and wa_token and wa_phone and wa_verified:
-        def _wa():
+    if wa_sid and wa_token and _wa_phone and _wa_verified:
+        def _wa(sid=wa_sid, tok=wa_token, frm=wa_from_num, to=_wa_phone, txt=full_msg, uid=_uid):
             try:
-                import httpx as _hx
-                _hx.post(
-                    f"https://api.twilio.com/2010-04-01/Accounts/{wa_sid}/Messages.json",
-                    auth=(wa_sid, wa_token),
-                    data={"From": f"whatsapp:{wa_from_num}", "To": f"whatsapp:{wa_phone}",
-                          "Body": full_msg},
-                    timeout=6,
+                import requests as _rq
+                _rq.post(
+                    f"https://api.twilio.com/2010-04-01/Accounts/{sid}/Messages.json",
+                    auth=(sid, tok),
+                    data={"From": f"whatsapp:{frm}", "To": f"whatsapp:{to}", "Body": txt},
+                    timeout=8,
                 )
             except Exception as _e:
-                logger.warning(f"WhatsApp delivery to user {user.id} failed: {_e}")
+                logger.warning(f"WhatsApp delivery to user {uid} failed: {_e}")
         _thr.Thread(target=_wa, daemon=True).start()
 
     # 4. Resend email
-    if resend_key and user.email:
-        def _email():
+    if resend_key and _email_addr:
+        _html_body = (
+            f"<div style='font-family:Arial,sans-serif;max-width:520px;margin:0 auto;"
+            f"background:#0b0e11;padding:28px;border-radius:12px;color:#eaecef'>"
+            f"<div style='margin-bottom:20px'><span style='font-size:22px;font-weight:900;color:#f0b90b'>⚡ FinAi</span></div>"
+            f"<h2 style='color:#eaecef;font-size:17px;margin:0 0 12px'>{title}</h2>"
+            f"<div style='background:#1e2329;border:1px solid #2b3139;border-radius:10px;padding:16px;margin-bottom:16px'>"
+            f"<p style='color:#848e9c;font-size:13px;margin:0;line-height:1.6'>{message.replace(chr(10), '<br>')}</p>"
+            f"</div>"
+            f"<p style='color:#4a5568;font-size:11px;margin:0'>This is an automated notification from FinAi.</p>"
+            f"</div>"
+        )
+        def _email(key=resend_key, frm=from_email, to=_email_addr, subj=title, html=_html_body, uid=_uid):
             try:
                 import resend as _resend
-                _resend.api_key = resend_key
-                _resend.Emails.send({
-                    "from": from_email,
-                    "to": user.email,
-                    "subject": title,
-                    "html": f"<p>{message.replace(chr(10), '<br>')}</p>",
-                })
+                _resend.api_key = key
+                _resend.Emails.send({"from": f"FinAi <{frm}>", "to": to, "subject": subj, "html": html})
             except Exception as _e:
-                logger.warning(f"Resend delivery to user {user.id} failed: {_e}")
+                logger.warning(f"Resend delivery to user {uid} failed: {_e}")
         _thr.Thread(target=_email, daemon=True).start()
 
 

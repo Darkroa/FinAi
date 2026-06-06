@@ -1183,10 +1183,10 @@ export default function BotsPage() {
       {/* ── Summary P&L stats ── */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         {[
-          { label: 'Realized P&L',    value: `${totalPnl >= 0 ? '+' : ''}$${fmt(totalPnl)}`,       sub: `${pnlTrades.length} closed`,              up: totalPnl >= 0,             icon: TrendingUp   },
-          { label: 'Unrealized P&L',  value: totalUnrealized !== 0 ? `${totalUnrealized >= 0 ? '+' : ''}$${fmt(totalUnrealized)}` : '—', sub: activeBots.filter(b => b.position > 0).length + ' open', up: totalUnrealized >= 0, icon: Activity },
+          { label: 'Realized P&L',    value: `${totalPnl >= 0 ? '+' : ''}$${fmtC(totalPnl)}`,       sub: `${pnlTrades.length} closed`,              up: totalPnl >= 0,             icon: TrendingUp   },
+          { label: 'Unrealized P&L',  value: totalUnrealized !== 0 ? `${totalUnrealized >= 0 ? '+' : ''}$${fmtC(totalUnrealized)}` : '—', sub: activeBots.filter(b => b.position > 0).length + ' open', up: totalUnrealized >= 0, icon: Activity },
           { label: 'Win Rate',        value: `${winRate}%`,                                          sub: `${winningTrades} of ${pnlTrades.length}`, up: parseFloat(winRate as string) > 50, icon: Cpu },
-          { label: 'Portfolio Value', value: totalPortfolio > 0 ? `$${fmt(totalPortfolio)}` : '—', sub: `${activeBots.length} active bots`,         up: true,                      icon: DollarSign   },
+          { label: 'Portfolio Value', value: totalPortfolio > 0 ? `$${fmtC(totalPortfolio)}` : '—', sub: `${activeBots.length} active bots`,         up: true,                      icon: DollarSign   },
         ].map(s => {
           const Icon = s.icon
           return (

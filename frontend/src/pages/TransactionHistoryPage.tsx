@@ -85,7 +85,21 @@ export default function TransactionHistoryPage() {
     return matchFilter && matchSearch;
   });
 
-  const filteredBotTrades = botTrades.filter(t => {
+  // AI Bot History = automated bot trades (reason does NOT contain "trading terminal")
+  const autoBotTrades = botTrades.filter(t => !t.reason?.toLowerCase().includes('trading terminal'));
+  // Trade History = manual trades placed from the Trade page (reason contains "trading terminal")
+  const manualTrades = botTrades.filter(t => t.reason?.toLowerCase().includes('trading terminal'));
+
+  const filteredBotTrades = autoBotTrades.filter(t => {
+    const matchAction = botActionFilter === 'all' || t.action === botActionFilter;
+    const matchSearch = !botSearch ||
+      t.ticker.toLowerCase().includes(botSearch.toLowerCase()) ||
+      (t.reason || '').toLowerCase().includes(botSearch.toLowerCase()) ||
+      t.exchange?.toLowerCase().includes(botSearch.toLowerCase());
+    return matchAction && matchSearch;
+  });
+
+  const filteredManualTrades = manualTrades.filter(t => {
     const matchAction = botActionFilter === 'all' || t.action === botActionFilter;
     const matchSearch = !botSearch ||
       t.ticker.toLowerCase().includes(botSearch.toLowerCase()) ||
@@ -102,9 +116,12 @@ export default function TransactionHistoryPage() {
   const totalIn = txs.filter(t => isIn(t.tx_type) && t.status !== 'rejected').reduce((s, t) => s + t.amount_usdt, 0);
   const totalOut = txs.filter(t => !isIn(t.tx_type) && t.status !== 'rejected' && ['withdrawal', 'p2p_send'].includes(t.tx_type)).reduce((s, t) => s + t.amount_usdt, 0);
 
-  const botPnl = botTrades.filter(t => t.pnl !== null).reduce((s, t) => s + (t.pnl ?? 0), 0);
-  const botWins = botTrades.filter(t => (t.pnl ?? 0) > 0).length;
-  const botClosedTrades = botTrades.filter(t => t.pnl !== null);
+  const botPnl = autoBotTrades.filter(t => t.pnl !== null).reduce((s, t) => s + (t.pnl ?? 0), 0);
+  const botWins = autoBotTrades.filter(t => (t.pnl ?? 0) > 0).length;
+  const botClosedTrades = autoBotTrades.filter(t => t.pnl !== null);
+
+  const manualPnl = manualTrades.filter(t => t.pnl !== null).reduce((s, t) => s + (t.pnl ?? 0), 0);
+  const manualVol = manualTrades.reduce((s, t) => s + t.price * t.qty, 0);
 
   return (
     <div className="space-y-4 sm:space-y-5">
@@ -323,61 +340,88 @@ export default function TransactionHistoryPage() {
       {/* ── TRADE HISTORY TAB ── */}
       {pageTab === 'trade_history' && (
         <>
-          <div className="grid grid-cols-3 gap-3">
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
             <div className="bg-[#161a1e] border border-[#2b3139] rounded-xl p-4">
-              <p className="text-[10px] text-[#848e9c] mb-1.5 font-medium uppercase tracking-wide">Manual Trades</p>
-              <p className="text-lg font-bold font-mono text-[#eaecef]">{tradeTxs.length}</p>
+              <p className="text-[10px] text-[#848e9c] mb-1.5 font-medium uppercase tracking-wide">Total Trades</p>
+              <p className="text-lg font-bold font-mono text-[#eaecef]">{manualTrades.length}</p>
             </div>
             <div className="bg-[#161a1e] border border-[#2b3139] rounded-xl p-4">
               <p className="text-[10px] text-[#848e9c] mb-1.5 font-medium uppercase tracking-wide">Volume (USDT)</p>
-              <p className="text-lg font-bold font-mono text-[#eaecef]">${fmt(tradeTxs.reduce((s, t) => s + t.amount_usdt, 0))}</p>
+              <p className="text-lg font-bold font-mono text-[#eaecef]">${fmt(manualVol)}</p>
             </div>
             <div className="bg-[#161a1e] border border-[#2b3139] rounded-xl p-4">
-              <p className="text-[10px] text-[#848e9c] mb-1.5 font-medium uppercase tracking-wide">Approved</p>
-              <p className="text-lg font-bold font-mono text-[#0ecb81]">{tradeTxs.filter(t => t.status === 'approved' || t.status === 'completed').length}</p>
+              <p className="text-[10px] text-[#848e9c] mb-1.5 font-medium uppercase tracking-wide">Realized P&L</p>
+              <p className={`text-lg font-bold font-mono ${manualPnl >= 0 ? 'text-[#0ecb81]' : 'text-[#f6465d]'}`}>{manualPnl >= 0 ? '+' : ''}${fmt(manualPnl)}</p>
+            </div>
+            <div className="bg-[#161a1e] border border-[#2b3139] rounded-xl p-4">
+              <p className="text-[10px] text-[#848e9c] mb-1.5 font-medium uppercase tracking-wide">Closed</p>
+              <p className="text-lg font-bold font-mono text-[#eaecef]">{manualTrades.filter(t => t.pnl !== null).length}</p>
             </div>
           </div>
 
-          <div className="relative max-w-xs">
-            <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-[#848e9c]" />
-            <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search trades…"
-              className="w-full bg-[#161a1e] border border-[#2b3139] rounded-xl pl-9 pr-3 py-2.5 text-sm text-[#eaecef] placeholder-[#4a5568] focus:outline-none focus:border-[#f0b90b] transition" />
+          <div className="flex flex-wrap gap-3 items-center">
+            <div className="relative flex-1 min-w-0 max-w-xs">
+              <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-[#848e9c]" />
+              <input value={botSearch} onChange={e => setBotSearch(e.target.value)} placeholder="Search ticker, exchange…"
+                className="w-full bg-[#161a1e] border border-[#2b3139] rounded-xl pl-9 pr-3 py-2.5 text-sm text-[#eaecef] placeholder-[#4a5568] focus:outline-none focus:border-[#f0b90b] transition" />
+            </div>
+            <div className="flex gap-1 bg-[#161a1e] border border-[#2b3139] rounded-xl p-1">
+              {(['all','BUY','SELL'] as const).map(a => (
+                <button key={a} onClick={() => setBotActionFilter(a)}
+                  className={`text-xs px-3 py-1.5 rounded-lg font-medium transition ${botActionFilter === a ? 'bg-[#f0b90b] text-black' : 'text-[#848e9c] hover:text-[#eaecef]'}`}>
+                  {a === 'all' ? 'All' : a}
+                </button>
+              ))}
+            </div>
           </div>
 
           {/* Card list */}
           <div className="space-y-2">
-            {loading
+            {botLoading
               ? [1,2,3].map(i => <div key={i} className="h-20 rounded-xl bg-[#161a1e] border border-[#2b3139] animate-pulse" />)
-              : filteredTradeTxs.length === 0
+              : filteredManualTrades.length === 0
               ? (
                 <div className="py-16 flex flex-col items-center gap-2">
                   <Zap size={28} className="text-[#2b3139]" />
-                  <p className="text-sm text-[#848e9c]">No manual trades found</p>
+                  <p className="text-sm text-[#848e9c]">No manual trades found — place trades from the Trade page</p>
                 </div>
               )
-              : filteredTradeTxs.map(tx => (
-                <div key={tx.id} className="bg-[#161a1e] border border-[#2b3139] rounded-xl p-4 flex items-start gap-3 hover:border-[#f0b90b]/30 transition">
-                  <div className="w-9 h-9 rounded-full border flex items-center justify-center flex-shrink-0 bg-[#f0b90b]/10 border-[#f0b90b]/20">
-                    <TrendingUp size={14} className="text-[#f0b90b]" />
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center justify-between gap-2">
-                      <div className="flex items-center gap-2">
-                        <p className="text-sm font-semibold text-[#eaecef]">{TYPE_LABELS[tx.tx_type] || tx.tx_type}</p>
-                        <span className="text-[10px] text-[#848e9c] capitalize bg-[#2b3139] px-1.5 py-0.5 rounded">{tx.method?.replace(/_/g, ' ')}</span>
-                      </div>
-                      <p className="text-sm font-bold font-mono text-[#eaecef]">${fmt(tx.amount_usdt)}</p>
+              : filteredManualTrades.map((t, i) => {
+                const isBuy = t.action === 'BUY';
+                const hasPnl = t.pnl !== null;
+                const pnlPos = (t.pnl ?? 0) >= 0;
+                return (
+                  <div key={t.id ?? i} className="bg-[#161a1e] border border-[#2b3139] rounded-xl p-4 flex items-start gap-3 hover:border-[#f0b90b]/30 transition">
+                    <div className={`w-9 h-9 rounded-full border flex items-center justify-center flex-shrink-0 ${isBuy ? 'bg-[#0ecb81]/10 border-[#0ecb81]/20' : 'bg-[#f6465d]/10 border-[#f6465d]/20'}`}>
+                      {isBuy ? <TrendingUp size={14} className="text-[#0ecb81]" /> : <TrendingDown size={14} className="text-[#f6465d]" />}
                     </div>
-                    <div className="flex items-center justify-between gap-2 mt-1.5">
-                      <div className="flex items-center gap-2">
-                        {statusBadge(tx.status)}
-                        {tx.note && <p className="text-[10px] text-[#4a5568] truncate max-w-[140px]">{tx.note}</p>}
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center justify-between gap-2">
+                        <div className="flex items-center gap-2">
+                          <span className="text-sm font-bold text-[#eaecef] font-mono">{t.ticker}</span>
+                          <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${isBuy ? 'bg-[#0ecb81]/10 text-[#0ecb81]' : 'bg-[#f6465d]/10 text-[#f6465d]'}`}>{t.action}</span>
+                          <Zap size={10} className="text-[#f0b90b]" />
+                        </div>
+                        <div className="text-right">
+                          {hasPnl
+                            ? <p className={`text-sm font-bold font-mono ${pnlPos ? 'text-[#0ecb81]' : 'text-[#f6465d]'}`}>{pnlPos ? '+' : ''}${fmt(t.pnl!)}</p>
+                            : <span className="text-[10px] px-2 py-0.5 rounded-full bg-[#f0b90b]/10 text-[#f0b90b] font-medium">Open</span>
+                          }
+                        </div>
                       </div>
-                      <p className="text-[10px] text-[#848e9c] whitespace-nowrap">{new Date(tx.created_at).toLocaleString()}</p>
+                      <div className="flex items-center justify-between gap-2 mt-1.5">
+                        <p className="text-[10px] text-[#848e9c]">
+                          ${t.price < 1 ? t.price.toFixed(5) : fmt(t.price)} · {t.qty.toFixed(4)} qty
+                          {t.exchange ? ` · ${t.exchange}` : ''}
+                        </p>
+                        <p className="text-[10px] text-[#848e9c] whitespace-nowrap">
+                          {t.created_at ? new Date(t.created_at).toLocaleString() : '—'}
+                        </p>
+                      </div>
                     </div>
                   </div>
-                </div>
-              ))
+                );
+              })
             }
           </div>
         </>
