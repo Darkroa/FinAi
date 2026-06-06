@@ -20,7 +20,7 @@ from src.auth.dependencies import get_current_user, require_admin
 from src.database.models import (
     User, APIKey, Transaction, UserMoney, Event,
     Notification, WalletConfig, SupportTicket, SupportMessage, TradeLog, PriceAlert,
-    SubscriptionRequest, Ad, Testimonial
+    SubscriptionRequest, Ad, Testimonial, UserActivityLog
 )
 
 # ===================== Pydantic Schemas =====================
@@ -698,6 +698,20 @@ async def login(request: Request, user_data: UserCreate2, db: Session = Depends(
             db.add(_adm_notif)
 
         db.commit()  # persist admin in-app notifications
+
+        # 4. Record last_login_at / last_login_ip on user + activity log
+        db_user.last_login_at = datetime.utcnow()
+        db_user.last_login_ip = client_ip
+        act = UserActivityLog(
+            user_id=db_user.id,
+            user_email=db_user.email,
+            action="login",
+            ip_address=client_ip,
+            user_agent=user_agent,
+            details=f"Successful login · {'Admin' if db_user.is_admin else 'User'}",
+        )
+        db.add(act)
+        db.commit()
 
     except Exception as _notif_err:
         logger.warning(f"Login notification skipped: {_notif_err}")
@@ -2041,6 +2055,34 @@ async def delete_notification(notification_id: int, current_user=Depends(get_cur
     db.delete(notif)
     db.commit()
     return {"status": "deleted"}
+
+
+@router.get("/admin/user-activity", dependencies=[Depends(require_admin)])
+async def admin_get_user_activity(limit: int = 200, db: Session = Depends(get_db)):
+    logs = (db.query(UserActivityLog)
+              .order_by(UserActivityLog.created_at.desc())
+              .limit(limit).all())
+    return [{
+        "id": l.id,
+        "user_id": l.user_id,
+        "user_email": l.user_email,
+        "action": l.action,
+        "ip_address": l.ip_address,
+        "user_agent": l.user_agent,
+        "details": l.details,
+        "created_at": l.created_at.isoformat() if l.created_at else None,
+    } for l in logs]
+
+
+@router.delete("/admin/user-activity/clear", dependencies=[Depends(require_admin)])
+async def admin_clear_user_activity(db: Session = Depends(get_db)):
+    deleted = db.query(UserActivityLog).delete()
+    db.commit()
+    _fire_admin_telegram_alert(
+        f"🗑️ *Activity Log Cleared*\n\nAll {deleted} activity log entries have been cleared by an admin.",
+        db,
+    )
+    return {"status": "cleared", "deleted": deleted}
 
 
 @router.delete("/notifications/clear-read")

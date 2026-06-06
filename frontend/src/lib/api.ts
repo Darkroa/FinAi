@@ -315,6 +315,8 @@ export const adminResetReferralCode = (userId: number) =>
 // Ads
 export const getActiveAd = () => api.get('/ads/active')
 export const getAllActiveAds = () => api.get('/ads/active-all')
+export const adminGetUserActivity = (limit = 200) => api.get(`/admin/user-activity?limit=${limit}`)
+export const adminClearUserActivity = () => api.delete('/admin/user-activity/clear')
 export const adminGetAds = () => api.get('/admin/ads')
 export const adminCreateAd = (data: { title: string; description?: string; ad_type?: string; image_base64?: string; link_url?: string; is_active?: boolean }) =>
   api.post('/admin/ads', data)

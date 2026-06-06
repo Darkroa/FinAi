@@ -83,6 +83,10 @@ class User(Base):
     transfer_pin = Column(String(255), nullable=True)   # bcrypt-hashed PIN
     pending_deletion = Column(Boolean, default=False)   # flagged for admin deletion
 
+    # Login tracking
+    last_login_at = Column(DateTime, nullable=True)
+    last_login_ip = Column(String(100), nullable=True)
+
     # Referral
     referral_code = Column(String(20), unique=True, nullable=True, index=True)
     referred_by   = Column(String(20), nullable=True)   # code that was used at signup
@@ -99,6 +103,19 @@ class User(Base):
     @staticmethod
     def hash_password(password: str) -> str:
         return bcrypt.hashpw(password.encode("utf-8"), bcrypt.gensalt()).decode("utf-8")
+
+
+class UserActivityLog(Base):
+    __tablename__ = "user_activity_logs"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    user_email = Column(String(255), nullable=True)
+    action = Column(String(100), nullable=False)      # login / logout / deposit / withdrawal / kyc_submit / etc.
+    ip_address = Column(String(100), nullable=True)
+    user_agent = Column(String(300), nullable=True)
+    details = Column(Text, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
 
 
 class APIKey(Base):
