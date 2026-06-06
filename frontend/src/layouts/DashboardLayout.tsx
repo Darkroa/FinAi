@@ -9,7 +9,7 @@ import {
   Home, Settings,
 } from 'lucide-react'
 import { cn } from '../lib/utils'
-import { getUserNotifications, markAllNotificationsRead } from '../lib/api'
+import { getUserNotifications, markAllNotificationsRead, clearReadNotifications } from '../lib/api'
 import { useLanguage } from '../contexts/LanguageContext'
 
 import AdPopup from '../components/AdPopup'
@@ -86,6 +86,10 @@ export default function DashboardLayout() {
   const handleMarkAllRead = async () => {
     await markAllNotificationsRead().catch(() => {})
     setNotifications(ns => ns.map(n => ({ ...n, is_read: true })))
+  }
+  const handleClearRead = async () => {
+    await clearReadNotifications().catch(() => {})
+    setNotifications(ns => ns.filter(n => !n.is_read))
   }
   const handleLogout = () => { logout(); navigate('/login') }
 
@@ -208,7 +212,12 @@ export default function DashboardLayout() {
                   <div className="absolute right-0 top-11 w-72 sm:w-80 bg-[#161a1e] border border-[#2b3139] rounded-2xl shadow-2xl z-50 overflow-hidden">
                     <div className="flex items-center justify-between px-4 py-3 border-b border-[#2b3139]">
                       <span className="text-sm font-semibold text-[#eaecef]">Notifications</span>
-                      {unread > 0 && <button onClick={handleMarkAllRead} className="text-xs text-[#f0b90b] hover:underline">Mark all read</button>}
+                      <div className="flex items-center gap-2">
+                        {unread > 0 && <button onClick={handleMarkAllRead} className="text-xs text-[#f0b90b] hover:underline">Mark all read</button>}
+                        {notifications.some(n => n.is_read) && (
+                          <button onClick={handleClearRead} className="text-xs text-[#f6465d] hover:underline">Clear read</button>
+                        )}
+                      </div>
                     </div>
                     <div className="max-h-72 overflow-y-auto">
                       {notifications.length === 0 ? (

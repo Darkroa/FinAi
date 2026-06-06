@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
-import { Bell, BellOff, CheckCheck, Info, AlertTriangle, TrendingUp, Bot, Crown } from 'lucide-react'
-import { getUserNotifications, markNotificationRead, markAllNotificationsRead } from '../lib/api'
+import { Bell, BellOff, CheckCheck, Info, AlertTriangle, TrendingUp, Bot, Crown, Trash2 } from 'lucide-react'
+import { getUserNotifications, markNotificationRead, markAllNotificationsRead, clearReadNotifications, deleteNotification } from '../lib/api'
 
 interface AppNotification {
   id: number
@@ -73,6 +73,24 @@ export default function NotificationsPage() {
     }
   }
 
+  const handleClearRead = async () => {
+    try {
+      await clearReadNotifications()
+      setNotifications(ns => ns.filter(n => !n.is_read))
+    } catch {
+      // ignore
+    }
+  }
+
+  const handleDelete = async (id: number) => {
+    try {
+      await deleteNotification(id)
+      setNotifications(ns => ns.filter(n => n.id !== id))
+    } catch {
+      // ignore (broadcast notifications can't be deleted)
+    }
+  }
+
   const filtered = filter === 'unread' ? notifications.filter(n => !n.is_read) : notifications
   const unreadCount = notifications.filter(n => !n.is_read).length
 
@@ -86,15 +104,26 @@ export default function NotificationsPage() {
             {unreadCount > 0 ? `${unreadCount} unread` : 'All caught up'}
           </p>
         </div>
-        {unreadCount > 0 && (
-          <button
-            onClick={handleMarkAllRead}
-            className="flex items-center gap-1.5 text-xs text-[#f0b90b] hover:text-[#d4a30a] bg-[#f0b90b]/8 hover:bg-[#f0b90b]/15 border border-[#f0b90b]/20 rounded-xl px-3 py-2 transition-all font-medium"
-          >
-            <CheckCheck size={13} />
-            Mark all read
-          </button>
-        )}
+        <div className="flex items-center gap-2">
+          {unreadCount > 0 && (
+            <button
+              onClick={handleMarkAllRead}
+              className="flex items-center gap-1.5 text-xs text-[#f0b90b] hover:text-[#d4a30a] bg-[#f0b90b]/8 hover:bg-[#f0b90b]/15 border border-[#f0b90b]/20 rounded-xl px-3 py-2 transition-all font-medium"
+            >
+              <CheckCheck size={13} />
+              Mark all read
+            </button>
+          )}
+          {notifications.some(n => n.is_read && !n.target_all) && (
+            <button
+              onClick={handleClearRead}
+              className="flex items-center gap-1.5 text-xs text-[#f6465d] hover:text-[#d93a4f] bg-[#f6465d]/8 hover:bg-[#f6465d]/15 border border-[#f6465d]/20 rounded-xl px-3 py-2 transition-all font-medium"
+            >
+              <Trash2 size={13} />
+              Clear read
+            </button>
+          )}
+        </div>
       </div>
 
       {/* Filter tabs */}
@@ -186,16 +215,27 @@ export default function NotificationsPage() {
                     </div>
                   </div>
                   <p className="text-xs text-[#848e9c] mt-1 leading-relaxed">{n.message}</p>
-                  <div className="flex items-center gap-3 mt-2">
-                    {n.target_all && (
-                      <span className="text-[10px] text-[#4a5568] bg-[#1e2329] rounded-md px-1.5 py-0.5">
-                        Broadcast
-                      </span>
-                    )}
-                    {!n.is_read && (
-                      <span className="text-[10px] text-[#f0b90b]">
-                        Click to mark as read
-                      </span>
+                  <div className="flex items-center justify-between mt-2">
+                    <div className="flex items-center gap-2">
+                      {n.target_all && (
+                        <span className="text-[10px] text-[#4a5568] bg-[#1e2329] rounded-md px-1.5 py-0.5">
+                          Broadcast
+                        </span>
+                      )}
+                      {!n.is_read && (
+                        <span className="text-[10px] text-[#f0b90b]">
+                          Tap to mark as read
+                        </span>
+                      )}
+                    </div>
+                    {!n.target_all && (
+                      <button
+                        onClick={e => { e.stopPropagation(); handleDelete(n.id) }}
+                        className="p-1 rounded-lg text-[#2b3139] hover:text-[#f6465d] hover:bg-[#f6465d]/10 transition opacity-0 group-hover:opacity-100"
+                        title="Delete"
+                      >
+                        <Trash2 size={11} />
+                      </button>
                     )}
                   </div>
                 </div>

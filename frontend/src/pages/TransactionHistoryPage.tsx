@@ -108,10 +108,6 @@ export default function TransactionHistoryPage() {
     return matchAction && matchSearch;
   });
 
-  const tradeTxs = txs.filter(t => ['trade'].includes(t.tx_type));
-  const filteredTradeTxs = tradeTxs.filter(t =>
-    !search || t.tx_type.toLowerCase().includes(search.toLowerCase()) || t.note?.toLowerCase().includes(search.toLowerCase())
-  );
 
   const totalIn = txs.filter(t => isIn(t.tx_type) && t.status !== 'rejected').reduce((s, t) => s + t.amount_usdt, 0);
   const totalOut = txs.filter(t => !isIn(t.tx_type) && t.status !== 'rejected' && ['withdrawal', 'p2p_send'].includes(t.tx_type)).reduce((s, t) => s + t.amount_usdt, 0);

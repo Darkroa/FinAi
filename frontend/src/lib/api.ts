@@ -110,6 +110,8 @@ export const adminRejectSubscription = (sub_id: number, note?: string) =>
 export const getUserNotifications = () => api.get('/notifications')
 export const markNotificationRead = (id: number) => api.post(`/notifications/${id}/read`)
 export const markAllNotificationsRead = () => api.post('/notifications/read-all')
+export const deleteNotification = (id: number) => api.delete(`/notifications/${id}`)
+export const clearReadNotifications = () => api.delete('/notifications/clear-read')
 
 // Support
 export const createSupportTicket = (data: { subject: string; message: string; priority?: string }) =>

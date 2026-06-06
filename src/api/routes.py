@@ -107,6 +107,7 @@ class AdminUpdateUser(BaseModel):
     is_admin: Optional[bool] = None
     profile_locked: Optional[bool] = None
     subscription: Optional[str] = None
+    is_mail_verified: Optional[bool] = None
 
 class SupportTicketCreate(BaseModel):
     subject: str
@@ -2025,6 +2026,38 @@ async def mark_all_notifications_read(current_user=Depends(get_current_user), db
             n.read_by_user_ids = read_by
     db.commit()
     return {"status": "all_read"}
+
+
+@router.delete("/notifications/{notification_id}")
+async def delete_notification(notification_id: int, current_user=Depends(get_current_user), db: Session = Depends(get_db)):
+    uid = current_user["id"] if isinstance(current_user, dict) else current_user.id
+    notif = db.query(Notification).filter(
+        Notification.id == notification_id,
+        Notification.target_user_id == uid,
+        Notification.target_all == False,
+    ).first()
+    if not notif:
+        raise HTTPException(status_code=404, detail="Not found or cannot delete")
+    db.delete(notif)
+    db.commit()
+    return {"status": "deleted"}
+
+
+@router.delete("/notifications/clear-read")
+async def clear_read_notifications(current_user=Depends(get_current_user), db: Session = Depends(get_db)):
+    uid = current_user["id"] if isinstance(current_user, dict) else current_user.id
+    # Delete user-specific notifications that are read
+    user_notifs = db.query(Notification).filter(
+        Notification.target_user_id == uid,
+        Notification.target_all == False,
+    ).all()
+    deleted = 0
+    for n in user_notifs:
+        if uid in (n.read_by_user_ids or []):
+            db.delete(n)
+            deleted += 1
+    db.commit()
+    return {"status": "cleared", "deleted": deleted}
 
 
 # ===================== Support Desk =====================

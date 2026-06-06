@@ -66,6 +66,8 @@ export default function AdminPage() {
   const [adForm, setAdForm] = useState({ title: '', description: '', ad_type: 'banner', image_base64: '', link_url: '', is_active: true })
   const [adImageName, setAdImageName] = useState('')
   const [adLoading, setAdLoading] = useState(false)
+  const [editingAd, setEditingAd] = useState<any>(null)
+  const [editingAdForm, setEditingAdForm] = useState<any>({})
 
   // Per-user deposit config
   const [userDepUser, setUserDepUser] = useState<any>(null)
@@ -391,6 +393,20 @@ export default function AdminPage() {
                   </label>
                 ))}
               </div>
+              {/* Manual email verification */}
+              <div className="flex items-center justify-between bg-[#0b0e11] border border-[#2b3139] rounded-xl px-4 py-3">
+                <div>
+                  <p className="text-xs font-medium text-[#eaecef]">Email Verified</p>
+                  <p className="text-[10px] text-[#848e9c]">Manually verify or unverify email (backup override)</p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setEditForm((f: any) => ({ ...f, is_mail_verified: !f.is_mail_verified }))}
+                  className={`relative w-11 h-6 rounded-full transition-colors flex-shrink-0 ${editForm.is_mail_verified ? 'bg-[#0ecb81]' : 'bg-[#2b3139]'}`}
+                >
+                  <span className={`absolute top-1 w-4 h-4 rounded-full bg-white transition-transform ${editForm.is_mail_verified ? 'translate-x-6' : 'translate-x-1'}`} />
+                </button>
+              </div>
               <div className="flex gap-3 pt-2">
                 <button type="submit" className="flex-1 bg-[#f0b90b] hover:bg-[#d4a30a] text-black font-semibold py-2.5 rounded-xl text-sm transition">Save Changes</button>
                 <button type="button" onClick={() => setEditingUser(null)} className="px-4 border border-[#2b3139] text-[#848e9c] hover:text-[#eaecef] rounded-xl text-sm transition">Cancel</button>
@@ -453,7 +469,7 @@ export default function AdminPage() {
                       </div>
                     </td>
                     <td className="px-4 py-3 text-right">
-                      <button onClick={() => { setEditingUser(u); setEditForm({ first_name: u.first_name, last_name: u.last_name, email: u.email, phone: u.phone, balance_usdt: u.balance_usdt, account_tier: u.account_tier, kyc_status: u.kyc_status, is_active: u.is_active, is_banned: u.is_banned, is_admin: u.is_admin, profile_locked: u.profile_locked, subscription: u.subscription || 'free' }) }}
+                      <button onClick={() => { setEditingUser(u); setEditForm({ first_name: u.first_name, last_name: u.last_name, email: u.email, phone: u.phone, balance_usdt: u.balance_usdt, account_tier: u.account_tier, kyc_status: u.kyc_status, is_active: u.is_active, is_banned: u.is_banned, is_admin: u.is_admin, profile_locked: u.profile_locked, subscription: u.subscription || 'free', is_mail_verified: u.is_mail_verified }) }}
                         className="p-1.5 rounded-lg text-[#848e9c] hover:text-[#f0b90b] hover:bg-[#f0b90b]/10 transition">
                         <Edit3 size={13} />
                       </button>
@@ -914,53 +930,149 @@ export default function AdminPage() {
             ) : (
               <div className="divide-y divide-[#2b3139]/50">
                 {ads.map(ad => (
-                  <div key={ad.id} className="flex items-start gap-4 px-4 py-4 hover:bg-[#1e2329] transition">
-                    {ad.image_base64 ? (
-                      <img src={ad.image_base64} alt={ad.title} className="w-20 h-14 rounded-lg object-cover flex-shrink-0 border border-[#2b3139]" />
-                    ) : (
-                      <div className="w-20 h-14 rounded-lg bg-[#0b0e11] border border-[#2b3139] flex items-center justify-center flex-shrink-0">
-                        <Image size={16} className="text-[#4a5568]" />
+                  <div key={ad.id} className="p-4 hover:bg-[#1e2329] transition">
+                    {/* Ad row — thumbnail + info + action buttons all on one row */}
+                    <div className="flex items-start gap-3">
+                      {/* Thumbnail */}
+                      {ad.image_base64 ? (
+                        <img src={ad.image_base64} alt={ad.title} className="w-16 h-12 rounded-lg object-cover flex-shrink-0 border border-[#2b3139]" />
+                      ) : (
+                        <div className="w-16 h-12 rounded-lg bg-[#0b0e11] border border-[#2b3139] flex items-center justify-center flex-shrink-0">
+                          <Image size={14} className="text-[#4a5568]" />
+                        </div>
+                      )}
+                      {/* Info */}
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-start justify-between gap-2">
+                          <div className="min-w-0">
+                            <p className="text-sm font-semibold text-[#eaecef] truncate">{ad.title}</p>
+                            <div className="flex items-center gap-1.5 mt-1 flex-wrap">
+                              <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-[#f0b90b]/10 text-[#f0b90b] capitalize border border-[#f0b90b]/20">{ad.ad_type || 'banner'}</span>
+                              <span className={`text-[10px] px-1.5 py-0.5 rounded-full ${ad.is_active ? 'bg-[#0ecb81]/10 text-[#0ecb81] border border-[#0ecb81]/20' : 'bg-[#2b3139] text-[#848e9c]'}`}>
+                                {ad.is_active ? 'Active' : 'Inactive'}
+                              </span>
+                            </div>
+                          </div>
+                          {/* Action buttons — always in a clean row on the right */}
+                          <div className="flex items-center gap-1 flex-shrink-0">
+                            {/* Edit */}
+                            <button
+                              onClick={() => { setEditingAd(editingAd?.id === ad.id ? null : ad); setEditingAdForm({ title: ad.title, description: ad.description || '', link_url: ad.link_url || '', ad_type: ad.ad_type || 'banner' }) }}
+                              className={`p-1.5 rounded-lg transition ${editingAd?.id === ad.id ? 'bg-[#f0b90b]/20 text-[#f0b90b]' : 'text-[#848e9c] hover:text-[#f0b90b] hover:bg-[#f0b90b]/10'}`}
+                              title="Edit"
+                            ><Edit3 size={13} /></button>
+                            {/* Toggle active */}
+                            <button
+                              onClick={async () => {
+                                try {
+                                  await adminToggleAd(ad.id)
+                                  setAds(as => as.map(a => a.id === ad.id ? { ...a, is_active: !a.is_active } : a))
+                                  toast.success(ad.is_active ? 'Ad deactivated' : 'Ad activated')
+                                } catch { toast.error('Failed to toggle') }
+                              }}
+                              className="p-1.5 rounded-lg transition text-[#848e9c] hover:text-[#0ecb81] hover:bg-[#0ecb81]/10"
+                              title={ad.is_active ? 'Deactivate' : 'Activate'}
+                            >
+                              {ad.is_active ? <ToggleRight size={16} className="text-[#0ecb81]" /> : <ToggleLeft size={16} />}
+                            </button>
+                            {/* Delete */}
+                            <button
+                              onClick={async () => {
+                                if (!confirm('Delete this ad?')) return
+                                try {
+                                  await adminDeleteAd(ad.id)
+                                  setAds(as => as.filter(a => a.id !== ad.id))
+                                  if (editingAd?.id === ad.id) setEditingAd(null)
+                                  toast.success('Ad deleted')
+                                } catch { toast.error('Failed to delete') }
+                              }}
+                              className="p-1.5 rounded-lg text-[#848e9c] hover:text-[#f6465d] hover:bg-[#f6465d]/10 transition"
+                              title="Delete"
+                            ><Trash2 size={13} /></button>
+                          </div>
+                        </div>
+                        {ad.description && <p className="text-[11px] text-[#848e9c] mt-1 line-clamp-1">{ad.description}</p>}
+                        {ad.link_url && (
+                          <a href={ad.link_url} target="_blank" rel="noopener noreferrer" className="text-[10px] text-[#f0b90b] hover:underline flex items-center gap-0.5 mt-0.5">
+                            <ExternalLink size={9} /> {ad.link_url.slice(0, 45)}{ad.link_url.length > 45 ? '…' : ''}
+                          </a>
+                        )}
+                        <p className="text-[10px] text-[#4a5568] mt-0.5">{new Date(ad.created_at).toLocaleString()}</p>
+                      </div>
+                    </div>
+
+                    {/* Inline edit form — shown when this ad is being edited */}
+                    {editingAd?.id === ad.id && (
+                      <div className="mt-3 pt-3 border-t border-[#2b3139] space-y-2">
+                        <div className="grid grid-cols-2 gap-2">
+                          <div>
+                            <label className="text-[10px] text-[#848e9c] mb-1 block">Title</label>
+                            <input value={editingAdForm.title} onChange={e => setEditingAdForm((f: any) => ({ ...f, title: e.target.value }))}
+                              className="w-full bg-[#0b0e11] border border-[#2b3139] rounded-lg px-2.5 py-1.5 text-xs text-[#eaecef] focus:outline-none focus:border-[#f0b90b]" />
+                          </div>
+                          <div>
+                            <label className="text-[10px] text-[#848e9c] mb-1 block">Type</label>
+                            <select value={editingAdForm.ad_type} onChange={e => setEditingAdForm((f: any) => ({ ...f, ad_type: e.target.value }))}
+                              className="w-full bg-[#0b0e11] border border-[#2b3139] rounded-lg px-2.5 py-1.5 text-xs text-[#eaecef] focus:outline-none focus:border-[#f0b90b]">
+                              {['banner','popup','sidebar','notification','ticker'].map(t => <option key={t} value={t}>{t}</option>)}
+                            </select>
+                          </div>
+                        </div>
+                        <div>
+                          <label className="text-[10px] text-[#848e9c] mb-1 block">Description</label>
+                          <textarea value={editingAdForm.description} onChange={e => setEditingAdForm((f: any) => ({ ...f, description: e.target.value }))}
+                            rows={2} className="w-full bg-[#0b0e11] border border-[#2b3139] rounded-lg px-2.5 py-1.5 text-xs text-[#eaecef] focus:outline-none focus:border-[#f0b90b] resize-none" />
+                        </div>
+                        <div>
+                          <label className="text-[10px] text-[#848e9c] mb-1 block">Link URL</label>
+                          <input value={editingAdForm.link_url} onChange={e => setEditingAdForm((f: any) => ({ ...f, link_url: e.target.value }))}
+                            placeholder="https://..." className="w-full bg-[#0b0e11] border border-[#2b3139] rounded-lg px-2.5 py-1.5 text-xs text-[#eaecef] focus:outline-none focus:border-[#f0b90b]" />
+                        </div>
+                        <div className="flex gap-2 pt-1">
+                          <button
+                            onClick={async () => {
+                              try {
+                                await adminDeleteAd(ad.id) // reuse delete + recreate pattern via update endpoint if available
+                                // Use the adminCreateAd to create an updated version then delete old
+                                // For now we patch by toggling; a proper PATCH would need a new endpoint
+                                // Instead we'll call a hypothetical adminUpdateAd — check if it exists
+                                toast.error('Ad update API not yet wired — delete and recreate instead')
+                              } catch { /* */ }
+                            }}
+                            className="hidden" // hidden until proper update endpoint exists
+                          />
+                          <button
+                            onClick={async () => {
+                              if (!editingAdForm.title?.trim()) { toast.error('Title required'); return }
+                              setAdLoading(true)
+                              try {
+                                // Delete old ad and recreate with updated fields
+                                await adminDeleteAd(ad.id)
+                                await adminCreateAd({
+                                  title: editingAdForm.title,
+                                  description: editingAdForm.description || undefined,
+                                  ad_type: editingAdForm.ad_type,
+                                  image_base64: ad.image_base64 || undefined,
+                                  link_url: editingAdForm.link_url || undefined,
+                                  is_active: ad.is_active,
+                                })
+                                toast.success('Ad updated!')
+                                const res = await adminGetAds(); setAds(Array.isArray(res.data) ? res.data : [])
+                                setEditingAd(null)
+                              } catch { toast.error('Failed to update ad') }
+                              finally { setAdLoading(false) }
+                            }}
+                            disabled={adLoading}
+                            className="flex items-center gap-1.5 px-3 py-1.5 bg-[#f0b90b]/10 hover:bg-[#f0b90b]/20 border border-[#f0b90b]/30 text-[#f0b90b] rounded-lg text-xs font-semibold transition disabled:opacity-60">
+                            <Save size={11} /> {adLoading ? 'Saving…' : 'Save'}
+                          </button>
+                          <button onClick={() => setEditingAd(null)}
+                            className="px-3 py-1.5 border border-[#2b3139] text-[#848e9c] hover:text-[#eaecef] rounded-lg text-xs transition">
+                            Cancel
+                          </button>
+                        </div>
                       </div>
                     )}
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <p className="text-sm font-medium text-[#eaecef] truncate">{ad.title}</p>
-                        <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-[#f0b90b]/10 text-[#f0b90b] capitalize border border-[#f0b90b]/20">{ad.ad_type || 'banner'}</span>
-                        <span className={`text-[10px] px-1.5 py-0.5 rounded-full ${ad.is_active ? 'bg-[#0ecb81]/10 text-[#0ecb81]' : 'bg-[#2b3139] text-[#848e9c]'}`}>
-                          {ad.is_active ? 'Active' : 'Inactive'}
-                        </span>
-                      </div>
-                      {ad.description && (
-                        <p className="text-[11px] text-[#848e9c] mt-0.5 line-clamp-2">{ad.description}</p>
-                      )}
-                      {ad.link_url && (
-                        <a href={ad.link_url} target="_blank" rel="noopener noreferrer" className="text-[10px] text-[#f0b90b] hover:underline flex items-center gap-0.5 mt-0.5">
-                          <ExternalLink size={9} /> {ad.link_url.slice(0, 40)}{ad.link_url.length > 40 ? '…' : ''}
-                        </a>
-                      )}
-                      <p className="text-[10px] text-[#4a5568] mt-0.5">{new Date(ad.created_at).toLocaleString()}</p>
-                    </div>
-                    <div className="flex items-center gap-1 flex-shrink-0">
-                      <button onClick={async () => {
-                        try {
-                          await adminToggleAd(ad.id)
-                          setAds(as => as.map(a => a.id === ad.id ? { ...a, is_active: !a.is_active } : a))
-                          toast.success(ad.is_active ? 'Ad deactivated' : 'Ad activated')
-                        } catch { toast.error('Failed to toggle') }
-                      }} className="p-1.5 rounded-lg text-[#848e9c] hover:text-[#f0b90b] hover:bg-[#f0b90b]/10 transition" title={ad.is_active ? 'Deactivate' : 'Activate'}>
-                        {ad.is_active ? <ToggleRight size={16} className="text-[#0ecb81]" /> : <ToggleLeft size={16} />}
-                      </button>
-                      <button onClick={async () => {
-                        if (!confirm('Delete this ad?')) return
-                        try {
-                          await adminDeleteAd(ad.id)
-                          setAds(as => as.filter(a => a.id !== ad.id))
-                          toast.success('Ad deleted')
-                        } catch { toast.error('Failed to delete') }
-                      }} className="p-1.5 rounded-lg text-[#848e9c] hover:text-[#f6465d] hover:bg-[#f6465d]/10 transition" title="Delete">
-                        <Trash2 size={14} />
-                      </button>
-                    </div>
                   </div>
                 ))}
               </div>
