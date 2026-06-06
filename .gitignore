@@ -1,0 +1,22 @@
+# Backup data — local only, not committed
+backup/data/
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+.env
+.venv/
+*.egg-info/
+dist/
+build/
+
+# Node
+node_modules/
+frontend/node_modules/
+
+# Misc
+.DS_Store
+*.log
+data/chroma_db/
+uploads/
