@@ -388,7 +388,7 @@ export default function DashboardPage() {
       {/* Quick Actions */}
       <div>
         <p className="text-xs font-bold text-[#eaecef] mb-3">Quick Actions</p>
-        <div className="grid grid-cols-3 sm:grid-cols-6 gap-2">
+        <div className="grid grid-cols-5 gap-2">
           {[
             { label: 'Signals',   icon: Lightbulb,    path: '/app/recommendations' },
             { label: 'History',   icon: Receipt,       path: '/app/transactions' },
