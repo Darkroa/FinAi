@@ -4,19 +4,19 @@ import { useLanguage } from '../contexts/LanguageContext'
 import { formatCurrency } from '../lib/i18n'
 import {
   getWalletConfig, requestDeposit, requestWithdrawal,
-  p2pSend, getMyTransactions, getMe, getVpsPlans, getAssetProducts,
+  p2pSend, getMyTransactions, getMe,
   getMyDepositConfig, cancelDeposit, getWithdrawalMethods, saveWithdrawalMethods,
 } from '../lib/api'
 import toast from 'react-hot-toast'
 import { QRCode } from 'react-qr-code'
 import {
   ArrowDownLeft, ArrowUpRight, Send, Copy, RefreshCw,
-  Clock, CheckCircle, XCircle, Server, ShoppingBag, ChevronRight,
+  Clock, CheckCircle, XCircle, ChevronRight,
   ChevronLeft, AlertTriangle, Lock, Bitcoin, Plus, Trash2, CreditCard,
   Building2, Info,
 } from 'lucide-react'
 
-type WalletTab = 'deposit' | 'withdraw' | 'send' | 'vps' | 'asset'
+type WalletTab = 'deposit' | 'withdraw' | 'send'
 type DepStep = 1 | 2 | 3
 type WdStep  = 1 | 2 | 3
 
@@ -25,8 +25,6 @@ interface Tx {
   id: number; tx_type: string; method: string; asset: string
   amount_usdt: number; status: string; note?: string; created_at: string
 }
-interface VpsPlan { id: number; name: string; price: number; specs: string }
-interface AssetProduct { id: number; name: string; price: number; icon: string }
 
 export interface WithdrawalMethod {
   id: string
@@ -54,24 +52,6 @@ const WD_TYPES: { key: WithdrawalMethod['type']; label: string; icon: string; co
   { key: 'bank',        label: 'Bank Transfer',  icon: 'B', color: 'text-[#848e9c]' },
 ]
 
-const DEFAULT_VPS: VpsPlan[] = [
-  { id: 1,  name: 'DigitalOcean',     price: 6,  specs: '1 vCPU · 1GB RAM · 25GB SSD' },
-  { id: 2,  name: 'Linode',           price: 5,  specs: '1 vCPU · 1GB RAM · 25GB SSD' },
-  { id: 3,  name: 'Vultr',            price: 6,  specs: '1 vCPU · 1GB RAM · 25GB SSD' },
-  { id: 4,  name: 'Kamatera',         price: 4,  specs: '1 vCPU · 1GB RAM · 20GB SSD' },
-  { id: 5,  name: 'Liquid Web',       price: 15, specs: '1 vCPU · 2GB RAM · 40GB SSD' },
-  { id: 6,  name: 'Hostinger',        price: 4,  specs: '1 vCPU · 1GB RAM · 20GB SSD' },
-  { id: 7,  name: 'IONOS',            price: 5,  specs: '1 vCPU · 1GB RAM · 25GB SSD' },
-  { id: 8,  name: 'ScalaHosting',     price: 10, specs: '1 vCPU · 2GB RAM · 50GB SSD' },
-  { id: 9,  name: 'InMotion Hosting', price: 20, specs: '2 vCPU · 4GB RAM · 75GB SSD' },
-  { id: 10, name: 'A2 Hosting',       price: 5,  specs: '1 vCPU · 1GB RAM · 25GB SSD' },
-]
-
-const DEFAULT_ASSETS: AssetProduct[] = [
-  { id: 1, name: 'Bitcoin (BTC)',  price: 67432, icon: '₿' },
-  { id: 2, name: 'Ethereum (ETH)', price: 3521,  icon: 'Ξ' },
-  { id: 3, name: 'BNB',           price: 598,   icon: 'B' },
-]
 
 function txIcon(type: string) {
   switch (type) {
@@ -142,9 +122,6 @@ export default function WalletPage() {
   const [txs, setTxs] = useState<Tx[]>([])
   const [loading, setLoading] = useState(true)
   const [submitting, setSubmitting] = useState(false)
-  const [vpsPlans, setVpsPlans]         = useState<VpsPlan[]>(DEFAULT_VPS)
-  const [assetProducts, setAssetProducts] = useState<AssetProduct[]>(DEFAULT_ASSETS)
-
   // ── Deposit state ──
   const [depStep, setDepStep]           = useState<DepStep>(1)
   const [depAmount, setDepAmount]       = useState('')
@@ -185,12 +162,10 @@ export default function WalletPage() {
     Promise.all([
       getWalletConfig(),
       getMyTransactions(),
-      getVpsPlans(),
-      getAssetProducts(),
       getMyDepositConfig().catch(() => ({ data: {} })),
       getWithdrawalMethods().catch(() => ({ data: [] })),
     ])
-      .then(([cfgRes, txRes, vpsRes, assetRes, myDepRes, wdRes]) => {
+      .then(([cfgRes, txRes, myDepRes, wdRes]) => {
         const globalCfg: WalletCfg = cfgRes.data || {}
         const userOverrides: Record<string, string> = myDepRes.data || {}
         const merged: WalletCfg = { ...globalCfg }
@@ -201,8 +176,6 @@ export default function WalletPage() {
         }
         setCfg(merged)
         setTxs(Array.isArray(txRes.data) ? txRes.data : [])
-        if (Array.isArray(vpsRes.data) && vpsRes.data.length > 0) setVpsPlans(vpsRes.data)
-        if (Array.isArray(assetRes.data) && assetRes.data.length > 0) setAssetProducts(assetRes.data)
         setWdMethods(Array.isArray(wdRes.data) ? wdRes.data : [])
         setWdMethodsLoaded(true)
       })
@@ -368,8 +341,6 @@ export default function WalletPage() {
     { key: 'deposit',  label: 'Deposit',   icon: ArrowDownLeft },
     { key: 'withdraw', label: 'Withdraw',  icon: ArrowUpRight },
     { key: 'send',     label: 'Send P2P',  icon: Send },
-    { key: 'vps',      label: 'Rent VPS',  icon: Server },
-    { key: 'asset',    label: 'Buy Asset', icon: ShoppingBag },
   ] as const
 
   return (
@@ -921,50 +892,6 @@ export default function WalletPage() {
             </form>
           )}
 
-          {/* ── RENT VPS ── */}
-          {tab === 'vps' && (
-            <div className="space-y-4">
-              <h2 className="text-sm font-semibold text-[#eaecef]">Rent a VPS for your Bot</h2>
-              <p className="text-xs text-[#848e9c]">Run your FinAi bot 24/7 on a dedicated server.</p>
-              {vpsPlans.map(plan => (
-                <div key={plan.id} className="flex items-center justify-between bg-[#0b0e11] border border-[#2b3139] rounded-xl px-4 py-3 hover:border-[#f0b90b]/30 transition">
-                  <div>
-                    <p className="text-sm font-medium text-[#eaecef]">{plan.name}</p>
-                    <p className="text-xs text-[#848e9c]">{plan.specs}</p>
-                  </div>
-                  <div className="text-right flex-shrink-0">
-                    <p className="text-base font-bold text-[#f0b90b]">${plan.price}<span className="text-xs text-[#848e9c]">/mo</span></p>
-                    <button onClick={() => { if (balance < plan.price) return toast.error('Insufficient balance'); toast.success(`${plan.name} order submitted!`) }}
-                      className="mt-1 text-xs bg-[#f0b90b]/10 hover:bg-[#f0b90b]/20 text-[#f0b90b] px-3 py-1 rounded-lg transition flex items-center gap-1 ml-auto">
-                      Rent <ChevronRight size={11} />
-                    </button>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-
-          {/* ── BUY ASSET ── */}
-          {tab === 'asset' && (
-            <div className="space-y-4">
-              <h2 className="text-sm font-semibold text-[#eaecef]">Buy Crypto Assets</h2>
-              <p className="text-xs text-[#848e9c]">Purchase crypto directly from your USDT balance.</p>
-              {assetProducts.map(asset => (
-                <div key={asset.id} className="flex items-center justify-between bg-[#0b0e11] border border-[#2b3139] rounded-xl px-4 py-3 hover:border-[#f0b90b]/30 transition">
-                  <div className="flex items-center gap-3">
-                    <div className="w-8 h-8 rounded-full bg-[#f0b90b]/10 flex items-center justify-center font-bold text-[#f0b90b]">{asset.icon}</div>
-                    <div>
-                      <p className="text-sm font-medium text-[#eaecef]">{asset.name}</p>
-                      <p className="text-xs text-[#848e9c]">${Number(asset.price).toLocaleString()} / unit</p>
-                    </div>
-                  </div>
-                  <button onClick={() => toast('Asset purchase coming soon')} className="text-xs bg-[#f0b90b]/10 hover:bg-[#f0b90b]/20 text-[#f0b90b] px-3 py-1.5 rounded-lg transition flex items-center gap-1">
-                    Buy <ChevronRight size={11} />
-                  </button>
-                </div>
-              ))}
-            </div>
-          )}
         </div>
 
         {/* Right: Transaction History */}

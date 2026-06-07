@@ -22,13 +22,21 @@ import {
   DollarSign,
   Lightbulb,
   Receipt,
-  Bell,
   CalendarDays,
-  MoreHorizontal,
   BarChart2,
   Gift,
   CheckCircle2,
+  ShoppingBag,
+  Server,
 } from 'lucide-react';
+
+function fmtCompact(n: number): string {
+  const abs = Math.abs(n)
+  const sign = n < 0 ? '-' : ''
+  if (abs >= 1_000_000) return `${sign}$${(abs / 1_000_000).toFixed(2)}M`
+  if (abs >= 10_000)    return `${sign}$${(abs / 1_000).toFixed(1)}K`
+  return `${sign}$${abs.toFixed(2)}`
+}
 
 export default function DashboardPage() {
   const navigate = useNavigate();
@@ -45,7 +53,7 @@ export default function DashboardPage() {
   const [hideBalance, setHideBalance] = useState(false);
   const [btcToggle, setBtcToggle] = useState<'BTC' | 'ETH'>('BTC');
   const [todayPnl, setTodayPnl] = useState(0);
-  const [unrealizedPnl, setUnrealizedPnl] = useState(0);
+  const [realizedPnl, setRealizedPnl] = useState(0);
   const [openPositions, setOpenPositions] = useState(0);
   const [portfolioValue, setPortfolioValue] = useState(0);
   const [activeBotCount, setActiveBotCount] = useState(0);
@@ -99,7 +107,6 @@ export default function DashboardPage() {
           openCount++;
         }
       }
-      setUnrealizedPnl(totalUnrealized);
       setOpenPositions(openCount);
       setPortfolioValue(portfolioVal);
       setActiveBotCount(activeBotCnt);
@@ -118,7 +125,12 @@ export default function DashboardPage() {
           setNewsCount(newsRes.value.length);
         }
         if (tradesRes.status === 'fulfilled') {
-          setTradeCount(tradesRes.value.data?.trades?.length ?? 0);
+          const trList: { pnl: number | null }[] = tradesRes.value.data?.trades ?? []
+          setTradeCount(trList.length)
+          const rPnl = trList
+            .filter(t => t.pnl !== null)
+            .reduce((s, t) => s + (t.pnl ?? 0), 0)
+          setRealizedPnl(rPnl)
         }
       } catch { /* silent */ }
     } catch (err) {
@@ -257,17 +269,17 @@ export default function DashboardPage() {
             <span className="text-[9px] text-[#848e9c]">Today's P&L</span>
           </div>
           <p className={`text-sm font-bold font-mono ${todayPnl >= 0 ? 'text-[#0ecb81]' : 'text-[#f6465d]'}`}>
-            {todayPnl >= 0 ? '+' : '-'}{formatCurrency(Math.abs(todayPnl), currency)}
+            {todayPnl >= 0 ? '+' : ''}{fmtCompact(todayPnl)}
           </p>
         </div>
 
         <div className="bg-[#161a1e] border border-[#2b3139] rounded-xl px-3 py-2.5">
           <div className="flex items-center gap-1 mb-0.5">
             <DollarSign size={11} className="text-[#f0b90b]" />
-            <span className="text-[9px] text-[#848e9c]">Unrealized P&L</span>
+            <span className="text-[9px] text-[#848e9c]">Realized P&L</span>
           </div>
-          <p className={`text-sm font-bold font-mono ${unrealizedPnl >= 0 ? 'text-[#0ecb81]' : 'text-[#f6465d]'}`}>
-            {unrealizedPnl >= 0 ? '+' : '-'}{formatCurrency(Math.abs(unrealizedPnl), currency)}
+          <p className={`text-sm font-bold font-mono ${realizedPnl >= 0 ? 'text-[#0ecb81]' : 'text-[#f6465d]'}`}>
+            {realizedPnl >= 0 ? '+' : ''}{fmtCompact(realizedPnl)}
           </p>
         </div>
       </div>
@@ -308,10 +320,10 @@ export default function DashboardPage() {
             <div className="text-right">
               <p
                 className={`text-sm font-bold font-mono ${
-                  unrealizedPnl >= 0 ? 'text-[#0ecb81]' : 'text-[#f6465d]'
+                  realizedPnl >= 0 ? 'text-[#0ecb81]' : 'text-[#f6465d]'
                 }`}
               >
-                {unrealizedPnl >= 0 ? '+' : ''}${Math.abs(unrealizedPnl).toFixed(2).replace(/\B(?=(\d{3})+(?!\d))/g, ",")}
+                {realizedPnl >= 0 ? '+' : ''}{fmtCompact(realizedPnl)}
               </p>
               <button
                 onClick={() => navigate('/app/bots')}
@@ -376,13 +388,14 @@ export default function DashboardPage() {
       {/* Quick Actions */}
       <div>
         <p className="text-xs font-bold text-[#eaecef] mb-3">Quick Actions</p>
-        <div className="grid grid-cols-5 gap-2">
+        <div className="grid grid-cols-3 sm:grid-cols-6 gap-2">
           {[
-            { label: 'Signals',  icon: Lightbulb,     path: '/app/recommendations' },
-            { label: 'History',  icon: Receipt,        path: '/app/transactions' },
-            { label: 'Alert',    icon: Bell,           path: '/app/alerts' },
-            { label: 'Calendar', icon: CalendarDays,   path: '/app/calendar' },
-            { label: 'More',     icon: MoreHorizontal, path: '/app/wallet' },
+            { label: 'Signals',   icon: Lightbulb,    path: '/app/recommendations' },
+            { label: 'History',   icon: Receipt,       path: '/app/transactions' },
+            { label: 'FinBot',    icon: Bot,           path: '/app/bots' },
+            { label: 'Calendar',  icon: CalendarDays,  path: '/app/calendar' },
+            { label: 'Buy Asset', icon: ShoppingBag,   path: '/app/store' },
+            { label: 'Rent VPS',  icon: Server,        path: '/app/store' },
           ].map(({ label, icon: Icon, path }) => (
             <button
               key={label}

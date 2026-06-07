@@ -1261,6 +1261,81 @@ async def get_asset_products(db: Session = Depends(get_db)):
     return DEFAULT_ASSET_PRODUCTS
 
 
+class BuyAssetRequest(BaseModel):
+    asset_id: int
+    name: str
+    price: float
+
+class RentVpsRequest(BaseModel):
+    plan_id: int
+    name: str
+    price: float
+
+
+@router.post("/wallet/buy-asset")
+async def buy_asset_endpoint(data: BuyAssetRequest, current_user=Depends(get_current_user), db: Session = Depends(get_db)):
+    user = db.query(User).filter(User.email == current_user["email"]).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    if (user.balance_usdt or 0) < data.price:
+        raise HTTPException(status_code=400, detail="Insufficient balance")
+    user.balance_usdt = (user.balance_usdt or 0) - data.price
+    tx = Transaction(
+        user_id=user.id,
+        tx_type="asset",
+        method="balance",
+        asset=data.name,
+        amount_usdt=data.price,
+        fee=0.0,
+        status="pending",
+        note=f"Asset purchase: {data.name}",
+    )
+    db.add(tx)
+    db.commit()
+    db.refresh(tx)
+    _fire_admin_telegram_alert(
+        f"🪙 *New Asset Purchase*\n\n"
+        f"👤 User: `{user.email}`\n"
+        f"💎 Asset: `{data.name}`\n"
+        f"💰 Price: `${data.price:,.2f} USDT`\n"
+        f"🔍 Status → *Pending Approval*",
+        db=db,
+    )
+    return _tx_dict(tx)
+
+
+@router.post("/wallet/rent-vps")
+async def rent_vps_endpoint(data: RentVpsRequest, current_user=Depends(get_current_user), db: Session = Depends(get_db)):
+    user = db.query(User).filter(User.email == current_user["email"]).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    if (user.balance_usdt or 0) < data.price:
+        raise HTTPException(status_code=400, detail="Insufficient balance")
+    user.balance_usdt = (user.balance_usdt or 0) - data.price
+    tx = Transaction(
+        user_id=user.id,
+        tx_type="vps",
+        method="balance",
+        asset="USDT",
+        amount_usdt=data.price,
+        fee=0.0,
+        status="pending",
+        note=f"VPS rental: {data.name}",
+    )
+    db.add(tx)
+    db.commit()
+    db.refresh(tx)
+    _fire_admin_telegram_alert(
+        f"🖥️ *New VPS Rental*\n\n"
+        f"👤 User: `{user.email}`\n"
+        f"🖥️ Plan: `{data.name}`\n"
+        f"💰 Price: `${data.price:,.2f} USDT/mo`\n"
+        f"🔍 Status → *Pending Approval*",
+        db=db,
+    )
+    return _tx_dict(tx)
+
+
 @router.get("/wallet/pricing-plans")
 async def get_pricing_plans(db: Session = Depends(get_db)):
     import json as _json
@@ -1669,7 +1744,7 @@ async def reject_transaction(data: RejectTransaction, db: Session = Depends(get_
             return {"status": "rejected"}
         raise HTTPException(status_code=404, detail="Transaction not found")
     user = db.query(User).filter(User.id == tx.user_id).first()
-    if tx.tx_type == "withdrawal" and tx.status == "pending":
+    if tx.tx_type in ("withdrawal", "vps", "asset") and tx.status == "pending":
         # Refund the held amount
         if user:
             user.balance_usdt = (user.balance_usdt or 0) + tx.amount_usdt

@@ -23,6 +23,7 @@ import PricingPage from './pages/PricingPage'
 import NotificationsPage from './pages/NotificationsPage'
 import NewsPage from './pages/NewsPage'
 import ChatFinPage from './pages/ChatFinPage'
+import StorePage from './pages/StorePage'
 
 import { useAuthStore } from './store/authStore'
 import DashboardLayout from './layouts/DashboardLayout'
@@ -115,6 +116,7 @@ export default function App() {
           <Route path="subscribe"       element={<SubscribePayPage />} />
           <Route path="pricing"         element={<PricingPage />} />
           <Route path="notifications"   element={<NotificationsPage />} />
+          <Route path="store"           element={<StorePage />} />
         </Route>
         <Route path="/subscribe" element={<Navigate to="/app/subscribe" replace />} />
         <Route path="/dashboard" element={<Navigate to="/app/dashboard" replace />} />
