@@ -21,7 +21,7 @@ import {
   Key, MessageSquare, Activity, Wallet, Save, RefreshCw,
   Edit3, CreditCard, Eye, Gift, Trash2, ToggleLeft, ToggleRight,
   Share2, Copy, RotateCcw, Megaphone, Image, Plus, Link2, ExternalLink,
-  Server, ShoppingBag, Package, DollarSign, X, Star, ChevronDown, Clock, Monitor,
+  Server, ShoppingBag, Package, DollarSign, X, Star, ChevronDown, Clock, Monitor, Download,
 } from 'lucide-react'
 import { adminGetUserActivity, adminClearUserActivity } from '../lib/api'
 
