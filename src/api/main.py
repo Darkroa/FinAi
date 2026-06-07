@@ -124,8 +124,53 @@ async def startup_event():
                 "ALTER TABLE users ADD COLUMN IF NOT EXISTS subscription_auto_renew BOOLEAN DEFAULT TRUE",
                 "ALTER TABLE users ADD COLUMN IF NOT EXISTS last_login_at TIMESTAMP",
                 "ALTER TABLE users ADD COLUMN IF NOT EXISTS last_login_ip VARCHAR(100)",
+                "ALTER TABLE users ADD COLUMN IF NOT EXISTS first_name VARCHAR",
+                "ALTER TABLE users ADD COLUMN IF NOT EXISTS middle_name VARCHAR",
+                "ALTER TABLE users ADD COLUMN IF NOT EXISTS last_name VARCHAR",
+                "ALTER TABLE users ADD COLUMN IF NOT EXISTS username VARCHAR",
+                "ALTER TABLE users ADD COLUMN IF NOT EXISTS phone VARCHAR",
+                "ALTER TABLE users ADD COLUMN IF NOT EXISTS dob VARCHAR",
+                "ALTER TABLE users ADD COLUMN IF NOT EXISTS sex VARCHAR",
+                "ALTER TABLE users ADD COLUMN IF NOT EXISTS address VARCHAR",
+                "ALTER TABLE users ADD COLUMN IF NOT EXISTS country VARCHAR",
+                "ALTER TABLE users ADD COLUMN IF NOT EXISTS profile_photo VARCHAR",
+                "ALTER TABLE users ADD COLUMN IF NOT EXISTS email_verify_code VARCHAR",
+                "ALTER TABLE users ADD COLUMN IF NOT EXISTS email_verify_expires TIMESTAMP",
+                "ALTER TABLE users ADD COLUMN IF NOT EXISTS profile_locked BOOLEAN DEFAULT FALSE",
+                "ALTER TABLE users ADD COLUMN IF NOT EXISTS account_tier INTEGER DEFAULT 0",
+                "ALTER TABLE users ADD COLUMN IF NOT EXISTS kyc_status VARCHAR DEFAULT 'none'",
+                "ALTER TABLE users ADD COLUMN IF NOT EXISTS kyc_submitted_at TIMESTAMP",
+                "ALTER TABLE users ADD COLUMN IF NOT EXISTS balance_usdt FLOAT DEFAULT 0.0",
+                "ALTER TABLE users ADD COLUMN IF NOT EXISTS exchange_connections TEXT",
             ]:
                 _conn.execute(_text(stmt))
+            _conn.commit()
+
+            # Fix JSON/JSONB columns that may have been created as TEXT
+            for _fix in [
+                """
+                DO $$ BEGIN
+                  IF (SELECT data_type FROM information_schema.columns
+                      WHERE table_name='users' AND column_name='exchange_connections') = 'text' THEN
+                    ALTER TABLE users ALTER COLUMN exchange_connections TYPE JSONB
+                    USING CASE WHEN exchange_connections IS NULL OR exchange_connections=''
+                               THEN '[]'::jsonb ELSE exchange_connections::jsonb END;
+                  END IF;
+                END $$
+                """,
+                """
+                DO $$ BEGIN
+                  IF (SELECT data_type FROM information_schema.columns
+                      WHERE table_name='users' AND column_name='withdrawal_methods') = 'text' THEN
+                    ALTER TABLE users ALTER COLUMN withdrawal_methods TYPE JSONB
+                    USING CASE WHEN withdrawal_methods IS NULL OR TRIM(withdrawal_methods)=''
+                               THEN '[]'::jsonb ELSE withdrawal_methods::jsonb END;
+                  END IF;
+                END $$
+                """,
+                "UPDATE users SET exchange_connections = '[]'::jsonb WHERE exchange_connections IS NULL",
+            ]:
+                _conn.execute(_text(_fix))
             _conn.commit()
 
             import secrets as _sec, string as _str
