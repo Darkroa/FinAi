@@ -2319,7 +2319,7 @@ export default function AdminPage() {
                 {activityLogs.length} entries — login events, IPs, and actions. Alerts sent to admin Telegram on every login.
               </p>
             </div>
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 flex-wrap">
               <button
                 onClick={async () => {
                   setActivityLoading(true)
@@ -2333,19 +2333,49 @@ export default function AdminPage() {
                 <RefreshCw size={12} className={activityLoading ? 'animate-spin' : ''} /> Refresh
               </button>
               {activityLogs.length > 0 && (
-                <button
-                  onClick={async () => {
-                    if (!confirm(`Clear all ${activityLogs.length} activity log entries? This cannot be undone.`)) return
-                    try {
-                      await adminClearUserActivity()
-                      setActivityLogs([])
-                      toast.success('Activity log cleared')
-                    } catch { toast.error('Failed to clear activity log') }
-                  }}
-                  className="flex items-center gap-1.5 px-3 py-2 text-xs text-[#f6465d] hover:text-white hover:bg-[#f6465d] border border-[#f6465d]/30 hover:border-[#f6465d] rounded-xl transition font-medium"
-                >
-                  <Trash2 size={12} /> Clear All
-                </button>
+                <>
+                  <button
+                    onClick={() => {
+                      const headers = ['ID', 'User Email', 'User ID', 'Action', 'IP Address', 'Device / User-Agent', 'Details', 'Timestamp (UTC)']
+                      const rows = activityLogs.map(l => [
+                        l.id,
+                        l.user_email ?? '',
+                        l.user_id,
+                        l.action,
+                        l.ip_address ?? '',
+                        (l.user_agent ?? '').replace(/"/g, "'"),
+                        (l.details ?? '').replace(/"/g, "'"),
+                        l.created_at ?? '',
+                      ])
+                      const csv = [headers, ...rows]
+                        .map(r => r.map(v => `"${v}"`).join(','))
+                        .join('\n')
+                      const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' })
+                      const url = URL.createObjectURL(blob)
+                      const a = document.createElement('a')
+                      a.href = url
+                      a.download = `finai-activity-log-${new Date().toISOString().slice(0, 10)}.csv`
+                      a.click()
+                      URL.revokeObjectURL(url)
+                    }}
+                    className="flex items-center gap-1.5 px-3 py-2 text-xs text-[#0ecb81] hover:text-white hover:bg-[#0ecb81] border border-[#0ecb81]/30 hover:border-[#0ecb81] rounded-xl transition font-medium"
+                  >
+                    <Download size={12} /> Export CSV
+                  </button>
+                  <button
+                    onClick={async () => {
+                      if (!confirm(`Clear all ${activityLogs.length} activity log entries? This cannot be undone.`)) return
+                      try {
+                        await adminClearUserActivity()
+                        setActivityLogs([])
+                        toast.success('Activity log cleared')
+                      } catch { toast.error('Failed to clear activity log') }
+                    }}
+                    className="flex items-center gap-1.5 px-3 py-2 text-xs text-[#f6465d] hover:text-white hover:bg-[#f6465d] border border-[#f6465d]/30 hover:border-[#f6465d] rounded-xl transition font-medium"
+                  >
+                    <Trash2 size={12} /> Clear All
+                  </button>
+                </>
               )}
             </div>
           </div>
