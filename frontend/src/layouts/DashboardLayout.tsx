@@ -6,7 +6,7 @@ import {
   ShieldCheck, LogOut, Bell, Bot,
   X, User, MessageSquare,
   Sun, Moon, Crown, BellRing, Newspaper, MessageCircle,
-  Home, Settings,
+  Home, Settings, Megaphone,
 } from 'lucide-react'
 import { cn } from '../lib/utils'
 import { getUserNotifications, markAllNotificationsRead, clearReadNotifications } from '../lib/api'
@@ -34,6 +34,7 @@ const TIER_META = [
 const sideNavItems = [
   { to: '/app/dashboard',     icon: Home,          tKey: 'nav.dashboard' },
   { to: '/app/wallet',        icon: Wallet,        tKey: 'nav.wallet' },
+  { to: '/app/ads',           icon: Megaphone,     tKey: 'nav.ads' },
   { to: '/app/chat',          icon: MessageCircle, tKey: 'nav.chatfin' },
   { to: '/app/news',          icon: Newspaper,     tKey: 'nav.news' },
   { to: '/app/notifications', icon: BellRing,      tKey: 'nav.notifications' },

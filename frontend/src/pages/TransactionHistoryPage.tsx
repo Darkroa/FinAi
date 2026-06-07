@@ -48,6 +48,14 @@ function statusBadge(s: string) {
 }
 function isIn(type: string) { return ['deposit', 'p2p_receive'].includes(type); }
 function fmt(n: number) { return n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }
+function fmtK(n: number): string {
+  const abs = Math.abs(n);
+  const sign = n < 0 ? '-' : '';
+  if (abs >= 1_000_000_000) return `${sign}$${(abs / 1_000_000_000).toFixed(2)}B`;
+  if (abs >= 1_000_000)     return `${sign}$${(abs / 1_000_000).toFixed(2)}M`;
+  if (abs >= 10_000)        return `${sign}$${(abs / 1_000).toFixed(2)}K`;
+  return `${sign}$${fmt(abs)}`;
+}
 
 type PageTab = 'transactions' | 'bot_history' | 'trade_history';
 
@@ -149,15 +157,15 @@ export default function TransactionHistoryPage() {
           <div className="grid grid-cols-3 gap-3">
             <div className="bg-[#161a1e] border border-[#2b3139] rounded-xl p-4">
               <p className="text-[10px] text-[#848e9c] mb-1.5 font-medium uppercase tracking-wide">Deposited</p>
-              <p className="text-lg font-bold font-mono text-[#0ecb81]">+${fmt(totalIn)}</p>
+              <p className="text-base font-bold font-mono text-[#0ecb81] truncate">+{fmtK(totalIn)}</p>
             </div>
             <div className="bg-[#161a1e] border border-[#2b3139] rounded-xl p-4">
               <p className="text-[10px] text-[#848e9c] mb-1.5 font-medium uppercase tracking-wide">Withdrawn</p>
-              <p className="text-lg font-bold font-mono text-[#f6465d]">-${fmt(totalOut)}</p>
+              <p className="text-base font-bold font-mono text-[#f6465d] truncate">-{fmtK(totalOut)}</p>
             </div>
             <div className="bg-[#161a1e] border border-[#2b3139] rounded-xl p-4">
               <p className="text-[10px] text-[#848e9c] mb-1.5 font-medium uppercase tracking-wide">Total Txs</p>
-              <p className="text-lg font-bold font-mono text-[#eaecef]">{txs.length}</p>
+              <p className="text-base font-bold font-mono text-[#eaecef]">{txs.length}</p>
             </div>
           </div>
 
@@ -249,19 +257,19 @@ export default function TransactionHistoryPage() {
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
             <div className="bg-[#161a1e] border border-[#2b3139] rounded-xl p-4">
               <p className="text-[10px] text-[#848e9c] mb-1.5 font-medium uppercase tracking-wide">Total Trades</p>
-              <p className="text-lg font-bold font-mono text-[#eaecef]">{botTrades.length}</p>
+              <p className="text-base font-bold font-mono text-[#eaecef]">{botTrades.length.toLocaleString()}</p>
             </div>
             <div className="bg-[#161a1e] border border-[#2b3139] rounded-xl p-4">
               <p className="text-[10px] text-[#848e9c] mb-1.5 font-medium uppercase tracking-wide">Realized P&L</p>
-              <p className={`text-lg font-bold font-mono ${botPnl >= 0 ? 'text-[#0ecb81]' : 'text-[#f6465d]'}`}>{botPnl >= 0 ? '+' : ''}${fmt(botPnl)}</p>
+              <p className={`text-base font-bold font-mono truncate ${botPnl >= 0 ? 'text-[#0ecb81]' : 'text-[#f6465d]'}`}>{botPnl >= 0 ? '+' : ''}{fmtK(botPnl)}</p>
             </div>
             <div className="bg-[#161a1e] border border-[#2b3139] rounded-xl p-4">
               <p className="text-[10px] text-[#848e9c] mb-1.5 font-medium uppercase tracking-wide">Win Rate</p>
-              <p className="text-lg font-bold font-mono text-[#eaecef]">{botClosedTrades.length > 0 ? ((botWins / botClosedTrades.length) * 100).toFixed(1) : '—'}%</p>
+              <p className="text-base font-bold font-mono text-[#eaecef]">{botClosedTrades.length > 0 ? ((botWins / botClosedTrades.length) * 100).toFixed(1) : '—'}%</p>
             </div>
             <div className="bg-[#161a1e] border border-[#2b3139] rounded-xl p-4">
               <p className="text-[10px] text-[#848e9c] mb-1.5 font-medium uppercase tracking-wide">Closed Trades</p>
-              <p className="text-lg font-bold font-mono text-[#eaecef]">{botClosedTrades.length}</p>
+              <p className="text-base font-bold font-mono text-[#eaecef]">{botClosedTrades.length.toLocaleString()}</p>
             </div>
           </div>
 
@@ -339,19 +347,19 @@ export default function TransactionHistoryPage() {
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
             <div className="bg-[#161a1e] border border-[#2b3139] rounded-xl p-4">
               <p className="text-[10px] text-[#848e9c] mb-1.5 font-medium uppercase tracking-wide">Total Trades</p>
-              <p className="text-lg font-bold font-mono text-[#eaecef]">{manualTrades.length}</p>
+              <p className="text-base font-bold font-mono text-[#eaecef]">{manualTrades.length.toLocaleString()}</p>
             </div>
             <div className="bg-[#161a1e] border border-[#2b3139] rounded-xl p-4">
               <p className="text-[10px] text-[#848e9c] mb-1.5 font-medium uppercase tracking-wide">Volume (USDT)</p>
-              <p className="text-lg font-bold font-mono text-[#eaecef]">${fmt(manualVol)}</p>
+              <p className="text-base font-bold font-mono text-[#eaecef] truncate">{fmtK(manualVol)}</p>
             </div>
             <div className="bg-[#161a1e] border border-[#2b3139] rounded-xl p-4">
               <p className="text-[10px] text-[#848e9c] mb-1.5 font-medium uppercase tracking-wide">Realized P&L</p>
-              <p className={`text-lg font-bold font-mono ${manualPnl >= 0 ? 'text-[#0ecb81]' : 'text-[#f6465d]'}`}>{manualPnl >= 0 ? '+' : ''}${fmt(manualPnl)}</p>
+              <p className={`text-base font-bold font-mono truncate ${manualPnl >= 0 ? 'text-[#0ecb81]' : 'text-[#f6465d]'}`}>{manualPnl >= 0 ? '+' : ''}{fmtK(manualPnl)}</p>
             </div>
             <div className="bg-[#161a1e] border border-[#2b3139] rounded-xl p-4">
               <p className="text-[10px] text-[#848e9c] mb-1.5 font-medium uppercase tracking-wide">Closed</p>
-              <p className="text-lg font-bold font-mono text-[#eaecef]">{manualTrades.filter(t => t.pnl !== null).length}</p>
+              <p className="text-base font-bold font-mono text-[#eaecef]">{manualTrades.filter(t => t.pnl !== null).length.toLocaleString()}</p>
             </div>
           </div>
 

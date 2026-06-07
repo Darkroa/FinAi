@@ -17,6 +17,7 @@ export const translations: Record<string, Record<LangCode, string>> = {
   'nav.settings':       { 'en-US': 'Settings',        'en-GB': 'Settings',        'fr': 'Paramètres',      'es': 'Configuración', 'de': 'Einstellungen', 'ar': 'الإعدادات',   'zh': '设置',    'pt': 'Configurações' },
   'nav.support':        { 'en-US': 'Support',         'en-GB': 'Support',         'fr': 'Assistance',      'es': 'Soporte',       'de': 'Support',      'ar': 'الدعم',        'zh': '支持',    'pt': 'Suporte' },
   'nav.pricing':        { 'en-US': 'Pricing',         'en-GB': 'Pricing',         'fr': 'Tarifs',          'es': 'Precios',       'de': 'Preise',       'ar': 'الأسعار',      'zh': '价格',    'pt': 'Preços' },
+  'nav.ads':            { 'en-US': 'Ads',             'en-GB': 'Ads',             'fr': 'Annonces',        'es': 'Anuncios',      'de': 'Anzeigen',     'ar': 'الإعلانات',    'zh': '广告',    'pt': 'Anúncios' },
   'nav.admin':          { 'en-US': 'Admin Panel',     'en-GB': 'Admin Panel',     'fr': 'Admin',           'es': 'Panel Admin',   'de': 'Admin',        'ar': 'لوحة المدير',  'zh': '管理员',  'pt': 'Painel Admin' },
   'nav.signout':        { 'en-US': 'Sign Out',        'en-GB': 'Sign Out',        'fr': 'Se déconnecter',  'es': 'Cerrar sesión', 'de': 'Abmelden',     'ar': 'تسجيل الخروج', 'zh': '退出',    'pt': 'Sair' },
 
