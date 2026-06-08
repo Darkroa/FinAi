@@ -1,3 +1,5 @@
+// Add this at the very top of the file
+declare module 'react-qr-code';
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { useAuthStore } from '../store/authStore'
 import { useLanguage } from '../contexts/LanguageContext'
