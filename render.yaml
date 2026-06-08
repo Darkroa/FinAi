@@ -10,27 +10,40 @@ databases:
 
 # ==================== SERVICES ====================
 services:
-  # Redis (Internal only - recommended)
+  # Redis (for WebSocket / caching)
   - type: redis
     name: finai-redis
     region: oregon
     plan: free
     ipAllowList:
       - source: 0.0.0.0/0
-        description: "Allow internal services + controlled external access if needed"
+        description: "Allow internal services"
 
-  # FastAPI Web Service
+  # ==================== FRONTEND (React) ====================
   - type: web
-    name: finai-api
-    runtime: docker
-    dockerfilePath: Dockerfile
-    dockerContext: .
-    dockerCommand: uvicorn src.api.main:app --host 0.0.0.0 --port $PORT
+    name: finai-frontend
+    env: static
     region: oregon
     plan: free
-    healthCheckPath: /api/health
-    autoDeploy: true
+    rootDir: frontend
+    buildCommand: npm install && npm run build
+    staticPublishPath: ./dist
+    pullRequestPreviewsEnabled: true
+    envVars:
+      - key: VITE_API_URL
+        value: https://finai-backend.onrender.com   # Change to your backend URL after deploy
+      - key: VITE_WS_URL
+        value: wss://finai-backend.onrender.com
 
+  # ==================== BACKEND (Python) ====================
+  - type: web
+    name: finai-backend
+    env: python
+    region: oregon
+    plan: free
+    rootDir: .
+    buildCommand: pip install -r requirements.txt
+    startCommand: bash start.sh
     envVars:
       - key: DATABASE_URL
         fromDatabase:
@@ -38,53 +51,12 @@ services:
           property: connectionString
       - key: REDIS_URL
         fromService:
-          type: redis
           name: finai-redis
+          type: redis
           property: connectionString
-      - key: GROK_API_KEY
-        sync: false
-      - key: OPENAI_API_KEY
-        sync: false
-      - key: JWT_SECRET_KEY
+      - key: FRONTEND_URL
+        value: https://finai-frontend.onrender.com
+      - key: SECRET_KEY
         generateValue: true
-      - key: TWILIO_ACCOUNT_SID
-        sync: false
-      - key: TWILIO_AUTH_TOKEN
-        sync: false
-      - key: ENVIRONMENT
-        value: production
-      - key: CORS_ORIGINS
-        value: "*"
-
-  # Celery Worker
-  - type: worker
-    name: finai-worker
-    runtime: docker
-    dockerfilePath: Dockerfile
-    dockerContext: .
-    dockerCommand: celery -A src.celery_app.tasks worker --loglevel=info --beat
-    region: oregon
-    plan: free
-
-    envVars:
-      - key: DATABASE_URL
-        fromDatabase:
-          name: finai-postgres
-          property: connectionString
-      - key: REDIS_URL
-        fromService:
-          type: redis
-          name: finai-redis
-          property: connectionString
-      - key: GROK_API_KEY
-        sync: false
-      - key: OPENAI_API_KEY
-        sync: false
-      - key: JWT_SECRET_KEY
-        sync: false
-      - key: TWILIO_ACCOUNT_SID
-        sync: false
-      - key: TWILIO_AUTH_TOKEN
-        sync: false
-      - key: ENVIRONMENT
-        value: production
+      - key: DEBUG
+        value: "False"
