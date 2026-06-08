@@ -16,12 +16,12 @@ services:
       - source: 0.0.0.0/0
         description: "Allow internal services"
 
-    # ==================== FRONTEND ====================
+      # ==================== FRONTEND (React) ====================
   - type: web
     name: finai-frontend
     env: static
     rootDir: frontend
-    buildCommand: rm -f package-lock.json && npm config set registry https://registry.npmjs.org/ && npm install && npm run build
+    buildCommand: npm config set registry https://registry.npmjs.org/ && rm -f package-lock.json && npm install && npm install --save-dev @types/react-qr-code && npm run build
     staticPublishPath: ./dist
     pullRequestPreviewsEnabled: true
     envVars:
@@ -29,7 +29,6 @@ services:
         value: https://finai-backend.onrender.com
       - key: VITE_WS_URL
         value: wss://finai-backend.onrender.com
-
   # ==================== BACKEND (Python Web Service) ====================
   - type: web
     name: finai-backend
