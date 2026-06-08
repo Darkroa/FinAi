@@ -19,4 +19,4 @@ echo "Backend started (PID: $BACKEND_PID)"
 sleep 5
 
 # Start React frontend (Vite) on port 5000
-cd /home/runner/workspace/frontend && exec ./node_modules/.bin/vite --port 5000 2>&1
+cd frontend && exec ./node_modules/.bin/vite --port 5000 2>&1
