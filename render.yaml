@@ -8,7 +8,7 @@ databases:
 
 # ==================== SERVICES ====================
 services:
-  # Redis (for WebSocket / caching) - Free tier
+  # Redis (Free tier)
   - type: redis
     name: finai-redis
     plan: free
@@ -16,11 +16,11 @@ services:
       - source: 0.0.0.0/0
         description: "Allow internal services"
 
-  # ==================== FRONTEND (React) ====================
+  # ==================== FRONTEND (React Static Site) ====================
   - type: web
     name: finai-frontend
     env: static
-    plan: free
+    # plan: free   ← Remove this line (Static sites don't use 'plan')
     rootDir: frontend
     buildCommand: npm install && npm run build
     staticPublishPath: ./dist
@@ -31,7 +31,7 @@ services:
       - key: VITE_WS_URL
         value: wss://finai-backend.onrender.com
 
-  # ==================== BACKEND (Python) ====================
+  # ==================== BACKEND (Python Web Service) ====================
   - type: web
     name: finai-backend
     env: python
