@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { useAuthStore } from '../store/authStore'
 import {
   BarChart2, ChevronDown, Minus, Plus, TrendingUp, TrendingDown,
-  Wifi, WifiOff, X, RefreshCw, ArrowLeft,
+  Wifi, X, RefreshCw, ArrowLeft,
 } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { getOpenPositions, closeManualTrade, executeTrade } from '../lib/api'
@@ -67,7 +67,7 @@ export default function OpenPositionsPage() {
   const [showPairs, setShowP] = useState(false)
   const [showBuySell, setShowBuySell] = useState(true)
   const [lotSize, setLotSize] = useState('0.01')
-  const [leverageIdx, setLeverageIdx] = useState(0)
+  const [leverageIdx, ] = useState(0)
   const leverage = LEVERAGE_STEPS[leverageIdx]
   const [orderLoading, setOrderLoading] = useState(false)
   const holdTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)

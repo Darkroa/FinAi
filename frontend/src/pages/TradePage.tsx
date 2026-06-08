@@ -5,7 +5,7 @@ import {
   ArrowUpDown, TrendingUp, TrendingDown, ChevronDown, ChevronUp,
   Wifi, WifiOff, Link2, RefreshCw, Clock, CheckCircle2, X,
   Target, AlertTriangle, ArrowRight, Zap, Minus, Plus,
-  MessageSquare, Tv, Bot, Settings, Radio, BarChart2, Maximize2,
+  MessageSquare, Tv, Bot, Settings, BarChart2, Maximize2,
 } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { useAuthStore } from '../store/authStore'
@@ -354,8 +354,6 @@ export default function TradePage() {
   const [showBuySell, setShowBuySell] = useState(true)
   const [showEntryLines, setShowEntryLines] = useState(() => localStorage.getItem('finai-entry-lines') !== 'false')
   const [orderFormCollapsed, setOrderFormCollapsed] = useState(false)
-  const chartContainerRef = useRef<HTMLDivElement>(null)
-  const holdTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   // Data state
   const [orderLoading, setLoading]  = useState(false)
@@ -451,7 +449,6 @@ export default function TradePage() {
   const selectedConn = exchanges.find(e => e.label === selExchange)
 
   // P&L ticker: live balance vs stored user balance
-  const pnlDelta = wsBalance !== null ? wsBalance - userBalance : null
 
   const handleTrade = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -658,7 +655,7 @@ export default function TradePage() {
       <div className={`grid grid-cols-1 gap-3 ${chatCollapsed ? 'lg:grid-cols-1' : 'lg:grid-cols-3'}`}>
 
         {/* TradingView chart */}
-        <div ref={chartContainerRef} className={`bg-[#161a1e] border border-[#2b3139] rounded-xl overflow-hidden flex flex-col ${chatCollapsed ? 'lg:col-span-1' : 'lg:col-span-2'}`}>
+        <div className={`bg-[#161a1e] border border-[#2b3139] rounded-xl overflow-hidden flex flex-col ${chatCollapsed ? 'lg:col-span-1' : 'lg:col-span-2'}`}>
           {/* Chart toolbar */}
           <div className="flex items-center gap-2 px-4 py-2.5 border-b border-[#2b3139] flex-shrink-0">
             {/* TV brand */}
@@ -717,7 +714,7 @@ export default function TradePage() {
                 if (document.fullscreenElement) {
                   document.exitFullscreen?.()
                 } else {
-                  chartContainerRef.current?.requestFullscreen?.()
+         
                 }
               }}
               title="Fullscreen chart"
