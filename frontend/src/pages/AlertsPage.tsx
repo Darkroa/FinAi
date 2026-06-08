@@ -153,7 +153,15 @@ export default function AlertsPage() {
           </button>
         </div>
       </div>
-
+      {/* Info banner */}
+      <div className="flex items-start gap-2.5 bg-[#f0b90b]/5 border border-[#f0b90b]/15 rounded-xl px-4 py-3">
+        <Bell size={13} className="text-[#f0b90b] flex-shrink-0 mt-0.5" />
+        <p className="text-xs text-[#848e9c]">
+          Alerts fire in-app and optionally via Telegram / WhatsApp when price hits your target.
+          Checked every 60 seconds against live prices.
+          Connect channels in <a href="/app/profile" className="text-[#f0b90b] underline">Profile → FinAPI</a>.
+        </p>
+      </div>
       {/* Live price bar */}
       <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
         {SYMBOLS.slice(0, 6).map(sym => {
@@ -173,15 +181,7 @@ export default function AlertsPage() {
         })}
       </div>
 
-      {/* Info banner */}
-      <div className="flex items-start gap-2.5 bg-[#f0b90b]/5 border border-[#f0b90b]/15 rounded-xl px-4 py-3">
-        <Bell size={13} className="text-[#f0b90b] flex-shrink-0 mt-0.5" />
-        <p className="text-xs text-[#848e9c]">
-          Alerts fire in-app and optionally via Telegram / WhatsApp when price hits your target.
-          Checked every 60 seconds against live prices.
-          Connect channels in <a href="/app/profile" className="text-[#f0b90b] underline">Profile → FinAPI</a>.
-        </p>
-      </div>
+
 
       {/* Create form */}
       {showForm && (

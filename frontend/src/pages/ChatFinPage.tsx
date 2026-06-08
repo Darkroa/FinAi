@@ -176,7 +176,7 @@ export default function ChatFinPage() {
           </p>
           <div className="flex flex-col sm:flex-row gap-2 justify-center">
             <button
-              onClick={() => navigate('/')}
+              onClick={() => navigate('/app/pricing')}
               className="inline-flex items-center justify-center gap-2 bg-[#f0b90b] hover:bg-[#d4a30a] text-black font-bold px-6 py-2.5 rounded-xl text-sm transition shadow-lg shadow-[#f0b90b]/20"
             >
               <Zap size={14} />

@@ -393,7 +393,6 @@ export default function DashboardPage() {
           {[
             { label: 'Signals',   icon: Lightbulb,    path: '/app/recommendations' },
             { label: 'History',   icon: Receipt,       path: '/app/transactions' },
-            { label: 'FinBot',    icon: Bot,           path: '/app/bots' },
             { label: 'Calendar',  icon: CalendarDays,  path: '/app/calendar' },
        { label: 'Alert',    icon: Bell,           path: '/app/alerts' },
             { label: 'Buy Asset', icon: ShoppingBag,   path: '/app/store' },
