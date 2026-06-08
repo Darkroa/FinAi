@@ -1,5 +1,3 @@
-version: 1
-
 # ==================== DATABASES ====================
 databases:
   - name: finai-postgres
@@ -10,9 +8,10 @@ databases:
 
 # ==================== SERVICES ====================
 services:
-  # Redis (for WebSocket / caching)
+  # Redis (for WebSocket / caching) - Free tier
   - type: redis
     name: finai-redis
+    plan: free
     ipAllowList:
       - source: 0.0.0.0/0
         description: "Allow internal services"
@@ -28,7 +27,7 @@ services:
     pullRequestPreviewsEnabled: true
     envVars:
       - key: VITE_API_URL
-        value: https://finai-backend.onrender.com   # Change to your backend URL after deploy
+        value: https://finai-backend.onrender.com
       - key: VITE_WS_URL
         value: wss://finai-backend.onrender.com
 
