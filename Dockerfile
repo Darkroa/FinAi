@@ -15,4 +15,4 @@ COPY . .
 EXPOSE 8000
 
 # Run migrations + start server (adjust as needed)
-CMD ["bash", "start.sh"]
+CMD ["bash", "setup.sh"]
