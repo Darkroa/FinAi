@@ -26,6 +26,8 @@ interface Purchase {
   start_date?: string; end_date?: string; roi_percent?: number
 }
 
+type StoreTab = 'asset' | 'vps'
+
 function statusBadge(s: string) {
   if (s === 'completed' || s === 'approved')
     return <span className="inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full bg-[#0ecb81]/10 text-[#0ecb81] font-medium"><CheckCircle size={9} />Active</span>
@@ -56,7 +58,6 @@ function RoiChart({ roi }: { roi: number }) {
   }
   const last = pts[pts.length - 1]
   const fillD = d + ` L ${last[0].toFixed(1)} ${H} L ${pts[0][0].toFixed(1)} ${H} Z`
-
   return (
     <div className="flex items-center gap-2">
       <svg width={W} height={H} viewBox={`0 0 ${W} ${H}`} className="flex-shrink-0">
@@ -78,6 +79,7 @@ function RoiChart({ roi }: { roi: number }) {
 export default function StorePage() {
   const { user, setUser } = useAuthStore()
   const { currency } = useLanguage()
+  const [tab, setTab]                     = useState<StoreTab>('asset')
   const [vpsPlans, setVpsPlans]           = useState<VpsPlan[]>([])
   const [assetProducts, setAssetProducts] = useState<AssetProduct[]>([])
   const [purchases, setPurchases]         = useState<Purchase[]>([])
@@ -85,8 +87,7 @@ export default function StorePage() {
   const [buyingId, setBuyingId]           = useState<number | null>(null)
   const [rentingId, setRentingId]         = useState<number | null>(null)
   const [closingId, setClosingId]         = useState<number | null>(null)
-  const vpsRef   = useRef<HTMLDivElement>(null)
-  const assetRef = useRef<HTMLDivElement>(null)
+  const catalogRef = useRef<HTMLDivElement>(null)
 
   const balance = user?.balance_usdt ?? 0
 
@@ -148,14 +149,17 @@ export default function StorePage() {
   }
 
   const activePurchases  = purchases.filter(p => p.status === 'completed' || p.status === 'approved' || p.status === 'pending')
+  const activeAssets     = activePurchases.filter(p => p.tx_type === 'asset')
+  const activeVps        = activePurchases.filter(p => p.tx_type === 'vps')
   const closedPurchases  = purchases.filter(p => p.status === 'cancelled' || p.status === 'rejected')
-
   const totalInvested    = activePurchases.reduce((s, p) => s + p.amount_usdt, 0)
   const unrealizedPL     = activePurchases.reduce((s, p) => s + p.amount_usdt * ((p.roi_percent ?? 0) / 100), 0)
   const realizedPL       = closedPurchases.reduce((s, p) => s + p.amount_usdt * ((p.roi_percent ?? 0) / 100), 0)
   const avgRoi           = activePurchases.length > 0
-    ? activePurchases.reduce((s, p) => s + (p.roi_percent ?? 0), 0) / activePurchases.length
-    : 0
+    ? activePurchases.reduce((s, p) => s + (p.roi_percent ?? 0), 0) / activePurchases.length : 0
+
+  const tabPurchases = tab === 'asset' ? activeAssets : activeVps
+  const tabProducts  = tab === 'asset' ? assetProducts : vpsPlans
 
   return (
     <div className="space-y-4">
@@ -169,20 +173,10 @@ export default function StorePage() {
           <p className="text-xs text-[#848e9c] font-medium mb-1">Available Balance</p>
           <p className="text-3xl font-bold font-mono text-[#eaecef]">{formatCurrency(balance, currency)}</p>
           <p className="text-xs text-[#848e9c] mt-1">USDT · Used for purchases &amp; rentals</p>
-          <div className="flex gap-2 mt-4">
-            <button onClick={() => vpsRef.current?.scrollIntoView({ behavior: 'smooth' })}
-              className="flex items-center gap-1.5 text-xs bg-[#0ecb81]/10 hover:bg-[#0ecb81]/20 border border-[#0ecb81]/25 text-[#0ecb81] px-4 py-2 rounded-xl font-medium transition">
-              <Server size={12} /> Rent VPS
-            </button>
-            <button onClick={() => assetRef.current?.scrollIntoView({ behavior: 'smooth' })}
-              className="flex items-center gap-1.5 text-xs bg-[#f0b90b]/10 hover:bg-[#f0b90b]/20 border border-[#f0b90b]/25 text-[#f0b90b] px-4 py-2 rounded-xl font-medium transition">
-              <TrendingUp size={12} /> Asset
-            </button>
-          </div>
         </div>
       </div>
 
-      {/* ROI Earnings Calculator */}
+      {/* ROI Calculator */}
       <div className="bg-[#161a1e] border border-[#2b3139] rounded-2xl p-4 space-y-3">
         <div className="flex items-center justify-between">
           <p className="text-xs font-semibold text-[#eaecef]">ROI Earnings Calculator</p>
@@ -190,15 +184,12 @@ export default function StorePage() {
             {activePurchases.length} active
           </span>
         </div>
-
-        {/* Chart */}
         {avgRoi > 0 && (
           <div className="bg-[#0b0e11] border border-[#2b3139] rounded-xl px-4 py-3">
             <p className="text-[10px] text-[#848e9c] mb-2">Avg ROI Curve</p>
             <RoiChart roi={avgRoi} />
           </div>
         )}
-
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
           <div className="bg-[#0b0e11] border border-[#2b3139] rounded-xl p-3">
             <p className="text-[10px] text-[#848e9c] mb-1">Purchases</p>
@@ -223,192 +214,193 @@ export default function StorePage() {
         </div>
       </div>
 
-      {/* Active Purchases */}
-      <div className="bg-[#161a1e] border border-[#2b3139] rounded-2xl overflow-hidden">
-        <div className="px-5 py-4 border-b border-[#2b3139] flex items-center gap-2">
-          <CheckCircle size={14} className="text-[#0ecb81]" />
-          <span className="text-sm font-bold text-[#eaecef]">Active Subscriptions</span>
-          <span className="ml-auto text-[10px] text-[#848e9c] bg-[#0b0e11] border border-[#2b3139] rounded-lg px-2 py-1">
-            {activePurchases.length}
-          </span>
-        </div>
-        <div className="p-4">
-          {loading ? (
-            <div className="space-y-2">
-              {[1, 2].map(i => <div key={i} className="h-20 rounded-xl bg-[#0b0e11] border border-[#2b3139] animate-pulse" />)}
-            </div>
-          ) : activePurchases.length === 0 ? (
-            <div className="py-10 flex flex-col items-center gap-2 text-center">
-              <div className="w-12 h-12 rounded-full bg-[#0b0e11] border border-[#2b3139] flex items-center justify-center">
-                <ShoppingBag size={20} className="text-[#2b3139]" />
-              </div>
-              <p className="text-sm text-[#848e9c]">No active purchases</p>
-              <p className="text-[10px] text-[#4a5568]">Scroll down to buy an asset or rent a VPS</p>
-            </div>
-          ) : (
-            <div className="space-y-2.5">
-              {activePurchases.map(p => {
-                const isAsset  = p.tx_type === 'asset'
-                const isActive = p.status === 'completed' || p.status === 'approved'
-                const projEarn = p.amount_usdt * ((p.roi_percent ?? 0) / 100)
-                return (
-                  <div key={p.id}
-                    className={`bg-[#0b0e11] border rounded-xl px-4 py-3 space-y-2 ${isActive ? 'border-[#0ecb81]/20' : 'border-[#2b3139]'}`}>
-                    <div className="flex items-start gap-3">
-                      <div className={`w-9 h-9 rounded-full border flex items-center justify-center flex-shrink-0
-                        ${isAsset ? 'bg-[#f0b90b]/10 border-[#f0b90b]/25' : 'bg-[#0ecb81]/10 border-[#0ecb81]/25'}`}>
-                        {isAsset
-                          ? <TrendingUp size={13} className="text-[#f0b90b]" />
-                          : <Server size={13} className="text-[#0ecb81]" />}
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center justify-between gap-2">
-                          <p className="text-sm font-semibold text-[#eaecef] truncate">
-                            {p.asset || (isAsset ? 'Asset' : 'VPS')}
+      {/* Tab selector */}
+      <div className="flex gap-1 bg-[#161a1e] border border-[#2b3139] rounded-xl p-1">
+        <button
+          onClick={() => setTab('asset')}
+          className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-lg text-sm font-semibold transition-all ${tab === 'asset' ? 'bg-[#f0b90b] text-black shadow-md' : 'text-[#848e9c] hover:text-[#eaecef]'}`}>
+          <ShoppingBag size={14} /> Assets
+          {activeAssets.length > 0 && (
+            <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-bold ${tab === 'asset' ? 'bg-black/20 text-black' : 'bg-[#f0b90b]/15 text-[#f0b90b]'}`}>
+              {activeAssets.length}
+            </span>
+          )}
+        </button>
+        <button
+          onClick={() => setTab('vps')}
+          className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-lg text-sm font-semibold transition-all ${tab === 'vps' ? 'bg-[#0ecb81] text-black shadow-md' : 'text-[#848e9c] hover:text-[#eaecef]'}`}>
+          <Server size={14} /> VPS
+          {activeVps.length > 0 && (
+            <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-bold ${tab === 'vps' ? 'bg-black/20 text-black' : 'bg-[#0ecb81]/15 text-[#0ecb81]'}`}>
+              {activeVps.length}
+            </span>
+          )}
+        </button>
+      </div>
+
+      {/* Active subscriptions for selected tab */}
+      {tabPurchases.length > 0 && (
+        <div className="bg-[#161a1e] border border-[#2b3139] rounded-2xl overflow-hidden">
+          <div className="px-5 py-4 border-b border-[#2b3139] flex items-center gap-2">
+            <CheckCircle size={14} className={tab === 'asset' ? 'text-[#f0b90b]' : 'text-[#0ecb81]'} />
+            <span className="text-sm font-bold text-[#eaecef]">
+              My Active {tab === 'asset' ? 'Assets' : 'VPS Subscriptions'}
+            </span>
+            <span className="ml-auto text-[10px] text-[#848e9c] bg-[#0b0e11] border border-[#2b3139] rounded-lg px-2 py-1">
+              {tabPurchases.length}
+            </span>
+          </div>
+          <div className="p-4 space-y-2.5">
+            {tabPurchases.map(p => {
+              const isAsset  = p.tx_type === 'asset'
+              const isActive = p.status === 'completed' || p.status === 'approved'
+              const projEarn = p.amount_usdt * ((p.roi_percent ?? 0) / 100)
+              return (
+                <div key={p.id}
+                  className={`bg-[#0b0e11] border rounded-xl px-4 py-3 space-y-2 ${isActive ? (isAsset ? 'border-[#f0b90b]/20' : 'border-[#0ecb81]/20') : 'border-[#2b3139]'}`}>
+                  <div className="flex items-start gap-3">
+                    <div className={`w-9 h-9 rounded-full border flex items-center justify-center flex-shrink-0
+                      ${isAsset ? 'bg-[#f0b90b]/10 border-[#f0b90b]/25' : 'bg-[#0ecb81]/10 border-[#0ecb81]/25'}`}>
+                      {isAsset
+                        ? <TrendingUp size={13} className="text-[#f0b90b]" />
+                        : <Server size={13} className="text-[#0ecb81]" />}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center justify-between gap-2">
+                        <p className="text-sm font-semibold text-[#eaecef] truncate">
+                          {p.asset || (isAsset ? 'Asset' : 'VPS')}
+                        </p>
+                        <div className="flex items-center gap-2 flex-shrink-0">
+                          <p className={`text-xs font-bold font-mono ${isActive ? (isAsset ? 'text-[#f0b90b]' : 'text-[#0ecb81]') : 'text-[#848e9c]'}`}>
+                            ${p.amount_usdt.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                           </p>
-                          <div className="flex items-center gap-2 flex-shrink-0">
-                            <p className={`text-xs font-bold font-mono ${isActive ? 'text-[#0ecb81]' : 'text-[#848e9c]'}`}>
-                              ${p.amount_usdt.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                            </p>
-                            <button onClick={() => handleClose(p)} disabled={closingId === p.id}
-                              className="flex items-center gap-1 text-[10px] text-[#f6465d] hover:bg-[#f6465d]/15 border border-[#f6465d]/20 px-2 py-1 rounded-lg transition disabled:opacity-50">
-                              {closingId === p.id ? <RefreshCw size={8} className="animate-spin" /> : <X size={8} />}
-                              Close
-                            </button>
-                          </div>
+                          <button onClick={() => handleClose(p)} disabled={closingId === p.id}
+                            className="flex items-center gap-1 text-[10px] text-[#f6465d] hover:bg-[#f6465d]/15 border border-[#f6465d]/20 px-2 py-1 rounded-lg transition disabled:opacity-50">
+                            {closingId === p.id ? <RefreshCw size={8} className="animate-spin" /> : <X size={8} />}
+                            Close
+                          </button>
                         </div>
-                        <div className="flex items-center gap-2 mt-0.5">
-                          <span className={`text-[10px] px-1.5 py-0.5 rounded font-bold
-                            ${isAsset ? 'bg-[#f0b90b]/10 text-[#f0b90b]' : 'bg-[#0ecb81]/10 text-[#0ecb81]'}`}>
-                            {isAsset ? 'ASSET' : 'VPS'}
-                          </span>
-                          <span className="text-[10px] text-[#4a5568]">{new Date(p.created_at).toLocaleDateString()}</span>
-                          {statusBadge(p.status)}
-                        </div>
+                      </div>
+                      <div className="flex items-center gap-2 mt-0.5">
+                        <span className={`text-[10px] px-1.5 py-0.5 rounded font-bold ${isAsset ? 'bg-[#f0b90b]/10 text-[#f0b90b]' : 'bg-[#0ecb81]/10 text-[#0ecb81]'}`}>
+                          {isAsset ? 'ASSET' : 'VPS'}
+                        </span>
+                        <span className="text-[10px] text-[#4a5568]">{new Date(p.created_at).toLocaleDateString()}</span>
+                        {statusBadge(p.status)}
                       </div>
                     </div>
-
-                    {(p.start_date || p.end_date) && (
-                      <div className="flex items-center gap-1.5 text-[10px] text-[#848e9c] pl-12">
-                        <CalendarRange size={9} />
-                        {p.start_date && <span>{p.start_date}</span>}
-                        {p.start_date && p.end_date && <span>→</span>}
-                        {p.end_date && <span>{p.end_date}</span>}
-                      </div>
-                    )}
-
-                    {p.roi_percent != null && p.roi_percent > 0 && (
-                      <div className="pl-12">
-                        <div className="flex items-center justify-between mb-1">
-                          <span className="text-[10px] text-[#848e9c]">ROI Projection</span>
-                          <span className="text-[10px] text-[#0ecb81] font-bold">+${projEarn.toFixed(2)}</span>
-                        </div>
-                        <RoiChart roi={p.roi_percent} />
-                      </div>
-                    )}
                   </div>
-                )
-              })}
-            </div>
-          )}
+                  {(p.start_date || p.end_date) && (
+                    <div className="flex items-center gap-1.5 text-[10px] text-[#848e9c] pl-12">
+                      <CalendarRange size={9} />
+                      {p.start_date && <span>{p.start_date}</span>}
+                      {p.start_date && p.end_date && <span>→</span>}
+                      {p.end_date && <span>{p.end_date}</span>}
+                    </div>
+                  )}
+                  {p.roi_percent != null && p.roi_percent > 0 && (
+                    <div className="pl-12">
+                      <div className="flex items-center justify-between mb-1">
+                        <span className="text-[10px] text-[#848e9c]">ROI Projection</span>
+                        <span className="text-[10px] text-[#0ecb81] font-bold">+${projEarn.toFixed(2)}</span>
+                      </div>
+                      <RoiChart roi={p.roi_percent} />
+                    </div>
+                  )}
+                </div>
+              )
+            })}
+          </div>
         </div>
-      </div>
+      )}
 
-      {/* VPS Plans */}
-      <div className="bg-[#161a1e] border border-[#2b3139] rounded-2xl overflow-hidden" ref={vpsRef}>
+      {/* Catalog section */}
+      <div className="bg-[#161a1e] border border-[#2b3139] rounded-2xl overflow-hidden" ref={catalogRef}>
         <div className="px-5 py-4 border-b border-[#2b3139] flex items-center gap-2.5">
-          <div className="w-8 h-8 rounded-xl bg-[#0ecb81]/10 flex items-center justify-center flex-shrink-0">
-            <Server size={15} className="text-[#0ecb81]" />
+          <div className={`w-8 h-8 rounded-xl flex items-center justify-center flex-shrink-0 ${tab === 'asset' ? 'bg-[#f0b90b]/10' : 'bg-[#0ecb81]/10'}`}>
+            {tab === 'asset'
+              ? <ShoppingBag size={15} className="text-[#f0b90b]" />
+              : <Server size={15} className="text-[#0ecb81]" />}
           </div>
           <div>
-            <h2 className="text-sm font-bold text-[#eaecef]">VPS Plans</h2>
-            <p className="text-[10px] text-[#848e9c]">Run your bot 24/7 on a dedicated server</p>
+            <h2 className="text-sm font-bold text-[#eaecef]">
+              {tab === 'asset' ? 'Buy Crypto Assets' : 'VPS Plans'}
+            </h2>
+            <p className="text-[10px] text-[#848e9c]">
+              {tab === 'asset' ? 'Purchase directly from your balance' : 'Run your bot 24/7 on a dedicated server'}
+            </p>
           </div>
         </div>
         <div className="p-4 space-y-2.5">
           {loading ? (
             <div className="py-8 flex items-center justify-center"><RefreshCw size={18} className="text-[#2b3139] animate-spin" /></div>
-          ) : vpsPlans.length === 0 ? (
-            <p className="text-xs text-[#848e9c] text-center py-8">No VPS plans available</p>
-          ) : vpsPlans.map(plan => (
-            <div key={plan.id}
-              className="bg-[#0b0e11] border border-[#2b3139] rounded-xl px-4 py-3 hover:border-[#0ecb81]/30 transition space-y-2">
-              <div className="flex items-center justify-between">
-                <div className="min-w-0">
-                  <p className="text-sm font-medium text-[#eaecef]">{plan.name}</p>
-                  <p className="text-xs text-[#848e9c] truncate">{plan.specs}</p>
-                  {plan.description && <p className="text-[10px] text-[#4a5568] mt-0.5">{plan.description}</p>}
-                </div>
-                <div className="text-right flex-shrink-0 ml-3">
-                  <p className="text-sm font-bold text-[#0ecb81]">
-                    ${plan.price}<span className="text-[10px] text-[#848e9c] font-normal">/mo</span>
-                  </p>
-                  <button onClick={() => handleRentVps(plan)} disabled={rentingId === plan.id}
-                    className="mt-1 flex items-center gap-1.5 text-xs bg-[#0ecb81]/10 hover:bg-[#0ecb81]/20 disabled:opacity-60 text-[#0ecb81] px-3 py-1 rounded-lg transition font-medium ml-auto">
-                    {rentingId === plan.id && <RefreshCw size={10} className="animate-spin" />} Rent
+          ) : tabProducts.length === 0 ? (
+            <p className="text-xs text-[#848e9c] text-center py-8">
+              No {tab === 'asset' ? 'assets' : 'VPS plans'} available
+            </p>
+          ) : tab === 'asset' ? (
+            (tabProducts as AssetProduct[]).map(asset => (
+              <div key={asset.id}
+                className="bg-[#0b0e11] border border-[#2b3139] rounded-xl px-4 py-3 hover:border-[#f0b90b]/30 transition space-y-2">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <div className="w-8 h-8 rounded-full bg-[#f0b90b]/10 flex items-center justify-center font-bold text-[#f0b90b] text-sm flex-shrink-0">
+                      {asset.icon}
+                    </div>
+                    <div>
+                      <p className="text-sm font-medium text-[#eaecef]">{asset.name}</p>
+                      <p className="text-xs text-[#848e9c]">${Number(asset.price).toLocaleString()} / unit</p>
+                      {asset.description && <p className="text-[10px] text-[#4a5568]">{asset.description}</p>}
+                    </div>
+                  </div>
+                  <button onClick={() => handleBuyAsset(asset)} disabled={buyingId === asset.id}
+                    className="flex items-center gap-1.5 text-xs bg-[#f0b90b]/10 hover:bg-[#f0b90b]/20 disabled:opacity-60 text-[#f0b90b] px-3 py-1.5 rounded-lg transition font-medium flex-shrink-0">
+                    {buyingId === asset.id && <RefreshCw size={10} className="animate-spin" />} Buy
                   </button>
                 </div>
-              </div>
-              {(plan.start_date || plan.end_date) && (
-                <div className="flex items-center gap-1.5 text-[10px] text-[#848e9c]">
-                  <CalendarRange size={9} />
-                  {plan.start_date && <span>{plan.start_date}</span>}
-                  {plan.start_date && plan.end_date && <span>→</span>}
-                  {plan.end_date && <span>{plan.end_date}</span>}
-                </div>
-              )}
-              {plan.roi_percent != null && plan.roi_percent > 0 && <RoiChart roi={plan.roi_percent} />}
-            </div>
-          ))}
-        </div>
-      </div>
-
-      {/* Asset Products */}
-      <div className="bg-[#161a1e] border border-[#2b3139] rounded-2xl overflow-hidden" ref={assetRef}>
-        <div className="px-5 py-4 border-b border-[#2b3139] flex items-center gap-2.5">
-          <div className="w-8 h-8 rounded-xl bg-[#f0b90b]/10 flex items-center justify-center flex-shrink-0">
-            <ShoppingBag size={15} className="text-[#f0b90b]" />
-          </div>
-          <div>
-            <h2 className="text-sm font-bold text-[#eaecef]">Buy Crypto Assets</h2>
-            <p className="text-[10px] text-[#848e9c]">Purchase directly from your balance</p>
-          </div>
-        </div>
-        <div className="p-4 space-y-2.5">
-          {loading ? (
-            <div className="py-8 flex items-center justify-center"><RefreshCw size={18} className="text-[#2b3139] animate-spin" /></div>
-          ) : assetProducts.length === 0 ? (
-            <p className="text-xs text-[#848e9c] text-center py-8">No assets available</p>
-          ) : assetProducts.map(asset => (
-            <div key={asset.id}
-              className="bg-[#0b0e11] border border-[#2b3139] rounded-xl px-4 py-3 hover:border-[#f0b90b]/30 transition space-y-2">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-3">
-                  <div className="w-8 h-8 rounded-full bg-[#f0b90b]/10 flex items-center justify-center font-bold text-[#f0b90b] text-sm flex-shrink-0">
-                    {asset.icon}
+                {(asset.start_date || asset.end_date) && (
+                  <div className="flex items-center gap-1.5 text-[10px] text-[#848e9c]">
+                    <CalendarRange size={9} />
+                    {asset.start_date && <span>{asset.start_date}</span>}
+                    {asset.start_date && asset.end_date && <span>→</span>}
+                    {asset.end_date && <span>{asset.end_date}</span>}
                   </div>
-                  <div>
-                    <p className="text-sm font-medium text-[#eaecef]">{asset.name}</p>
-                    <p className="text-xs text-[#848e9c]">${Number(asset.price).toLocaleString()} / unit</p>
-                    {asset.description && <p className="text-[10px] text-[#4a5568]">{asset.description}</p>}
+                )}
+                {asset.roi_percent != null && asset.roi_percent > 0 && <RoiChart roi={asset.roi_percent} />}
+              </div>
+            ))
+          ) : (
+            (tabProducts as VpsPlan[]).map(plan => (
+              <div key={plan.id}
+                className="bg-[#0b0e11] border border-[#2b3139] rounded-xl px-4 py-3 hover:border-[#0ecb81]/30 transition space-y-2">
+                <div className="flex items-center justify-between">
+                  <div className="min-w-0">
+                    <p className="text-sm font-medium text-[#eaecef]">{plan.name}</p>
+                    <p className="text-xs text-[#848e9c] truncate">{plan.specs}</p>
+                    {plan.description && <p className="text-[10px] text-[#4a5568] mt-0.5">{plan.description}</p>}
+                  </div>
+                  <div className="text-right flex-shrink-0 ml-3">
+                    <p className="text-sm font-bold text-[#0ecb81]">
+                      ${plan.price}<span className="text-[10px] text-[#848e9c] font-normal">/mo</span>
+                    </p>
+                    <button onClick={() => handleRentVps(plan)} disabled={rentingId === plan.id}
+                      className="mt-1 flex items-center gap-1.5 text-xs bg-[#0ecb81]/10 hover:bg-[#0ecb81]/20 disabled:opacity-60 text-[#0ecb81] px-3 py-1 rounded-lg transition font-medium ml-auto">
+                      {rentingId === plan.id && <RefreshCw size={10} className="animate-spin" />} Rent
+                    </button>
                   </div>
                 </div>
-                <button onClick={() => handleBuyAsset(asset)} disabled={buyingId === asset.id}
-                  className="flex items-center gap-1.5 text-xs bg-[#f0b90b]/10 hover:bg-[#f0b90b]/20 disabled:opacity-60 text-[#f0b90b] px-3 py-1.5 rounded-lg transition font-medium flex-shrink-0">
-                  {buyingId === asset.id && <RefreshCw size={10} className="animate-spin" />} Buy
-                </button>
+                {(plan.start_date || plan.end_date) && (
+                  <div className="flex items-center gap-1.5 text-[10px] text-[#848e9c]">
+                    <CalendarRange size={9} />
+                    {plan.start_date && <span>{plan.start_date}</span>}
+                    {plan.start_date && plan.end_date && <span>→</span>}
+                    {plan.end_date && <span>{plan.end_date}</span>}
+                  </div>
+                )}
+                {plan.roi_percent != null && plan.roi_percent > 0 && <RoiChart roi={plan.roi_percent} />}
               </div>
-              {(asset.start_date || asset.end_date) && (
-                <div className="flex items-center gap-1.5 text-[10px] text-[#848e9c]">
-                  <CalendarRange size={9} />
-                  {asset.start_date && <span>{asset.start_date}</span>}
-                  {asset.start_date && asset.end_date && <span>→</span>}
-                  {asset.end_date && <span>{asset.end_date}</span>}
-                </div>
-              )}
-              {asset.roi_percent != null && asset.roi_percent > 0 && <RoiChart roi={asset.roi_percent} />}
-            </div>
-          ))}
+            ))
+          )}
         </div>
       </div>
     </div>

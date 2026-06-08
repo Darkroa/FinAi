@@ -146,7 +146,8 @@ async def startup_event():
                 "ALTER TABLE transactions ADD COLUMN IF NOT EXISTS end_date VARCHAR(20)",
                 "ALTER TABLE transactions ADD COLUMN IF NOT EXISTS roi_percent FLOAT",
                 "ALTER TABLE users ADD COLUMN IF NOT EXISTS trade_leverage FLOAT DEFAULT 1.0",
-                "ALTER TABLE users ADD COLUMN IF NOT EXISTS buy_leverage FLOAT DEFAULT 1.0",
+                "ALTER TABLE users ADD COLUMN IF NOT EXISTS bot_leverage FLOAT DEFAULT 1.0",
+                "CREATE TABLE IF NOT EXISTS price_alerts (id SERIAL PRIMARY KEY, user_id INTEGER REFERENCES users(id), symbol VARCHAR(30) NOT NULL, target_price FLOAT NOT NULL, direction VARCHAR(10) NOT NULL, is_active BOOLEAN DEFAULT TRUE, triggered_at TIMESTAMP, notify_browser BOOLEAN DEFAULT TRUE, notify_telegram BOOLEAN DEFAULT FALSE, notify_whatsapp BOOLEAN DEFAULT FALSE, created_at TIMESTAMP DEFAULT NOW())",
             ]:
                 _conn.execute(_text(stmt))
             _conn.commit()

@@ -31,7 +31,7 @@ interface AppPrefs {
 
 interface LeverageForm {
   trade_leverage: number;
-  buy_leverage: number;
+  bot_leverage: number;
 }
 
 const APP_PREFS_KEY = 'finai-app-prefs';
@@ -93,7 +93,7 @@ export default function SettingsPage() {
   const { lang: language, currency, setLang, setCurrency: setCtxCurrency } = useLanguage();
   const [localeSaved, setLocaleSaved] = useState(false);
 
-  const [leverage, setLeverage] = useState<LeverageForm>({ trade_leverage: 1, buy_leverage: 1 });
+  const [leverage, setLeverage] = useState<LeverageForm>({ trade_leverage: 1, bot_leverage: 1 });
   const [savingLev, setSavingLev] = useState(false);
 
   useEffect(() => {
@@ -108,7 +108,7 @@ export default function SettingsPage() {
     if (user) {
       setLeverage({
         trade_leverage: user.trade_leverage ?? 1,
-        buy_leverage: user.buy_leverage ?? 1,
+        bot_leverage: user.bot_leverage ?? 1,
       });
     }
   }, [user]);
@@ -155,7 +155,7 @@ export default function SettingsPage() {
   };
 
   const handleSaveLeverage = async () => {
-    if (leverage.trade_leverage < 1 || leverage.buy_leverage < 1) {
+    if (leverage.trade_leverage < 1 || leverage.bot_leverage < 1) {
       toast.error('Leverage must be at least 1x');
       return;
     }
@@ -458,25 +458,25 @@ export default function SettingsPage() {
               </div>
             </div>
             <div>
-              <label className="text-xs text-[#848e9c] mb-1.5 block font-medium">Buy Leverage (×)</label>
-              <p className="text-[10px] text-[#4a5568] mb-2">Applied to asset buy orders from the Store</p>
+              <label className="text-xs text-[#848e9c] mb-1.5 block font-medium">Bot Leverage (×)</label>
+              <p className="text-[10px] text-[#4a5568] mb-2">Applied to AI bot automated trades</p>
               <div className="flex items-center gap-2">
                 <input
                   type="number"
                   min={1}
-                  max={100}
+                  max={200}
                   step={1}
-                  value={leverage.buy_leverage}
-                  onChange={e => setLeverage(p => ({ ...p, buy_leverage: Math.max(1, Number(e.target.value)) }))}
+                  value={leverage.bot_leverage}
+                  onChange={e => setLeverage(p => ({ ...p, bot_leverage: Math.max(1, Number(e.target.value)) }))}
                   className="w-full bg-[#0b0e11] border border-[#2b3139] rounded-xl px-3 py-2.5 text-sm text-[#eaecef] font-mono focus:outline-none focus:border-[#f0b90b] transition"
                 />
-                <span className="text-sm font-bold text-[#f0b90b] flex-shrink-0">{leverage.buy_leverage}×</span>
+                <span className="text-sm font-bold text-[#f0b90b] flex-shrink-0">{leverage.bot_leverage}×</span>
               </div>
             </div>
           </div>
           <div className="flex items-center gap-3 p-3 bg-[#0b0e11] border border-[#f0b90b]/20 rounded-xl">
             <BarChart2 size={13} className="text-[#f0b90b] flex-shrink-0" />
-            <p className="text-[10px] text-[#848e9c]">Higher leverage amplifies both gains and losses. Use with caution. Max trade leverage: 200×, max buy leverage: 100×.</p>
+            <p className="text-[10px] text-[#848e9c]">Higher leverage amplifies both gains and losses. Use with caution. Max 200× for both trade and bot leverage.</p>
           </div>
           <button
             onClick={handleSaveLeverage}

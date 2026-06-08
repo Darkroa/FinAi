@@ -192,56 +192,90 @@ def check_price_alerts_job():
                 if not user:
                     continue
 
-                msg = (
-                    f"🔔 FinAi Price Alert Triggered!\n"
-                    f"{alert.symbol} hit ${alert.target_price:,.2f} ({alert.direction})\n"
-                    f"Current Price: ${current:,.4f}"
-                )
-                prefs = dict(user.notification_preferences or {})
-
-                # Telegram
-                if alert.notify_telegram:
-                    tg_token = prefs.get("telegram_bot_token")
-                    tg_chat_id = prefs.get("telegram_chat_id")
-                    if tg_token and tg_chat_id:
-                        try:
-                            import threading
-                            def _send_tg(tok, cid, text):
-                                try:
-                                    import requests as _r2
-                                    _r2.post(f"https://api.telegram.org/bot{tok}/sendMessage",
-                                             json={"chat_id": cid, "text": text}, timeout=5)
-                                except Exception:
-                                    pass
-                            threading.Thread(target=_send_tg, args=(tg_token, tg_chat_id, msg), daemon=True).start()
-                        except Exception:
-                            pass
-
-                # WhatsApp
-                if alert.notify_whatsapp:
-                    wa_verified = prefs.get("whatsapp_verified")
-                    wa_phone = prefs.get("whatsapp_number")
-                    if wa_verified and wa_phone:
-                        try:
-                            import os, threading
-                            def _send_wa(phone, text):
-                                try:
-                                    from twilio.rest import Client as _TC
-                                    tc = _TC(os.getenv("TWILIO_ACCOUNT_SID"), os.getenv("TWILIO_AUTH_TOKEN"))
-                                    tc.messages.create(
-                                        from_=f"whatsapp:{os.getenv('TWILIO_WHATSAPP_NUMBER','+14155238886')}",
-                                        body=text,
-                                        to=f"whatsapp:{phone}"
-                                    )
-                                except Exception:
-                                    pass
-                            threading.Thread(target=_send_wa, args=(wa_phone, msg), daemon=True).start()
-                        except Exception:
-                            pass
+                _fire_alert_notifications(db, alert, user, current)
 
             if triggered_count > 0:
                 db.commit()
                 logger.info(f"🔔 Price alerts: {triggered_count} triggered")
+
+    except Exception as e:
+        logger.error(f"Price alert check failed: {e}")
+
+
+def _create_in_app_notification(db, user_id: int, title: str, message: str):
+    """Insert an in-app Notification record for the user's notification bell."""
+    try:
+        from src.database.models import Notification
+        notif = Notification(
+            title=title,
+            message=message,
+            target_all=False,
+            target_user_id=user_id,
+            created_by=None,
+            read_by_user_ids=[],
+        )
+        db.add(notif)
+    except Exception as _e:
+        logger.warning(f"In-app notification insert failed: {_e}")
+
+
+def _fire_alert_notifications(db, alert, user, current_price: float):
+    """Send all notification channels for a triggered price alert."""
+    msg = (
+        f"🔔 FinAi Price Alert Triggered!\n"
+        f"{alert.symbol} hit ${alert.target_price:,.2f} ({alert.direction})\n"
+        f"Current Price: ${current_price:,.4f}"
+    )
+    prefs = dict(user.notification_preferences or {})
+
+    # In-app notification (notify_browser flag)
+    if alert.notify_browser:
+        _create_in_app_notification(
+            db, user.id,
+            f"🔔 {alert.symbol} Alert Triggered",
+            f"{alert.symbol} reached ${current_price:,.4f} ({alert.direction} ${alert.target_price:,.2f})"
+        )
+
+    # Telegram
+    if alert.notify_telegram:
+        tg_token = prefs.get("telegram_bot_token")
+        tg_chat_id = prefs.get("telegram_chat_id")
+        if tg_token and tg_chat_id:
+            try:
+                import threading
+                def _send_tg(tok, cid, text):
+                    try:
+                        import requests as _r2
+                        _r2.post(f"https://api.telegram.org/bot{tok}/sendMessage",
+                                 json={"chat_id": cid, "text": text}, timeout=5)
+                    except Exception:
+                        pass
+                threading.Thread(target=_send_tg, args=(tg_token, tg_chat_id, msg), daemon=True).start()
+            except Exception:
+                pass
+
+    # WhatsApp
+    if alert.notify_whatsapp:
+        wa_verified = prefs.get("whatsapp_verified")
+        wa_phone = prefs.get("whatsapp_number")
+        if wa_verified and wa_phone:
+            try:
+                import os, threading
+                def _send_wa(phone, text):
+                    try:
+                        from twilio.rest import Client as _TC
+                        import os as _os
+                        tc = _TC(_os.getenv("TWILIO_ACCOUNT_SID"), _os.getenv("TWILIO_AUTH_TOKEN"))
+                        tc.messages.create(
+                            from_=f"whatsapp:{_os.getenv('TWILIO_WHATSAPP_NUMBER','+14155238886')}",
+                            body=text,
+                            to=f"whatsapp:{phone}"
+                        )
+                    except Exception:
+                        pass
+                threading.Thread(target=_send_wa, args=(wa_phone, msg), daemon=True).start()
+            except Exception:
+                pass
 
     except Exception as e:
         logger.error(f"Price alert check failed: {e}")

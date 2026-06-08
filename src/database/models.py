@@ -81,7 +81,7 @@ class User(Base):
 
     # Leverage settings
     trade_leverage = Column(Float, nullable=True, default=1.0)
-    buy_leverage   = Column(Float, nullable=True, default=1.0)
+    bot_leverage   = Column(Float, nullable=True, default=1.0)
 
     # Security
     transfer_pin = Column(String(255), nullable=True)   # bcrypt-hashed PIN

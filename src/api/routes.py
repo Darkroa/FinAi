@@ -320,7 +320,7 @@ def _user_dict(u: User) -> dict:
         "telegram_connected": bool(u.telegram_connected),
         "whatsapp_connected": bool(u.whatsapp_connected),
         "trade_leverage": u.trade_leverage or 1.0,
-        "buy_leverage": u.buy_leverage or 1.0,
+        "bot_leverage": u.bot_leverage or 1.0,
         "created_at": u.created_at.isoformat() if u.created_at else None,
     }
 
@@ -2312,7 +2312,7 @@ async def change_password(data: ChangePasswordRequest, current_user=Depends(get_
 
 class UpdateLeverageRequest(BaseModel):
     trade_leverage: float = 1.0
-    buy_leverage: float = 1.0
+    bot_leverage: float = 1.0
 
 @router.post("/users/update-leverage")
 async def update_leverage(data: UpdateLeverageRequest, current_user=Depends(get_current_user), db: Session = Depends(get_db)):
@@ -2320,7 +2320,7 @@ async def update_leverage(data: UpdateLeverageRequest, current_user=Depends(get_
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
     user.trade_leverage = max(1.0, min(200.0, data.trade_leverage))
-    user.buy_leverage   = max(1.0, min(100.0, data.buy_leverage))
+    user.bot_leverage   = max(1.0, min(200.0, data.bot_leverage))
     db.commit()
     db.refresh(user)
     return _user_dict(user)

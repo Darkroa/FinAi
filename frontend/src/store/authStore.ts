@@ -44,7 +44,7 @@ export interface User {
   telegram_connected?: boolean;
   whatsapp_connected?: boolean;
   trade_leverage?: number;
-  buy_leverage?: number;
+  bot_leverage?: number;
 }
 
 interface AuthState {
