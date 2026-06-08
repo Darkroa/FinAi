@@ -16,6 +16,12 @@ from datetime import datetime, date
 from pathlib import Path
 
 try:
+    from dotenv import load_dotenv
+    load_dotenv()
+except ImportError:
+    pass
+
+try:
     import psycopg2
     import psycopg2.extras
 except ImportError:
@@ -51,13 +57,20 @@ TABLES = [
 
 
 def _serialize(val):
+    """Recursively serialize values to JSON-safe types."""
     if isinstance(val, (datetime, date)):
         return val.isoformat()
+    if isinstance(val, dict):
+        return {k: _serialize(v) for k, v in val.items()}
+    if isinstance(val, list):
+        return [_serialize(v) for v in val]
+    # Return as-is (str, int, float, bool, None all fine)
     return val
 
 
 def export_table(cur, table: str) -> int:
     try:
+        # Use RealDictCursor so JSONB columns come back as dicts/lists
         cur.execute(f"SELECT * FROM {table}")
     except Exception as e:
         print(f"  ⚠  Skipped {table}: {e}")
@@ -82,7 +95,7 @@ def main():
     print(f"  Output: {OUT_DIR}")
     print(f"{'='*55}")
 
-    conn = psycopg2.connect(DATABASE_URL)
+    conn = psycopg2.connect(DATABASE_URL, cursor_factory=psycopg2.extras.RealDictCursor)
     conn.autocommit = True
     cur = conn.cursor()
 

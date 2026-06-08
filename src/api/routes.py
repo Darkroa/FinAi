@@ -5,6 +5,8 @@ from fastapi import (
 )
 from datetime import datetime, timedelta
 import random, string, base64, io, os
+from dotenv import load_dotenv
+load_dotenv()
 from sqlalchemy.orm import Session
 from typing import Optional, List
 from loguru import logger

@@ -3,6 +3,9 @@ from fastapi.security import OAuth2PasswordBearer
 from jose import JWTError, jwt
 from datetime import datetime, timedelta
 import os
+from dotenv import load_dotenv
+
+load_dotenv()
 
 from src.database.session import SessionLocal
 from src.database.models import User

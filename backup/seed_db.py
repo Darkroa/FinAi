@@ -17,9 +17,16 @@ Options:
 
 import json
 import os
+import re
 import sys
 import argparse
 from pathlib import Path
+
+try:
+    from dotenv import load_dotenv
+    load_dotenv()
+except ImportError:
+    pass
 
 try:
     import psycopg2
@@ -56,6 +63,42 @@ SEED_ORDER = [
 ]
 
 
+def _parse_pg_array(value: str):
+    """
+    Convert a PostgreSQL TEXT array literal like ARRAY['read','write']
+    or {read,write} into a Python list.
+    """
+    if not isinstance(value, str):
+        return value
+    # ARRAY['a', 'b', ...] format
+    m = re.match(r"^ARRAY\[(.+)\]$", value.strip(), re.DOTALL)
+    if m:
+        inner = m.group(1)
+        items = [item.strip().strip("'\"") for item in inner.split(",")]
+        return [i for i in items if i]
+    # {a,b,c} format
+    if value.startswith("{") and value.endswith("}"):
+        inner = value[1:-1]
+        items = [item.strip().strip("'\"") for item in inner.split(",")]
+        return [i for i in items if i]
+    return value
+
+
+def coerce_value(val):
+    """
+    Convert Python dicts/lists to psycopg2.extras.Json so they can be
+    inserted into JSONB columns.  Also handles legacy PostgreSQL ARRAY
+    string literals from older backup files.
+    """
+    if isinstance(val, (dict, list)):
+        return psycopg2.extras.Json(val)
+    if isinstance(val, str):
+        parsed = _parse_pg_array(val)
+        if isinstance(parsed, list):
+            return psycopg2.extras.Json(parsed)
+    return val
+
+
 def load_json(table: str):
     path = DATA_DIR / f"{table}.json"
     if not path.exists():
@@ -89,7 +132,8 @@ def seed_table(cur, table: str, rows: list, overwrite: bool, dry_run: bool) -> t
     inserted = 0
     skipped = 0
     for row in rows:
-        values = [row.get(c) for c in cols]
+        # Coerce each value so dicts/lists → Json, ARRAY strings → Json
+        values = [coerce_value(row.get(c)) for c in cols]
         if dry_run:
             inserted += 1
             continue

@@ -277,9 +277,6 @@ def _fire_alert_notifications(db, alert, user, current_price: float):
             except Exception:
                 pass
 
-    except Exception as e:
-        logger.error(f"Price alert check failed: {e}")
-
 
 def auto_cancel_expired_deposits():
     """Cancel pending deposit requests that are older than 30 minutes."""

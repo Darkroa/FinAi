@@ -1,7 +1,7 @@
 import { useEffect, useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuthStore } from '../store/authStore';
-import { getEvents, getBotStatus, getTodayPnl, finEventListBots, getBotTrades, getMyBonusTasks, claimBonusTask, getMe } from '../lib/api';
+import { getEvents, getBotStatus, getTodayPnl, finEventListBots, getBotTrades, getMyBonusTasks, claimBonusTask, getMe, getOpenPositions } from '../lib/api';
 
 import { useTickerPrices } from '../hooks/useTickerPrices';
 import { useHotData } from '../hooks/useHotData';
@@ -93,7 +93,7 @@ export default function DashboardPage() {
       setBotRunning(botRes.data?.running ?? false);
       setTodayPnl(pnlRes.data?.today_pnl ?? 0);
 
-      // Unrealized P&L + open positions from bot status (accurate with leverage)
+      // Unrealized P&L + open positions from bot status (AiBot + FinEvent bots)
       const bots: Record<string, { position: number; unrealized_pnl: number; running?: boolean; portfolio_value?: number }> =
         botRes.data?.bots ?? {};
       let totalUnrealized = 0;
@@ -108,6 +108,19 @@ export default function DashboardPage() {
           openCount++;
         }
       }
+
+      // Also include manual (Trade page) open positions
+      try {
+        const posRes = await getOpenPositions();
+        const manualPositions: { qty: number; current_price: number; price: number; unrealized_pnl: number }[] =
+          posRes.data?.positions ?? [];
+        openCount += manualPositions.length;
+        for (const p of manualPositions) {
+          totalUnrealized += p.unrealized_pnl ?? 0;
+          portfolioVal += p.qty * (p.current_price || p.price);
+        }
+      } catch { /* silent */ }
+
       setOpenPositions(openCount);
       setPortfolioValue(portfolioVal);
       setActiveBotCount(activeBotCnt);
@@ -116,11 +129,14 @@ export default function DashboardPage() {
       const feBots: { running: boolean }[] = finEventRes.data?.bots ?? [];
       setFinEventRunning(Array.isArray(feBots) && feBots.some((b) => b.running));
 
-      // News count + trade count
+      // News count + trade count + realized P&L + VPS/Asset in portfolio
       try {
-        const [newsRes, tradesRes] = await Promise.allSettled([
+        const [newsRes, tradesRes, walletRes] = await Promise.allSettled([
           fetch('/api/public/news').then(r => r.json()),
           getBotTrades(200),
+          fetch('/api/wallet/transactions', {
+            headers: { Authorization: `Bearer ${localStorage.getItem('finai-auth') ? JSON.parse(localStorage.getItem('finai-auth')!).state?.token ?? '' : ''}` }
+          }).then(r => r.ok ? r.json() : { transactions: [] }).catch(() => ({ transactions: [] })),
         ]);
         if (newsRes.status === 'fulfilled' && Array.isArray(newsRes.value)) {
           setNewsCount(newsRes.value.length);
@@ -132,6 +148,15 @@ export default function DashboardPage() {
             .filter(t => t.pnl !== null)
             .reduce((s, t) => s + (t.pnl ?? 0), 0)
           setRealizedPnl(rPnl)
+        }
+        // Add VPS + Asset transactions to portfolio value
+        if (walletRes.status === 'fulfilled') {
+          const txList: { tx_type: string; amount: number; status: string }[] =
+            (walletRes.value as { transactions?: typeof txList }).transactions ?? [];
+          const extraPortfolio = txList
+            .filter(t => (t.tx_type === 'vps' || t.tx_type === 'asset') && t.status === 'approved')
+            .reduce((s, t) => s + Math.abs(t.amount ?? 0), 0);
+          setPortfolioValue(v => v + extraPortfolio);
         }
       } catch { /* silent */ }
     } catch (err) {
