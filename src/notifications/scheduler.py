@@ -153,24 +153,57 @@ def check_price_alerts_job():
             if not active:
                 return
 
-            # Fetch current prices from Binance.US
+            # Fetch current prices — try Binance global first, fallback to CoinGecko
             prices: dict = {}
-            try:
-                r = _req.get(
-                    "https://api.binance.us/api/v3/ticker/price",
-                    timeout=5
-                )
-                if r.status_code == 200:
-                    raw = r.json()
-                    for item in raw:
-                        sym = item.get("symbol", "")
-                        price = float(item.get("price", 0))
-                        # Map BTCUSDT -> BTC/USDT
-                        if sym.endswith("USDT"):
-                            key = sym[:-4] + "/USDT"
-                            prices[key] = price
-            except Exception:
-                pass
+
+            # Source 1: Binance global (com, not .us — far better uptime)
+            for _binance_url in [
+                "https://api.binance.com/api/v3/ticker/price",
+                "https://api.binance.us/api/v3/ticker/price",
+            ]:
+                if prices:
+                    break
+                try:
+                    r = _req.get(_binance_url, timeout=5)
+                    if r.status_code == 200:
+                        raw = r.json()
+                        for item in raw:
+                            sym = item.get("symbol", "")
+                            price_val = float(item.get("price", 0))
+                            if sym.endswith("USDT") and price_val > 0:
+                                key = sym[:-4] + "/USDT"
+                                prices[key] = price_val
+                except Exception:
+                    pass
+
+            # Source 2: CoinGecko fallback when Binance is unreachable
+            if not prices:
+                try:
+                    _CG_IDS = {
+                        "BTC/USDT": "bitcoin", "ETH/USDT": "ethereum",
+                        "BNB/USDT": "binancecoin", "SOL/USDT": "solana",
+                        "XRP/USDT": "ripple", "ADA/USDT": "cardano",
+                        "DOGE/USDT": "dogecoin", "AVAX/USDT": "avalanche-2",
+                        "DOT/USDT": "polkadot", "LINK/USDT": "chainlink",
+                        "LTC/USDT": "litecoin", "UNI/USDT": "uniswap",
+                        "ATOM/USDT": "cosmos", "TRX/USDT": "tron",
+                        "MATIC/USDT": "matic-network", "NEAR/USDT": "near",
+                        "APT/USDT": "aptos", "ARB/USDT": "arbitrum",
+                        "OP/USDT": "optimism", "SUI/USDT": "sui",
+                    }
+                    ids_str = ",".join(_CG_IDS.values())
+                    cg_r = _req.get(
+                        f"https://api.coingecko.com/api/v3/simple/price?ids={ids_str}&vs_currencies=usd",
+                        timeout=8
+                    )
+                    if cg_r.status_code == 200:
+                        cg_data = cg_r.json()
+                        for sym, coin_id in _CG_IDS.items():
+                            usd_val = cg_data.get(coin_id, {}).get("usd", 0)
+                            if usd_val > 0:
+                                prices[sym] = float(usd_val)
+                except Exception:
+                    pass
 
             from datetime import datetime
             triggered_count = 0

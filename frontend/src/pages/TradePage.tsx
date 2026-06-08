@@ -525,22 +525,45 @@ export default function TradePage() {
   return (
     <div className="space-y-3">
 
-      {/* ── Pair Selector + Quick Buy/Sell (tap-hold 3.5s to hide) ──────── */}
-      <div
-        className="sticky top-0 z-20 bg-[#161a1e] border-b border-[#2b3139] -mx-4 sm:-mx-5 lg:-mx-6 px-4 sm:px-5 lg:px-6 overflow-visible select-none"
-        onMouseDown={() => { holdTimerRef.current = setTimeout(() => setShowBuySell(v => !v), 3500) }}
-        onMouseUp={() => { if (holdTimerRef.current) { clearTimeout(holdTimerRef.current); holdTimerRef.current = null } }}
-        onMouseLeave={() => { if (holdTimerRef.current) { clearTimeout(holdTimerRef.current); holdTimerRef.current = null } }}
-        onTouchStart={() => { holdTimerRef.current = setTimeout(() => setShowBuySell(v => !v), 3500) }}
-        onTouchEnd={() => { if (holdTimerRef.current) { clearTimeout(holdTimerRef.current); holdTimerRef.current = null } }}
-        onTouchCancel={() => { if (holdTimerRef.current) { clearTimeout(holdTimerRef.current); holdTimerRef.current = null } }}
-      >
-        {/* Row 1: pair + price + change + live + 24h stats + WS */}
+      {/* ── Sticky Quick Buy/Sell bar — flush under header ────────────── */}
+      {showBuySell && (
+        <div className="sticky top-0 z-20 bg-[#161a1e] border-b border-[#2b3139] -mx-4 sm:-mx-5 lg:-mx-6 px-4 sm:px-5 lg:px-6">
+          <div className="flex items-center gap-2 py-2">
+            <button type="button" disabled={orderLoading}
+              onClick={() => handleQuickTrade('sell')}
+              className="flex-1 py-2 rounded-xl text-xs font-bold bg-[#f6465d]/10 border border-[#f6465d]/30 text-[#f6465d] hover:bg-[#f6465d] hover:text-white disabled:opacity-50 transition active:scale-[0.98]">
+              Sell
+            </button>
+            <div className="flex items-center bg-[#0b0e11] border border-[#2b3139] rounded-lg overflow-hidden flex-shrink-0">
+              <button type="button" onClick={() => {
+                const next = Math.max(0.01, parseFloat(lotSize||'0.01') - 0.01)
+                const s = next.toFixed(2); setLotSize(s); setAmount(s)
+              }} className="px-2 py-1.5 text-[#848e9c] hover:text-[#eaecef] hover:bg-[#2b3139] transition">
+                <Minus size={9} />
+              </button>
+              <span className="w-14 text-center text-xs font-mono text-[#eaecef] font-bold py-1.5">{lotSize}</span>
+              <button type="button" onClick={() => {
+                const next = Math.min(100, parseFloat(lotSize||'0.01') + 0.01)
+                const s = next.toFixed(2); setLotSize(s); setAmount(s)
+              }} className="px-2 py-1.5 text-[#848e9c] hover:text-[#eaecef] hover:bg-[#2b3139] transition">
+                <Plus size={9} />
+              </button>
+            </div>
+            <button type="button" disabled={orderLoading}
+              onClick={() => handleQuickTrade('buy')}
+              className="flex-1 py-2 rounded-xl text-xs font-bold bg-[#0ecb81]/10 border border-[#0ecb81]/30 text-[#0ecb81] hover:bg-[#0ecb81] hover:text-black disabled:opacity-50 transition active:scale-[0.98]">
+              Buy
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* ── Pair Selector Card ───────────────────────────────────────── */}
+      <div className="bg-[#161a1e] border border-[#2b3139] rounded-xl overflow-visible">
+        {/* Row 1: pair + price + change + live + 24h stats */}
         <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 px-3 py-2.5">
           <div className="relative">
-            <button
-              onMouseDown={e => e.stopPropagation()} onTouchStart={e => e.stopPropagation()}
-              onClick={() => setShowP(v => !v)}
+            <button onClick={() => setShowP(v => !v)}
               className="flex items-center gap-1.5 hover:bg-[#2b3139]/60 rounded-lg px-1.5 py-1 transition">
               <span className="text-sm font-bold text-[#eaecef]">{pair}</span>
               <ChevronDown size={11} className="text-[#848e9c]" />
@@ -581,41 +604,6 @@ export default function TradePage() {
           <span className="mx-2 text-[#2b3139]">|</span>
           24h L <span className="text-[#eaecef] font-mono">${low24}</span>
         </div>
-
-        {/* Buy/Sell quick bar (hidden by tap-and-hold on card) */}
-        {showBuySell && (
-          <div
-            className="border-t border-[#2b3139] px-3 py-2 flex items-center gap-2"
-            onMouseDown={e => e.stopPropagation()} onTouchStart={e => e.stopPropagation()}
-          >
-            <button type="button" disabled={orderLoading}
-              onClick={() => handleQuickTrade('sell')}
-              className="flex-1 py-2 rounded-xl text-xs font-bold bg-[#f6465d]/10 border border-[#f6465d]/30 text-[#f6465d] hover:bg-[#f6465d] hover:text-white disabled:opacity-50 transition active:scale-[0.98]">
-              Sell
-            </button>
-            <div className="flex items-center bg-[#0b0e11] border border-[#2b3139] rounded-lg overflow-hidden flex-shrink-0"
-              onMouseDown={e => e.stopPropagation()} onTouchStart={e => e.stopPropagation()}>
-              <button type="button" onClick={() => {
-                const next = Math.max(0.01, parseFloat(lotSize||'0.01') - 0.01)
-                const s = next.toFixed(2); setLotSize(s); setAmount(s)
-              }} className="px-2 py-1.5 text-[#848e9c] hover:text-[#eaecef] hover:bg-[#2b3139] transition">
-                <Minus size={9} />
-              </button>
-              <span className="w-14 text-center text-xs font-mono text-[#eaecef] font-bold py-1.5">{lotSize}</span>
-              <button type="button" onClick={() => {
-                const next = Math.min(100, parseFloat(lotSize||'0.01') + 0.01)
-                const s = next.toFixed(2); setLotSize(s); setAmount(s)
-              }} className="px-2 py-1.5 text-[#848e9c] hover:text-[#eaecef] hover:bg-[#2b3139] transition">
-                <Plus size={9} />
-              </button>
-            </div>
-            <button type="button" disabled={orderLoading}
-              onClick={() => handleQuickTrade('buy')}
-              className="flex-1 py-2 rounded-xl text-xs font-bold bg-[#0ecb81]/10 border border-[#0ecb81]/30 text-[#0ecb81] hover:bg-[#0ecb81] hover:text-black disabled:opacity-50 transition active:scale-[0.98]">
-              Buy
-            </button>
-          </div>
-        )}
       </div>
 
       {/* ── Open Positions Summary ──────────────────────────────────── */}
@@ -713,6 +701,14 @@ export default function TradePage() {
                       <Target size={10} />
                     </button>
                   </div>
+                  <div className="mt-3 pt-2 border-t border-[#2b3139]">
+                    <p className="text-[10px] text-[#848e9c] uppercase tracking-widest mb-2">Quick Bar</p>
+                    <button onClick={() => { setShowBuySell(v => !v); setShowPrefs(false) }}
+                      className="w-full text-left px-3 py-2 rounded-lg text-xs text-[#848e9c] hover:bg-[#2b3139] hover:text-[#eaecef] transition flex items-center justify-between">
+                      {showBuySell ? 'Hide Buy/Sell Bar' : 'Show Buy/Sell Bar'}
+                      <Zap size={10} />
+                    </button>
+                  </div>
                 </div>
               )}
             </div>
@@ -789,29 +785,29 @@ export default function TradePage() {
         )}
       </div>
 
-      {/* ── OctaFX-style Order Form ─────────────────────────────────── */}
-      <div className="bg-[#161a1e] border border-[#2b3139] rounded-xl overflow-hidden">
-        {/* Collapsible header */}
-        <button type="button" onClick={() => setOrderFormCollapsed(v => !v)}
-          className="w-full flex items-center justify-between px-4 py-3 hover:bg-[#1e2329] transition border-b border-[#2b3139]">
-          <div className="flex items-center gap-2">
-            <div className={`w-2 h-2 rounded-full ${side === 'buy' ? 'bg-[#0ecb81]' : 'bg-[#f6465d]'}`} />
-            <span className="text-xs font-semibold text-[#eaecef]">Order Form</span>
-            <span className={`text-[10px] font-bold px-2 py-0.5 rounded-lg ${side === 'buy' ? 'bg-[#0ecb81]/10 text-[#0ecb81]' : 'bg-[#f6465d]/10 text-[#f6465d]'}`}>
-              {side === 'buy' ? 'BUY' : 'SELL'} · {orderType}
+      {/* ── Order Form — BotsPage config style ──────────────────────── */}
+      <div className="bg-[#161a1e] border border-[#f0b90b]/30 rounded-2xl overflow-hidden">
+        {/* Header */}
+        <div className="flex items-center justify-between px-5 py-4 border-b border-[#2b3139]">
+          <h3 className="text-sm font-semibold text-[#eaecef] flex items-center gap-2">
+            <TrendingUp size={14} className="text-[#f0b90b]" />
+            Place Order
+            <span className={`text-[10px] font-bold px-2 py-0.5 rounded-lg ${side==='buy' ? 'bg-[#0ecb81]/10 text-[#0ecb81]' : 'bg-[#f6465d]/10 text-[#f6465d]'}`}>
+              {side === 'buy' ? 'BUY' : 'SELL'} · {orderType.toUpperCase()}
             </span>
-          </div>
-          <button type="button" onClick={(e) => { e.stopPropagation(); setOrderFormCollapsed(v => !v) }}
-            className="p-1 rounded-lg hover:bg-[#2b3139] text-[#848e9c] hover:text-[#eaecef] transition">
-            {orderFormCollapsed ? <ChevronDown size={13} /> : <ChevronUp size={13} />}
+            <span className="text-[10px] text-[#848e9c] font-mono">{pair}</span>
+          </h3>
+          <button type="button" onClick={() => setOrderFormCollapsed(v => !v)}
+            className="text-[#848e9c] hover:text-[#eaecef] transition">
+            {orderFormCollapsed ? <ChevronDown size={14} /> : <ChevronUp size={14} />}
           </button>
-        </button>
+        </div>
 
         {!orderFormCollapsed && (
-      <form onSubmit={handleTrade} className="p-4">
+      <form onSubmit={handleTrade} className="p-5">
 
         {/* Row 1: Buy/Sell + Order type + Route + Balance */}
-        <div className="flex flex-wrap items-center gap-3 mb-4">
+        <div className="flex flex-wrap items-center gap-3 mb-5">
           <div className="flex gap-1 bg-[#0b0e11] p-1 rounded-xl border border-[#2b3139]">
             <button type="button" onClick={() => setSide('buy')}
               className={`px-5 py-2 rounded-lg text-sm font-bold transition ${side==='buy' ? 'bg-[#0ecb81] text-black shadow-lg shadow-[#0ecb81]/20' : 'text-[#848e9c] hover:text-[#eaecef]'}`}>
@@ -858,7 +854,7 @@ export default function TradePage() {
         </div>
 
         {/* Row 2: Controls grid */}
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 mb-3">
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 mb-4">
 
           {/* Lot Size */}
           <div>

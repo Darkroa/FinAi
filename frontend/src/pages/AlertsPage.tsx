@@ -21,13 +21,33 @@ interface PriceAlert {
   created_at: string
 }
 
-const SYMBOLS = ['BTC/USDT', 'ETH/USDT', 'BNB/USDT', 'SOL/USDT', 'XRP/USDT']
+const SYMBOLS = [
+  'BTC/USDT', 'ETH/USDT', 'BNB/USDT', 'SOL/USDT', 'XRP/USDT',
+  'ADA/USDT', 'DOGE/USDT', 'AVAX/USDT', 'DOT/USDT', 'LINK/USDT',
+  'LTC/USDT', 'UNI/USDT', 'ATOM/USDT', 'TRX/USDT', 'MATIC/USDT',
+  'NEAR/USDT', 'APT/USDT', 'ARB/USDT', 'OP/USDT', 'SUI/USDT',
+]
 const COINGECKO_IDS: Record<string, string> = {
-  'BTC/USDT': 'bitcoin',
-  'ETH/USDT': 'ethereum',
-  'BNB/USDT': 'binancecoin',
-  'SOL/USDT': 'solana',
-  'XRP/USDT': 'ripple',
+  'BTC/USDT':  'bitcoin',
+  'ETH/USDT':  'ethereum',
+  'BNB/USDT':  'binancecoin',
+  'SOL/USDT':  'solana',
+  'XRP/USDT':  'ripple',
+  'ADA/USDT':  'cardano',
+  'DOGE/USDT': 'dogecoin',
+  'AVAX/USDT': 'avalanche-2',
+  'DOT/USDT':  'polkadot',
+  'LINK/USDT': 'chainlink',
+  'LTC/USDT':  'litecoin',
+  'UNI/USDT':  'uniswap',
+  'ATOM/USDT': 'cosmos',
+  'TRX/USDT':  'tron',
+  'MATIC/USDT':'matic-network',
+  'NEAR/USDT': 'near',
+  'APT/USDT':  'aptos',
+  'ARB/USDT':  'arbitrum',
+  'OP/USDT':   'optimism',
+  'SUI/USDT':  'sui',
 }
 
 const SUGGEST_PCTS = [-20, -10, -5, +5, +10, +20]
