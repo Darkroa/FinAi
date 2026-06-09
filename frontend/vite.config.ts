@@ -26,7 +26,7 @@ export default defineConfig({
         rewrite: (path) => path.replace(/^\/ws/, '/api/ws'),
       },
       '/__mockup': {
-        target: 'http://localhost:23636',
+        target: 'http://localhost:8000',
         changeOrigin: true,
         ws: true,
       },
