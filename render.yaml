@@ -26,9 +26,9 @@ services:
     pullRequestPreviewsEnabled: true
     envVars:
       - key: VITE_API_URL
-        value: https://finai-backend.onrender.com
+        value: https://finai-api-2nyg.onrender.com
       - key: VITE_WS_URL
-        value: wss://finai-backend.onrender.com
+        value: wss://finai-api-2nyg.onrender.com
   # ==================== BACKEND (Python Web Service) ====================
   - type: web
     name: finai-backend
@@ -48,7 +48,7 @@ services:
           type: redis
           property: connectionString
       - key: FRONTEND_URL
-        value: https://finai-frontend.onrender.com
+        value: https://finai-frontend-xtdg.onrender.com
       - key: SECRET_KEY
         generateValue: true
       - key: DEBUG
