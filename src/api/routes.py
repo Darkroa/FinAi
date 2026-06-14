@@ -2006,6 +2006,16 @@ async def admin_wallet_stats(current_user=Depends(get_current_user), db: Session
     }
 
 
+@router.get("/llm/status")
+async def llm_status(current_user=Depends(get_current_user)):
+    """Return which LLM providers are available and which is active."""
+    from src.utils.llm import list_providers, get_active_provider
+    return {
+        "active_provider": get_active_provider(),
+        "providers": list_providers(),
+    }
+
+
 @router.get("/admin/health")
 async def admin_health_check(db: Session = Depends(get_db)):
     import time

@@ -1,20 +1,11 @@
-from langchain_core.prompts import ChatPromptTemplate
 from langchain_community.tools import Tool
-from langchain_core.messages import HumanMessage, AIMessage
 from loguru import logger
 
-from src.utils.llm import get_llm
+from src.utils.llm import get_llm, get_active_provider
 from src.analysis.full_analyzer import FullAnalyzer
 from src.rag.vector_store import FinancialRAG
 from src.ingestion.news_fetcher import NewsFetcher
 
-
-try:
-    llm = get_llm(model="grok", temperature=0.7)
-except Exception as _e:
-    logger.warning(f"LLM init failed ({_e}) → using Local Intelligence Engine")
-    from src.utils.local_llm import LocalAI
-    llm = LocalAI()
 
 rag = FinancialRAG()
 full_analyzer = FullAnalyzer()
@@ -95,14 +86,21 @@ tools = [
     ),
 ]
 
-SYSTEM_PROMPT = """You are ChatFin, a professional AI Trading Assistant for the ChatFin trading platform.
+FIN_SYSTEM_PROMPT = """You are Fin — FinAi's intelligent trading assistant. You are the AI brain powering the FinAi platform.
 
-You possess expert-level, up-to-date knowledge in:
+You possess expert-level knowledge in:
 • Technical Analysis (price action, indicators, chart patterns, volume profile, order flow)
 • Fundamental Analysis (macro data, earnings, on-chain metrics, sector trends)
 • Risk Management (position sizing, leverage control, portfolio risk, drawdown management)
 • All major markets: Stocks, Forex, Cryptocurrencies, Futures, and Options
 • Algorithmic & AI-powered bot trading strategies
+
+Your Identity — Fin:
+• You are always Fin, regardless of which underlying AI model is powering you.
+• You never mention GPT, Groq, Grok, Gemini, DeepSeek, or any model name.
+• You never say "As an AI language model..." — you are Fin, a trading specialist.
+• Your personality is calm, confident, decisive, and authoritative — like a seasoned senior trader.
+• Use professional yet approachable language. Adjust technical depth to the user's level.
 
 Core Rules:
 • Always respond in a concise, clear, structured, and highly professional tone.
@@ -110,32 +108,36 @@ Core Rules:
 • Always include clear risk warnings with any trade suggestion.
 • For trade ideas, provide: entry zone, stop-loss, take-profit levels, and risk-reward ratio.
 • Perform multi-timeframe analysis (1m to Weekly) and highlight confluences or conflicts.
-• You can analyze chart images when provided.
-• You have access to real-time market data.
-
-LLM Integration & Routing:
-You intelligently route across multiple LLM providers: Google AI Studio, Groq Cloud, GitHub Models, OpenRouter, NVIDIA Build, DeepSeek, OpenAI (ChatGPT), and Grok.
-• Automatically select the best model based on task complexity, speed, and availability.
-• When no API key is available, seamlessly switch to the local LLM.
-• Maintain complete consistency in personality, knowledge, and output quality regardless of the underlying LLM.
-
-Personality & Tone:
-• Act as a seasoned senior trader — calm, confident, decisive, and authoritative.
-• Use professional yet approachable language. Adjust technical depth based on the user's level.
-• Always close any trade suggestion or high-risk idea with: "This is financial analysis with ChatFin. Trade at your own risk."
+• You have access to real-time market data and live tool integrations.
 
 Rules (Tool Use):
 - When the user asks about any specific stock or ticker, ALWAYS use the full_market_analysis tool first.
 - For general market updates, use get_latest_financial_news.
 - Use retrieve_relevant_context when more historical background is needed.
-- Give clear insights with confidence levels and actionable recommendations."""
+- Give clear insights with confidence levels and actionable recommendations.
+
+Sign-off:
+• Always close any trade suggestion or high-risk idea with: "This is financial analysis from Fin. Trade at your own risk."
+"""
+
+
+def _get_llm_for_request():
+    """Get best available LLM for each request (re-evaluates keys each time)."""
+    try:
+        return get_llm(temperature=0.7)
+    except Exception as e:
+        logger.warning(f"LLM init failed ({e}) → Local Intelligence Engine")
+        from src.utils.local_llm import LocalAI
+        return LocalAI()
 
 
 def chat_with_agent(message: str, user_email: str = None) -> str:
-    """Chat with FinAi agent. Falls back to local intelligence when no API keys."""
+    """Chat with Fin agent. Dynamically selects best available LLM provider."""
     global chat_history
 
-    # If llm is LocalAI, route directly to context-aware local engine
+    llm = _get_llm_for_request()
+
+    # If LocalAI, route directly to context-aware local engine
     from src.utils.local_llm import LocalAI, local_chat
     if isinstance(llm, LocalAI):
         reply = local_chat(message, user_email)
@@ -143,12 +145,13 @@ def chat_with_agent(message: str, user_email: str = None) -> str:
         chat_history.append({"role": "assistant", "content": reply})
         return reply
 
+    provider = get_active_provider()
     tool_descriptions = "\n".join([
         f"- {t.name}: {t.description}" for t in tools
     ])
 
     system_content = (
-        f"{SYSTEM_PROMPT}\n\n"
+        f"{FIN_SYSTEM_PROMPT}\n\n"
         f"Available tools (call them by returning 'USE_TOOL: <tool_name> | <input>'):\n"
         f"{tool_descriptions}\n\n"
         "If you need to use a tool, say 'USE_TOOL: tool_name | input'. "
@@ -181,18 +184,18 @@ def chat_with_agent(message: str, user_email: str = None) -> str:
 
         chat_history.append({"role": "user", "content": message})
         chat_history.append({"role": "assistant", "content": reply})
+        logger.debug(f"Fin responded via [{provider}]")
         return reply
 
     except Exception as e:
-        logger.error(f"Agent chat error: {e}")
-        # Final fallback to local intelligence
+        logger.error(f"Fin agent error (provider={provider}): {e}")
         try:
             return local_chat(message, user_email)
         except Exception:
-            return f"⚠️ FinAi assistant is temporarily unavailable."
+            return "⚠️ Fin is temporarily unavailable. Please try again in a moment."
 
 
-logger.success("🤖 FinAi Agent is ready!")
+logger.success("🤖 Fin (FinAi Agent) is ready!")
 
 agent_executor = type("AgentExecutor", (), {
     "invoke": staticmethod(lambda inp: {"output": chat_with_agent(inp.get("input", ""))})

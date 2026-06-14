@@ -56,10 +56,13 @@ export default function DashboardPage() {
   const [todayPnl, setTodayPnl] = useState(0);
   const [realizedPnl, setRealizedPnl] = useState(0);
   const [openPositions, setOpenPositions] = useState(0);
+  const [manualOpenCount, setManualOpenCount] = useState(0);
+  const [finBotOpenCount, setFinBotOpenCount] = useState(0);
+  const [finEventOpenCount, setFinEventOpenCount] = useState(0);
   const [portfolioValue, setPortfolioValue] = useState(0);
-  const [activeBotCount, setActiveBotCount] = useState(0);
   const [newsCount, setNewsCount] = useState(0);
   const [tradeCount, setTradeCount] = useState(0);
+  const [eventCount, setEventCount] = useState(0);
   const [bonusTasks, setBonusTasks] = useState<{ claim_id: number; bonus_id: number; title: string; amount_usdt: number; task_description?: string; note?: string; assigned_at?: string }[]>([]);
   const [claimingId, setClaimingId] = useState<number | null>(null);
   const { setUser } = useAuthStore();
@@ -83,51 +86,57 @@ export default function DashboardPage() {
   const fetchData = useCallback(async () => {
     try {
       const [eventsRes, botRes, pnlRes, finEventRes] = await Promise.all([
-        getEvents(5),
+        getEvents(20),
         getBotStatus(),
         getTodayPnl(),
         finEventListBots().catch(() => ({ data: { bots: [] } })),
       ]);
 
-      setEvents(Array.isArray(eventsRes.data) ? eventsRes.data : eventsRes.data?.events ?? []);
+      const evList = Array.isArray(eventsRes.data) ? eventsRes.data : eventsRes.data?.events ?? [];
+      setEvents(evList);
+      setEventCount(evList.length);
       setBotRunning(botRes.data?.running ?? false);
       setTodayPnl(pnlRes.data?.today_pnl ?? 0);
 
-      // Unrealized P&L + open positions from bot status (AiBot + FinEvent bots)
+      // FinBot open positions + portfolio value
       const bots: Record<string, { position: number; unrealized_pnl: number; running?: boolean; portfolio_value?: number }> =
         botRes.data?.bots ?? {};
       let totalUnrealized = 0;
-      let openCount = 0;
       let portfolioVal = 0;
       let activeBotCnt = 0;
+      let finBotOpen = 0;
       for (const bot of Object.values(bots)) {
         portfolioVal += bot.portfolio_value ?? 0;
         if (bot.running) activeBotCnt++;
         if (bot.position > 0) {
           totalUnrealized += bot.unrealized_pnl ?? 0;
-          openCount++;
+          finBotOpen++;
         }
       }
+      setFinBotOpenCount(finBotOpen);
 
-      // Also include manual (Trade page) open positions
+      // FinEvent running bots → count as open event positions
+      const feBots: { running: boolean; position?: number }[] = finEventRes.data?.bots ?? [];
+      const feOpen = Array.isArray(feBots) ? feBots.filter((b) => b.running || (b.position ?? 0) > 0).length : 0;
+      setFinEventOpenCount(feOpen);
+      setFinEventRunning(Array.isArray(feBots) && feBots.some((b) => b.running));
+
+      // Manual (Trade page) open positions
+      let manualOpen = 0;
       try {
         const posRes = await getOpenPositions();
         const manualPositions: { qty: number; current_price: number; price: number; unrealized_pnl: number }[] =
           posRes.data?.positions ?? [];
-        openCount += manualPositions.length;
+        manualOpen = manualPositions.length;
         for (const p of manualPositions) {
           totalUnrealized += p.unrealized_pnl ?? 0;
           portfolioVal += p.qty * (p.current_price || p.price);
         }
       } catch { /* silent */ }
+      setManualOpenCount(manualOpen);
 
-      setOpenPositions(openCount);
+      setOpenPositions(finBotOpen + feOpen + manualOpen);
       setPortfolioValue(portfolioVal);
-      setActiveBotCount(activeBotCnt);
-
-      // FinEvent running status
-      const feBots: { running: boolean }[] = finEventRes.data?.bots ?? [];
-      setFinEventRunning(Array.isArray(feBots) && feBots.some((b) => b.running));
 
       // News count + trade count + realized P&L + VPS/Asset in portfolio
       try {
@@ -340,8 +349,9 @@ export default function DashboardPage() {
                   {openPositions} All  Position{openPositions !== 1 ? 's' : ''}
                 </p>
                 <p className="text-[10px] text-[#848e9c]">
-                  Trade <span className="text-[#eaecef] font-medium">{openPositions}</span> | 
-                  FinBot <span className="text-[#eaecef] font-medium">{activeBotCount}</span> |EventBot <span className="text-[#eaecef] font-medium"> </span>
+                  Trade <span className="text-[#eaecef] font-medium">{manualOpenCount}</span>
+                  {' · '}FinBot <span className="text-[#eaecef] font-medium">{finBotOpenCount}</span>
+                  {' · '}Event <span className="text-[#eaecef] font-medium">{finEventOpenCount}</span>
                 </p>
               </div>
             </div>
@@ -480,7 +490,14 @@ export default function DashboardPage() {
       {/* AI Events */}
       <div>
         <div className="flex items-center justify-between mb-3">
-          <p className="text-xs font-bold text-[#eaecef]">AI Market Events</p>
+          <div className="flex items-center gap-2">
+            <p className="text-xs font-bold text-[#eaecef]">AI Market Events</p>
+            {eventCount > 0 && (
+              <span className="min-w-[18px] h-[18px] bg-[#0ecb81] text-black text-[9px] font-bold rounded-full flex items-center justify-center px-1">
+                {eventCount > 99 ? '99+' : eventCount}
+              </span>
+            )}
+          </div>
           <div className="flex items-center gap-1.5">
             <span className="w-1.5 h-1.5 rounded-full bg-[#0ecb81] inline-block animate-pulse" />
             <Zap size={12} className="text-[#f0b90b]" />

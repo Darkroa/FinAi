@@ -1092,7 +1092,7 @@ export default function BotsPage() {
             </div>
             <div>
               <p className="text-sm font-bold text-[#eaecef]">FinEventAI Bots</p>
-              <p className="text-xs text-[#848e9c]">Multiple bots trading on high-impact financial news events</p>
+              
             </div>
             <span className="text-[10px] px-2 py-0.5 rounded-full font-medium bg-[#f0b90b]/10 text-[#f0b90b]">
               {feBots.filter(b => b.running).length} running / {feMaxBots} slots
