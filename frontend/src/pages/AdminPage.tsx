@@ -23,7 +23,7 @@ import {
   Edit3, CreditCard, Eye, Gift, Trash2, ToggleLeft, ToggleRight,
   Share2, Copy, RotateCcw, Megaphone, Image, Plus, Link2, ExternalLink,
   Server, ShoppingBag, Package, DollarSign, X, Star, ChevronDown, Clock, Monitor, Download,
-  BarChart2, TrendingUp, TrendingDown,
+  BarChart2,
 } from 'lucide-react'
 import { adminGetUserActivity, adminClearUserActivity } from '../lib/api'
 

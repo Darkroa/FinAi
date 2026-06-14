@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuthStore } from '../store/authStore';
 import {
@@ -12,7 +12,6 @@ import {
   RefreshCw,
   Bot,
   Zap,
-  Target,
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { getOpenPositions, closeManualTrade, getBotStatus, finEventListBots } from '../lib/api';
@@ -93,7 +92,6 @@ export default function OpenPositionsPage() {
   // Collapsible card state
   const [botCollapsed, setBotCollapsed] = useState(false);
   const [eventCollapsed, setEventCollapsed] = useState(false);
-  const [posCollapsed, setPosCollapsed] = useState(false) // add this with your other useState hooks at top 
 
   // Bot status - both types
   const [botStatus, setBotStatus] = useState<any>(null); // Fin Bot

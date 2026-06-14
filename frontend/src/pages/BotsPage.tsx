@@ -943,7 +943,11 @@ export default function BotsPage() {
                         onClick={async () => {
                           setSavingParams(true)
                           try {
-                            await updateBotParams({ bot_id: bot.bot_id, ...editParams })
+                            await updateBotParams({
+                              default_capital: editParams.initial_capital,
+                              risk_per_trade: editParams.risk_per_trade_pct,
+                              max_drawdown: editParams.max_drawdown_pct,
+                            })
                             toast.success('Bot parameters updated')
                             setEditingBotId(null)
                             fetchData()
