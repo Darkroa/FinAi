@@ -4484,16 +4484,26 @@ async def start_fin_event_bot(
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
 
-    # Check subscription limit
+    # Check subscription / tier limit
+    # Tier 2+ users always get at least 2 event bots regardless of subscription
+    tier = user.account_tier or 0
     limits = _subscription_limits(user.subscription or "free")
+    if tier >= 3:
+        effective_event_bots = max(limits["event_bots"], 50)   # admin / tier-3
+    elif tier >= 2:
+        effective_event_bots = max(limits["event_bots"], 2)    # tier-2 override
+    elif tier >= 1:
+        effective_event_bots = max(limits["event_bots"], 1)    # tier-1 gets at least 1
+    else:
+        effective_event_bots = limits["event_bots"]            # free / unverified
     from src.trading.fin_event_bot import FinEventBotManager
     mgr = FinEventBotManager.instance()
     running = mgr.list_user_bots(user.id)
     running_count = sum(1 for b in running if b.get("running"))
-    if running_count >= limits["event_bots"] and limits["event_bots"] > 0:
-        raise HTTPException(status_code=403, detail=f"Your plan allows up to {limits['event_bots']} FinEventAI bots. Upgrade to add more.")
-    if limits["event_bots"] == 0:
-        raise HTTPException(status_code=403, detail="FinEventAI bots require a Pro subscription or higher.")
+    if effective_event_bots == 0:
+        raise HTTPException(status_code=403, detail="FinEventAI bots require KYC Tier 1 or a Pro subscription.")
+    if running_count >= effective_event_bots:
+        raise HTTPException(status_code=403, detail=f"Your plan allows up to {effective_event_bots} FinEventAI bot(s). Upgrade or stop an existing one.")
 
     result = mgr.start(
         user_id            = user.id,
