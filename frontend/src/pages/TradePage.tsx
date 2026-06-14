@@ -351,10 +351,10 @@ export default function TradePage() {
   const [chatCollapsed, setChatCollapsed] = useState(false)
   const [selExchange, setSelExch]   = useState<string>('__balance__')
   const [showOrderBook, setShowOrderBook] = useState(false)
-  const [showBuySell, setShowBuySell] = useState(true)
+  const [showBuySell, setShowBuySell] = useState(() => localStorage.getItem('finai-buy-sell') !== 'false')
   const [showEntryLines, setShowEntryLines] = useState(() => localStorage.getItem('finai-entry-lines') !== 'false')
   const [orderFormCollapsed, setOrderFormCollapsed] = useState(false)
-  const [showOrderForm, setShowOrderForm] = useState(() => localStorage.getItem('finai-order-form') !== 'false')
+  const [showOrderForm, setShowOrderForm] = useState(() => localStorage.getItem('finai-order-form') === 'true')
   const [chartCollapsed, setChartCollapsed] = useState(false)
 
   // Data state
@@ -525,37 +525,50 @@ export default function TradePage() {
   return (
     <div className="space-y-3">
 
-      {/* ── Sticky Quick Buy/Sell bar — flush under header ────────────── */}
+      {/* ── Sticky Quick Buy/Sell bar — Binance style ────────────────── */}
       {showBuySell && (
-              <div className="sticky top-0 z-50 bg-[#161a1e] border-b border-[#2b3139] rounded-2 -mx-3 sm:-mx-4 lg:-mx-5 px-3 sm:px-4 lg:px-5 py-2">
-          <div className="flex items-center gap-2 py-2">
+        <div className="sticky top-0 z-50 bg-[#0b0e11]/95 backdrop-blur border border-[#2b3139] rounded-xl -mx-3 sm:-mx-4 lg:-mx-5 px-3 sm:px-4 lg:px-5 py-3">
+          <div className="flex items-center gap-2">
+            {/* Sell side */}
             <button type="button" disabled={orderLoading}
               onClick={() => handleQuickTrade('sell')}
-              className="flex-1 py-2 rounded-xl text-xs font-bold bg-[#f6465d]/10 border border-[#f6465d]/30 text-[#f6465d] hover:bg-[#f6465d] hover:text-white disabled:opacity-50 transition active:scale-[0.98]">
-              Sell
+              className="flex-1 py-3 rounded-xl font-bold bg-[#f6465d] hover:bg-[#d93d51] text-white disabled:opacity-50 transition active:scale-[0.98] shadow-lg shadow-[#f6465d]/20 flex flex-col items-center gap-0.5">
+              <span className="text-sm">Sell / Short</span>
+              <span className="text-[10px] font-mono opacity-80">
+                {orderBook.bids[0] ? `$${orderBook.bids[0].price.toLocaleString('en-US', { maximumFractionDigits: 2 })}` : '—'}
+              </span>
             </button>
-            <div className="flex items-center bg-[#0b0e11] border border-[#2b3139] rounded-lg overflow-hidden flex-shrink-0">
-              <button type="button" onClick={() => {
-                const next = Math.max(0.01, parseFloat(lotSize||'1') - 1)
-                const s = next.toFixed(2); setLotSize(s); setAmount(s)
-              }} className="px-2 py-1.5 text-[#848e9c] hover:text-[#eaecef] hover:bg-[#2b3139] transition">
-                <Minus size={9} />
-              </button>
-              <span className="w-14 text-center text-xs font-mono text-[#eaecef] font-bold py-1.5">{lotSize}</span>
-              <button type="button" onClick={() => {
-                const next = Math.min(100, parseFloat(lotSize||'1') + 1)
-                const s = next.toFixed(2); setLotSize(s); setAmount(s)
-              }} className="px-2 py-1.5 text-[#848e9c] hover:text-[#eaecef] hover:bg-[#2b3139] transition">
-                <Plus size={9} />
-              </button>
+
+            {/* Lot size stepper */}
+            <div className="flex flex-col items-center gap-1 flex-shrink-0">
+              <span className="text-[8px] text-[#4a5568] uppercase tracking-widest">Lot</span>
+              <div className="flex items-center bg-[#161a1e] border border-[#2b3139] rounded-lg overflow-hidden">
+                <button type="button" onClick={() => {
+                  const next = Math.max(0.01, parseFloat(lotSize||'1') - 0.01)
+                  const s = next.toFixed(2); setLotSize(s); setAmount(s)
+                }} className="px-2 py-2 text-[#848e9c] hover:text-[#eaecef] hover:bg-[#2b3139] transition">
+                  <Minus size={9} />
+                </button>
+                <span className="w-14 text-center text-xs font-mono text-[#f0b90b] font-bold py-2">{lotSize}</span>
+                <button type="button" onClick={() => {
+                  const next = Math.min(100, parseFloat(lotSize||'1') + 0.01)
+                  const s = next.toFixed(2); setLotSize(s); setAmount(s)
+                }} className="px-2 py-2 text-[#848e9c] hover:text-[#eaecef] hover:bg-[#2b3139] transition">
+                  <Plus size={9} />
+                </button>
+              </div>
             </div>
+
+            {/* Buy side */}
             <button type="button" disabled={orderLoading}
               onClick={() => handleQuickTrade('buy')}
-              className="flex-1 py-2 rounded-xl text-xs font-bold bg-[#0ecb81]/10 border border-[#0ecb81]/30 text-[#0ecb81] hover:bg-[#0ecb81] hover:text-black disabled:opacity-50 transition active:scale-[0.98]">
-              Buy
+              className="flex-1 py-3 rounded-xl font-bold bg-[#0ecb81] hover:bg-[#0ab56f] text-black disabled:opacity-50 transition active:scale-[0.98] shadow-lg shadow-[#0ecb81]/20 flex flex-col items-center gap-0.5">
+              <span className="text-sm">Buy / Long</span>
+              <span className="text-[10px] font-mono opacity-70">
+                {orderBook.asks[0] ? `$${orderBook.asks[0].price.toLocaleString('en-US', { maximumFractionDigits: 2 })}` : '—'}
+              </span>
             </button>
           </div>
-                
         </div>
       )}
 
@@ -675,7 +688,7 @@ export default function TradePage() {
       <div className={`grid grid-cols-1 gap-3 ${chatCollapsed ? 'lg:grid-cols-1' : 'lg:grid-cols-3'}`}>
 
         {/* TradingView chart */}
-        <div className={`bg-[#161a1e] border border-[#2b3139] rounded-xl overflow-hidden flex flex-col ${chatCollapsed ? '' : 'lg:col-span-2'} ${chartExpanded ? 'fixed inset-0 z-[9999] rounded-none border-0' : ''}`}>
+        <div className={`bg-[#161a1e] rounded-xl overflow-hidden flex flex-col ${chatCollapsed ? '' : 'lg:col-span-2'} ${chartExpanded ? 'fixed inset-0 z-[9999] rounded-none' : ''}`}>
           {/* Chart toolbar */}
           <div className="flex items-center gap-2 px-4 py-2.5 border-b border-[#2b3139] flex-shrink-0">
             {/* TV brand */}
@@ -720,7 +733,7 @@ export default function TradePage() {
                   </div>
                   <div className="mt-3 pt-2 border-t border-[#2b3139]">
                     <p className="text-[10px] text-[#848e9c] uppercase tracking-widest mb-2">Quick Bar</p>
-                    <button onClick={() => { setShowBuySell(v => !v); setShowPrefs(false) }}
+                    <button onClick={() => { const nv = !showBuySell; setShowBuySell(nv); localStorage.setItem('finai-buy-sell', String(nv)); setShowPrefs(false) }}
                       className="w-full text-left px-3 py-2 rounded-lg text-xs text-[#848e9c] hover:bg-[#2b3139] hover:text-[#eaecef] transition flex items-center justify-between">
                       {showBuySell ? 'Hide Buy/Sell Bar' : 'Show Buy/Sell Bar'}
                       <Zap size={10} />

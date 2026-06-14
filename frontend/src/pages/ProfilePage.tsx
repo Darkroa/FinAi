@@ -529,32 +529,21 @@ function PersonalTab({ user, setUser }: { user: UserProfile | null; setUser: (u:
                 <p className="text-[11px] text-[#4a5568] mt-0.5 truncate">{user?.email}</p>
               </div>
 
-              {/* Connection status row */}
-              <div className="flex flex-wrap items-center gap-1.5 pt-0.5">
-                <span className={`inline-flex items-center gap-1 text-[10px] font-medium px-2 py-0.5 rounded-full border ${tgConnected ? 'bg-[#0ecb81]/8 border-[#0ecb81]/25 text-[#0ecb81]' : 'bg-[#2b3139]/60 border-[#2b3139] text-[#848e9c]'}`}>
-                  <Send size={8} />{tgConnected ? 'Telegram' : 'No Telegram'}
-                </span>
-                <span className={`inline-flex items-center gap-1 text-[10px] font-medium px-2 py-0.5 rounded-full border ${waConnected ? 'bg-[#0ecb81]/8 border-[#0ecb81]/25 text-[#0ecb81]' : 'bg-[#2b3139]/60 border-[#2b3139] text-[#848e9c]'}`}>
-                  <MessageCircle size={8} />{waConnected ? 'WhatsApp' : 'No WhatsApp'}
-                </span>
-              </div>
-
-              {/* Status badges row */}
-              <div className="flex flex-wrap items-center gap-1.5">
-                {/* Tier */}
-                <span className={`inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full border ${tier.border} ${tier.bg} ${tier.color}`}>
-                  <Star size={8} />{tier.label}
-                </span>
-                {/* KYC */}
-                {kycBadge()}
-                {/* Email */}
-                {user?.is_mail_verified
-                  ? <span className="inline-flex items-center gap-1 text-[10px] font-medium px-2 py-0.5 rounded-full bg-[#0ecb81]/8 border border-[#0ecb81]/25 text-[#0ecb81]"><CheckCircle size={8}/>Email Verified</span>
-                  : <span className="inline-flex items-center gap-1 text-[10px] font-medium px-2 py-0.5 rounded-full bg-[#f6465d]/8 border border-[#f6465d]/25 text-[#f6465d]"><Mail size={8}/>Unverified</span>
-                }
-                {/* Tier limits hint */}
-                <span className="inline-flex items-center text-[10px] text-[#848e9c] px-2 py-0.5 rounded-full bg-[#1e2329] border border-[#2b3139]">{tier.limits}</span>
-              </div>
+              {/* Connection status row — only show when actually connected */}
+              {(tgConnected || waConnected) && (
+                <div className="flex flex-wrap items-center gap-1.5 pt-0.5">
+                  {tgConnected && (
+                    <span className="inline-flex items-center gap-1 text-[10px] font-medium px-2 py-0.5 rounded-full border bg-[#0ecb81]/8 border-[#0ecb81]/25 text-[#0ecb81]">
+                      <Send size={8} />Telegram
+                    </span>
+                  )}
+                  {waConnected && (
+                    <span className="inline-flex items-center gap-1 text-[10px] font-medium px-2 py-0.5 rounded-full border bg-[#0ecb81]/8 border-[#0ecb81]/25 text-[#0ecb81]">
+                      <MessageCircle size={8} />WhatsApp
+                    </span>
+                  )}
+                </div>
+              )}
             </div>
           </div>
         </div>

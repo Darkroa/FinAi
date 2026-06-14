@@ -732,55 +732,74 @@ export default function BotsPage() {
               <p className="text-[10px] text-[#4a5568] mt-1">Stop bot when portfolio drops <span className="text-[#f6465d]">{params.max_drawdown_pct}%</span> — Range: 1% – 50%</p>
             </div>
 
-            {/* Margin Calculator */}
+            {/* Margin Calculator — card style */}
             <div className="sm:col-span-2 lg:col-span-3">
               {(() => {
                 const reqMargin = (params.lot_size * 100_000) / Math.max(params.leverage, 1)
                 const ok = params.initial_capital >= reqMargin
                 return (
-                  <div className={`flex items-center gap-3 p-3 rounded-xl border ${ok ? 'bg-[#0ecb81]/5 border-[#0ecb81]/20' : 'bg-[#f6465d]/5 border-[#f6465d]/20'}`}>
-                    <div className={`w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 ${ok ? 'bg-[#0ecb81]/10' : 'bg-[#f6465d]/10'}`}>
-                      <Calculator size={14} className={ok ? 'text-[#0ecb81]' : 'text-[#f6465d]'} />
+                  <div className={`rounded-xl border ${ok ? 'bg-[#0ecb81]/5 border-[#0ecb81]/20' : 'bg-[#f6465d]/5 border-[#f6465d]/20'} overflow-hidden`}>
+                    {/* Header row */}
+                    <div className="flex items-center justify-between px-4 py-3 border-b border-[#2b3139]/60">
+                      <div className="flex items-center gap-2">
+                        <div className={`w-7 h-7 rounded-lg flex items-center justify-center flex-shrink-0 ${ok ? 'bg-[#0ecb81]/15' : 'bg-[#f6465d]/15'}`}>
+                          <Calculator size={13} className={ok ? 'text-[#0ecb81]' : 'text-[#f6465d]'} />
+                        </div>
+                        <span className="text-[11px] font-semibold text-[#848e9c] uppercase tracking-wider">Live Margin Required</span>
+                      </div>
+                      <span className={`text-lg font-bold font-mono ${ok ? 'text-[#0ecb81]' : 'text-[#f6465d]'}`}>
+                        ${reqMargin.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                      </span>
                     </div>
-                    <div className="flex-1 min-w-0">
-                      <p className="text-[10px] text-[#848e9c] mb-0.5">Live Margin Required</p>
-                      <div className="flex flex-wrap items-center gap-x-4 gap-y-0.5">
-                        <span className={`text-sm font-bold font-mono ${ok ? 'text-[#0ecb81]' : 'text-[#f6465d]'}`}>
-                          ${reqMargin.toLocaleString('en-US', { maximumFractionDigits: 2 })}
-                        </span>
-                        <span className="text-[10px] text-[#4a5568]">
+                    {/* Formula + capital */}
+                    <div className="flex items-center justify-between px-4 py-2.5">
+                      <div className="flex flex-col gap-0.5">
+                        <span className="text-[10px] text-[#4a5568] font-mono">
                           {params.lot_size} lot × 100,000 ÷ 1:{params.leverage} = ${reqMargin.toFixed(2)}
                         </span>
-                        {!ok && <span className="text-[10px] text-[#f6465d] font-semibold">⚠ Increase capital or reduce lot size</span>}
+                        {!ok && (
+                          <span className="text-[10px] text-[#f6465d] font-semibold">⚠ Increase capital or reduce lot size</span>
+                        )}
                       </div>
-                    </div>
-                    <div className="text-right flex-shrink-0">
-                      <p className="text-[10px] text-[#4a5568]">Capital</p>
-                      <p className={`text-sm font-bold font-mono ${ok ? 'text-[#eaecef]' : 'text-[#f6465d]'}`}>${params.initial_capital.toLocaleString()}</p>
+                      <div className="text-right flex-shrink-0 ml-4">
+                        <p className="text-[9px] text-[#4a5568] uppercase tracking-wide">Capital</p>
+                        <p className={`text-sm font-bold font-mono ${ok ? 'text-[#eaecef]' : 'text-[#f6465d]'}`}>
+                          ${params.initial_capital.toLocaleString()}
+                        </p>
+                      </div>
                     </div>
                   </div>
                 )
               })()}
             </div>
 
-            {/* Summary + start */}
-            <div className="sm:col-span-2 lg:col-span-3 flex flex-wrap items-center gap-3 pt-2 border-t border-[#2b3139]">
-              <div className="flex flex-wrap gap-3 text-xs text-[#848e9c] flex-1">
-                <span><span className="text-[#4a5568]">Ticker</span> <span className="text-[#f0b90b] font-mono font-semibold">{params.ticker}</span></span>
-                <span><span className="text-[#4a5568]">Strategy</span> <span className="text-[#eaecef] font-semibold uppercase">{params.strategy}</span></span>
-                <span><span className="text-[#4a5568]">Direction</span> <span className="text-[#eaecef] font-semibold capitalize">{params.direction}</span></span>
-                <span><span className="text-[#4a5568]">TP</span> <span className="text-[#0ecb81] font-semibold">+{params.take_profit_pct}%</span></span>
-                <span><span className="text-[#4a5568]">SL</span> <span className="text-[#f6465d] font-semibold">-{params.stop_loss_pct}%</span></span>
-                <span><span className="text-[#4a5568]">Leverage</span> <span className="text-[#f0b90b] font-semibold">1:{params.leverage}</span></span>
-                <span><span className="text-[#4a5568]">Mode</span> <span className="text-[#f6465d] font-semibold">LIVE</span></span>
+            {/* Config summary grid + action buttons */}
+            <div className="sm:col-span-2 lg:col-span-3 pt-2 border-t border-[#2b3139] space-y-3">
+              {/* 4-column config grid */}
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                {[
+                  { label: 'Ticker',    value: params.ticker,                          color: 'text-[#f0b90b]',   mono: true  },
+                  { label: 'Strategy',  value: params.strategy.toUpperCase(),          color: 'text-[#eaecef]',   mono: false },
+                  { label: 'Direction', value: params.direction.charAt(0).toUpperCase() + params.direction.slice(1), color: 'text-[#eaecef]', mono: false },
+                  { label: 'Leverage',  value: `1:${params.leverage}`,                color: 'text-[#f0b90b]',   mono: true  },
+                  { label: 'TP',        value: `+${params.take_profit_pct}%`,         color: 'text-[#0ecb81]',   mono: true  },
+                  { label: 'SL',        value: `-${params.stop_loss_pct}%`,           color: 'text-[#f6465d]',   mono: true  },
+                  { label: 'Mode',      value: 'LIVE',                                color: 'text-[#f6465d]',   mono: false },
+                ].map(item => (
+                  <div key={item.label} className="bg-[#0b0e11] border border-[#2b3139] rounded-lg px-3 py-2">
+                    <p className="text-[9px] text-[#4a5568] uppercase tracking-widest mb-0.5">{item.label}</p>
+                    <p className={`text-xs font-bold ${item.color} ${item.mono ? 'font-mono' : ''}`}>{item.value}</p>
+                  </div>
+                ))}
               </div>
-              <div className="flex gap-2">
+              {/* Action buttons */}
+              <div className="flex gap-2 justify-end">
                 <button onClick={handleSaveDefaults} disabled={savingParams}
-                  className="flex items-center gap-1.5 text-xs border border-[#2b3139] text-[#848e9c] hover:text-[#eaecef] px-3 py-2 rounded-lg transition">
+                  className="flex items-center gap-1.5 text-xs border border-[#2b3139] text-[#848e9c] hover:text-[#eaecef] hover:border-[#3c4451] px-4 py-2.5 rounded-xl transition">
                   <Save size={11} /> {savingParams ? 'Saving…' : 'Save Defaults'}
                 </button>
                 <button onClick={handleStart} disabled={!!actionLoading}
-                  className="flex items-center gap-2 bg-[#0ecb81] hover:bg-[#0ab56f] disabled:opacity-60 text-black font-bold px-5 py-2 rounded-xl text-sm transition">
+                  className="flex items-center gap-2 bg-[#0ecb81] hover:bg-[#0ab56f] disabled:opacity-60 text-black font-bold px-6 py-2.5 rounded-xl text-sm transition shadow-lg shadow-[#0ecb81]/20">
                   <Play size={13} /> {actionLoading === 'start' ? 'Starting…' : 'Launch Bot'}
                 </button>
               </div>
