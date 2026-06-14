@@ -306,6 +306,7 @@ export default function AdminPage() {
   const tierColor = (t: number) => ['text-[#848e9c]', 'text-[#f0b90b]', 'text-[#0ecb81]', 'text-[#a78bfa]'][t] || 'text-[#848e9c]'
 
   const tabs = [
+    { id: 'platform-stats', label: 'Platform', icon: BarChart2 },
     { id: 'users', label: 'Users', icon: Users },
     { id: 'transactions', label: 'Transactions', icon: Receipt },
     { id: 'subscriptions', label: 'Subscriptions', icon: CreditCard },
@@ -321,7 +322,6 @@ export default function AdminPage() {
     { id: 'ads', label: 'Ads', icon: Megaphone },
     { id: 'testimonials', label: 'Reviews', icon: Star },
     { id: 'activity', label: 'Activity Log', icon: Clock },
-    { id: 'platform-stats', label: 'Platform', icon: BarChart2 },
   ] as const
 
   const inp = 'w-full bg-[#0b0e11] border border-[#2b3139] rounded-xl px-3 py-2 text-sm text-[#eaecef] placeholder-[#4a5568] focus:outline-none focus:border-[#f0b90b] transition'

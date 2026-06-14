@@ -335,8 +335,8 @@ export default function TransactionHistoryPage() {
                       </div>
                       <div className="flex items-center justify-between gap-2 mt-1.5">
                         <p className="text-[10px] text-[#848e9c]">
-                          ${t.price < 1 ? t.price.toFixed(5) : fmt(t.price)} · {t.qty.toFixed(4)} qty
-                          {t.reason ? ` · ${t.reason.replace(/_/g, ' ').slice(0, 40)}` : ''}
+                          ${t.price < 1 ? t.price.toFixed(5) : fmt(t.price)} · {t.qty < 1 ? t.qty.toFixed(4) : t.qty >= 1000 ? t.qty.toFixed(1) : t.qty.toFixed(2)} qty
+                          {t.reason ? ` · ${t.reason.replace(/_/g, ' ').slice(0, 30)}` : ''}
                         </p>
                         <p className="text-[10px] text-[#848e9c] whitespace-nowrap">
                           {t.created_at ? new Date(t.created_at).toLocaleString() : '—'}
@@ -425,7 +425,7 @@ export default function TransactionHistoryPage() {
                       </div>
                       <div className="flex items-center justify-between gap-2 mt-1.5">
                         <p className="text-[10px] text-[#848e9c]">
-                          ${t.price < 1 ? t.price.toFixed(5) : fmt(t.price)} · {t.qty.toFixed(4)} qty
+                          ${t.price < 1 ? t.price.toFixed(5) : fmt(t.price)} · {t.qty < 1 ? t.qty.toFixed(4) : t.qty >= 1000 ? t.qty.toFixed(1) : t.qty.toFixed(2)} qty
                           {t.exchange ? ` · ${t.exchange}` : ''}
                         </p>
                         <p className="text-[10px] text-[#848e9c] whitespace-nowrap">

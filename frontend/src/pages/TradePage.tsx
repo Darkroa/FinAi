@@ -354,6 +354,7 @@ export default function TradePage() {
   const [showBuySell, setShowBuySell] = useState(true)
   const [showEntryLines, setShowEntryLines] = useState(() => localStorage.getItem('finai-entry-lines') !== 'false')
   const [orderFormCollapsed, setOrderFormCollapsed] = useState(false)
+  const [showOrderForm, setShowOrderForm] = useState(() => localStorage.getItem('finai-order-form') !== 'false')
   const [chartCollapsed, setChartCollapsed] = useState(false)
 
   // Data state
@@ -725,6 +726,36 @@ export default function TradePage() {
                       <Zap size={10} />
                     </button>
                   </div>
+                  <div className="mt-3 pt-2 border-t border-[#2b3139]">
+                    <p className="text-[10px] text-[#848e9c] uppercase tracking-widest mb-2">Place Order</p>
+                    <button onClick={() => { const v = !showOrderForm; setShowOrderForm(v); localStorage.setItem('finai-order-form', String(v)); setShowPrefs(false) }}
+                      className="w-full text-left px-3 py-2 rounded-lg text-xs text-[#848e9c] hover:bg-[#2b3139] hover:text-[#eaecef] transition flex items-center justify-between">
+                      {showOrderForm ? 'Hide Order Form' : 'Show Order Form'}
+                      <TrendingUp size={10} />
+                    </button>
+                  </div>
+                  <div className="mt-3 pt-2 border-t border-[#2b3139]">
+                    <p className="text-[10px] text-[#848e9c] uppercase tracking-widest mb-2">Default Lot Size</p>
+                    <div className="flex items-center gap-1.5 bg-[#0b0e11] border border-[#2b3139] rounded-lg overflow-hidden">
+                      <button type="button" onClick={() => {
+                        const next = Math.max(0.01, parseFloat(lotSize||'0.01') - 0.01)
+                        const s = next.toFixed(2); setLotSize(s); setAmount(s)
+                      }} className="px-2 py-1.5 text-[#848e9c] hover:text-[#eaecef] hover:bg-[#2b3139] transition">
+                        <Minus size={9} />
+                      </button>
+                      <input
+                        value={lotSize}
+                        onChange={e => { setLotSize(e.target.value); setAmount(e.target.value) }}
+                        className="flex-1 bg-transparent text-center text-xs font-mono text-[#eaecef] focus:outline-none min-w-0 py-1.5 w-16"
+                      />
+                      <button type="button" onClick={() => {
+                        const next = Math.min(100, parseFloat(lotSize||'0.01') + 0.01)
+                        const s = next.toFixed(2); setLotSize(s); setAmount(s)
+                      }} className="px-2 py-1.5 text-[#848e9c] hover:text-[#eaecef] hover:bg-[#2b3139] transition">
+                        <Plus size={9} />
+                      </button>
+                    </div>
+                  </div>
                 </div>
               )}
             </div>
@@ -840,6 +871,14 @@ export default function TradePage() {
       </div>
 
       {/* ── Order Form — BotsPage config style ──────────────────────── */}
+      {!showOrderForm && (
+        <button
+          onClick={() => { setShowOrderForm(true); localStorage.setItem('finai-order-form', 'true') }}
+          className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl border border-[#f0b90b]/20 bg-[#f0b90b]/5 text-[#f0b90b] hover:bg-[#f0b90b]/10 text-xs font-semibold transition">
+          <TrendingUp size={12} /> Show Place Order Form
+        </button>
+      )}
+      {showOrderForm && (
       <div className="bg-[#161a1e] border border-[#f0b90b]/30 rounded-2xl overflow-hidden">
         {/* Header */}
         <div className="flex items-center justify-between px-5 py-4 border-b border-[#2b3139]">
@@ -1060,6 +1099,7 @@ export default function TradePage() {
       </form>
         )}
       </div>
+      )}
 
       {/* ── Order Book (collapsible) ─────────────────────────────────── */}
       <div className="bg-[#161a1e] border border-[#2b3139] rounded-xl overflow-hidden">

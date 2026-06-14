@@ -1,5 +1,8 @@
-import { X, AlertTriangle } from 'lucide-react'
+import { useState } from 'react'
+import { X, AlertTriangle, MessageSquare } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
+import toast from 'react-hot-toast'
+import { createSupportTicket } from '../lib/api'
 
 export interface TxDetail {
   id: number
@@ -26,6 +29,8 @@ interface Props {
 
 export default function TransactionDetailModal({ detail, onClose }: Props) {
   const navigate = useNavigate()
+  const [reporting, setReporting] = useState(false)
+
   if (!detail) return null
 
   const txId = genTxId(detail.id, detail.created_at)
@@ -35,6 +40,31 @@ export default function TransactionDetailModal({ detail, onClose }: Props) {
         hour: '2-digit', minute: '2-digit', timeZone: 'UTC',
       }) + ' UTC'
     : '—'
+
+  const handleReportIssue = async () => {
+    setReporting(true)
+    try {
+      const subject = `Issue with ${detail.label ?? detail.type} — TX #${txId}`
+      const message = [
+        `I am reporting an issue with the following transaction:`,
+        ``,
+        `Type: ${detail.label ?? detail.type}`,
+        ...detail.fields.map(f => `${f.key}: ${f.value}`),
+        `Date: ${dateStr}`,
+        `Transaction ID: ${txId}`,
+        ``,
+        `Please review and assist. Thank you.`,
+      ].join('\n')
+      await createSupportTicket({ subject, message, priority: 'high' })
+      toast.success('Complaint lodged — our team will review it shortly')
+      onClose()
+      navigate('/app/support')
+    } catch {
+      toast.error('Failed to lodge complaint. Please try again.')
+    } finally {
+      setReporting(false)
+    }
+  }
 
   return (
     <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4"
@@ -78,14 +108,20 @@ export default function TransactionDetailModal({ detail, onClose }: Props) {
         </div>
 
         {/* Footer */}
-        <div className="px-5 pb-5 pt-3">
+        <div className="px-5 pb-5 pt-3 space-y-2">
           <button
-            onClick={() => {
-              onClose()
-              navigate('/app/support')
-            }}
-            className="w-full flex items-center justify-center gap-2 py-3 rounded-xl border border-[#f6465d]/30 bg-[#f6465d]/5 text-[#f6465d] hover:bg-[#f6465d]/15 text-xs font-semibold transition">
-            <AlertTriangle size={13} /> Report Issue
+            onClick={handleReportIssue}
+            disabled={reporting}
+            className="w-full flex items-center justify-center gap-2 py-3 rounded-xl border border-[#f6465d]/30 bg-[#f6465d]/5 text-[#f6465d] hover:bg-[#f6465d]/15 text-xs font-semibold transition disabled:opacity-60">
+            {reporting
+              ? <><span className="w-3 h-3 rounded-full border-2 border-[#f6465d]/40 border-t-[#f6465d] animate-spin" /> Lodging complaint…</>
+              : <><AlertTriangle size={13} /> Report Issue</>
+            }
+          </button>
+          <button
+            onClick={() => { onClose(); navigate('/app/support') }}
+            className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl border border-[#2b3139] text-[#848e9c] hover:text-[#eaecef] hover:bg-[#2b3139] text-xs font-medium transition">
+            <MessageSquare size={12} /> View My Complaints
           </button>
         </div>
       </div>
@@ -130,7 +166,7 @@ export function buildBotTradeDetail(t: {
     { key: 'Type', value: isBuy ? 'Bot BUY' : 'Bot SELL', color: isBuy ? 'text-[#0ecb81]' : 'text-[#f6465d]' },
     { key: 'Order', value: t.ticker },
     { key: 'Entry Price', value: `$${t.price.toLocaleString('en-US', { maximumFractionDigits: 4 })}` },
-    { key: 'Quantity', value: String(t.qty) },
+    { key: 'Quantity', value: Number(t.qty).toFixed(6) },
     { key: 'Realized PnL', value: pnlStr, color: t.pnl !== null ? (t.pnl >= 0 ? 'text-[#0ecb81]' : 'text-[#f6465d]') : undefined },
     { key: 'Strategy', value: (t.reason ?? 'AI Bot').replace(/_/g, ' ') },
     { key: 'Exchange', value: t.exchange ?? 'Platform' },
@@ -150,7 +186,7 @@ export function buildTradeDetail(t: {
     { key: 'Type', value: isBuy ? 'Buy' : 'Sell', color: isBuy ? 'text-[#0ecb81]' : 'text-[#f6465d]' },
     { key: 'Order', value: t.ticker },
     { key: 'Entry', value: `$${t.price.toLocaleString('en-US', { maximumFractionDigits: 4 })}` },
-    { key: 'Quantity', value: String(t.qty) },
+    { key: 'Quantity', value: Number(t.qty).toFixed(6) },
     { key: 'Realized PnL', value: pnlStr, color: t.pnl !== null ? (t.pnl >= 0 ? 'text-[#0ecb81]' : 'text-[#f6465d]') : undefined },
     { key: 'Leverage', value: t.leverage && t.leverage > 1 ? `${t.leverage}x` : '1x (Spot)' },
     { key: 'Transaction Fee', value: `$${fee} (0.05%)` },

@@ -174,6 +174,8 @@ export default function BotsPage() {
   const [prevPrices,   setPrevPrices]   = useState<Record<string, number>>({})
   const [priceFlash,   setPriceFlash]   = useState<Record<string, 'up' | 'down'>>({})
   const [collapsedBots,setCollapsedBots]= useState<Record<string, boolean>>({})
+  const [editingBotId, setEditingBotId] = useState<string | null>(null)
+  const [editParams,   setEditParams]   = useState({ ...EMPTY_PARAMS })
   const flashTimers                     = useRef<Record<string, ReturnType<typeof setTimeout>>>({})
 
   const [params, setParams] = useState({ ...EMPTY_PARAMS })
@@ -836,6 +838,33 @@ export default function BotsPage() {
                       className="text-[10px] px-2 py-1 bg-[#2b3139] text-[#848e9c] rounded-lg hover:text-[#eaecef] transition flex items-center gap-0.5">
                       {collapsed ? <ChevronDown size={10} /> : <ChevronUp size={10} />}
                     </button>
+                    {/* Edit toggle */}
+                    <button onClick={() => {
+                      if (editingBotId === bot.bot_id) { setEditingBotId(null) }
+                      else {
+                        setEditParams({
+                          ticker: bot.ticker,
+                          route: '__balance__',
+                          initial_capital: bot.balance ?? EMPTY_PARAMS.initial_capital,
+                          risk_per_trade_pct: EMPTY_PARAMS.risk_per_trade_pct,
+                          max_drawdown_pct: EMPTY_PARAMS.max_drawdown_pct,
+                          strategy: (bot.strategy as any) ?? 'finlux',
+                          take_profit_pct: bot.take_profit_pct ?? EMPTY_PARAMS.take_profit_pct,
+                          stop_loss_pct: bot.stop_loss_pct ?? EMPTY_PARAMS.stop_loss_pct,
+                          leverage: bot.leverage ?? EMPTY_PARAMS.leverage,
+                          sl_usdt: EMPTY_PARAMS.sl_usdt,
+                          direction: (bot.direction as any) ?? 'auto',
+                          bot_name: bot.bot_name,
+                          lot_size: bot.lot_size ?? EMPTY_PARAMS.lot_size,
+                          execution_cooldown: EMPTY_PARAMS.execution_cooldown,
+                        })
+                        setEditingBotId(bot.bot_id)
+                        setCollapsedBots(c => ({ ...c, [bot.bot_id]: false }))
+                      }
+                    }}
+                      className={`text-[10px] px-2 py-1 rounded-lg border transition ${editingBotId === bot.bot_id ? 'bg-[#f0b90b]/20 border-[#f0b90b]/40 text-[#f0b90b]' : 'bg-[#2b3139] border-[#2b3139] text-[#848e9c] hover:text-[#eaecef]'}`}>
+                      Edit
+                    </button>
                     {bot.position > 0 && !collapsed && (
                       <button onClick={() => handleClosePosition(bot.bot_id)}
                         disabled={actionLoading === `close_${bot.bot_id}`}
@@ -869,6 +898,66 @@ export default function BotsPage() {
                     <span className={`text-[10px] font-bold px-2 py-0.5 rounded ${bot.signal === 'BULLISH' ? 'bg-[#0ecb81]/10 text-[#0ecb81]' : bot.signal === 'BEARISH' ? 'bg-[#f6465d]/10 text-[#f6465d]' : 'bg-[#2b3139] text-[#848e9c]'}`}>
                       {bot.signal}
                     </span>
+                  </div>
+                )}
+
+                {/* ── Inline Edit Panel ── */}
+                {editingBotId === bot.bot_id && (
+                  <div className="border-t border-[#f0b90b]/20 bg-[#0b0e11] px-4 py-4 space-y-3">
+                    <p className="text-xs font-semibold text-[#f0b90b]">Edit Bot Configuration</p>
+                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                      <div>
+                        <label className="text-[10px] text-[#848e9c] mb-1 block">Take Profit (%)</label>
+                        <input type="number" min={5} max={200} value={editParams.take_profit_pct}
+                          onChange={e => setEditParams(p => ({ ...p, take_profit_pct: Math.min(200, Math.max(5, parseFloat(e.target.value) || 5)) }))}
+                          className="w-full bg-[#161a1e] border border-[#2b3139] focus:border-[#0ecb81] rounded-lg px-3 py-2 text-xs font-mono text-[#0ecb81] focus:outline-none" />
+                      </div>
+                      <div>
+                        <label className="text-[10px] text-[#848e9c] mb-1 block">Stop Loss (%)</label>
+                        <input type="number" min={5} max={100} value={editParams.stop_loss_pct}
+                          onChange={e => setEditParams(p => ({ ...p, stop_loss_pct: Math.min(100, Math.max(5, parseFloat(e.target.value) || 5)) }))}
+                          className="w-full bg-[#161a1e] border border-[#2b3139] focus:border-[#f6465d] rounded-lg px-3 py-2 text-xs font-mono text-[#f6465d] focus:outline-none" />
+                      </div>
+                      <div>
+                        <label className="text-[10px] text-[#848e9c] mb-1 block">Lot Size</label>
+                        <input type="number" min={0.01} step={0.01} value={editParams.lot_size}
+                          onChange={e => setEditParams(p => ({ ...p, lot_size: parseFloat(e.target.value) || 0.01 }))}
+                          className="w-full bg-[#161a1e] border border-[#2b3139] focus:border-[#f0b90b] rounded-lg px-3 py-2 text-xs font-mono text-[#eaecef] focus:outline-none" />
+                      </div>
+                      <div>
+                        <label className="text-[10px] text-[#848e9c] mb-1 block">Cooldown (s)</label>
+                        <input type="number" min={40} max={3600} value={editParams.execution_cooldown}
+                          onChange={e => setEditParams(p => ({ ...p, execution_cooldown: Math.max(40, parseInt(e.target.value) || 40) }))}
+                          className="w-full bg-[#161a1e] border border-[#2b3139] focus:border-[#f0b90b] rounded-lg px-3 py-2 text-xs font-mono text-[#eaecef] focus:outline-none" />
+                      </div>
+                      <div>
+                        <label className="text-[10px] text-[#848e9c] mb-1 block">Max Drawdown (%)</label>
+                        <input type="number" min={1} max={50} value={editParams.max_drawdown_pct}
+                          onChange={e => setEditParams(p => ({ ...p, max_drawdown_pct: Math.min(50, Math.max(1, parseFloat(e.target.value) || 1)) }))}
+                          className="w-full bg-[#161a1e] border border-[#2b3139] focus:border-[#f6465d] rounded-lg px-3 py-2 text-xs font-mono text-[#f6465d] focus:outline-none" />
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2 pt-1">
+                      <button
+                        disabled={savingParams}
+                        onClick={async () => {
+                          setSavingParams(true)
+                          try {
+                            await updateBotParams({ bot_id: bot.bot_id, ...editParams })
+                            toast.success('Bot parameters updated')
+                            setEditingBotId(null)
+                            fetchData()
+                          } catch { toast.error('Failed to update parameters') }
+                          finally { setSavingParams(false) }
+                        }}
+                        className="flex items-center gap-1.5 text-xs bg-[#f0b90b] hover:bg-[#d9a60b] disabled:opacity-60 text-black font-bold px-4 py-2 rounded-lg transition">
+                        <Save size={11} /> {savingParams ? 'Saving…' : 'Save Changes'}
+                      </button>
+                      <button onClick={() => setEditingBotId(null)}
+                        className="text-xs px-3 py-2 rounded-lg border border-[#2b3139] text-[#848e9c] hover:text-[#eaecef] transition">
+                        Cancel
+                      </button>
+                    </div>
                   </div>
                 )}
 
@@ -1044,72 +1133,113 @@ export default function BotsPage() {
                       <span>Capital: <span className="text-[#eaecef] font-mono">${(bot.capital_per_trade ?? 500).toFixed(0)}</span></span>
                     </div>
                     {bot.running && (
-                      <button onClick={() => handleFeStop(bot.bot_name)} disabled={feLoading}
-                        className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-[#f6465d]/10 hover:bg-[#f6465d]/20 border border-[#f6465d]/30 text-[#f6465d] text-xs font-semibold transition disabled:opacity-60">
-                        <Square size={10} /> Stop
-                      </button>
+                      <div className="flex items-center gap-1.5">
+                        <button onClick={() => {
+                          setFeParams(p => ({
+                            ...p,
+                            bot_name: bot.bot_name,
+                            min_impact_score: bot.min_impact_score ?? p.min_impact_score,
+                            capital_per_trade: bot.capital_per_trade ?? p.capital_per_trade,
+                            max_trades_per_day: bot.max_trades_per_day ?? p.max_trades_per_day,
+                          }))
+                          setShowFePanel(true)
+                          setFeCollapsed(false)
+                        }}
+                          className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-[#f0b90b]/10 hover:bg-[#f0b90b]/20 border border-[#f0b90b]/30 text-[#f0b90b] text-xs font-semibold transition">
+                          Edit
+                        </button>
+                        <button onClick={() => handleFeStop(bot.bot_name)} disabled={feLoading}
+                          className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-[#f6465d]/10 hover:bg-[#f6465d]/20 border border-[#f6465d]/30 text-[#f6465d] text-xs font-semibold transition disabled:opacity-60">
+                          <Square size={10} /> Stop
+                        </button>
+                      </div>
                     )}
                   </div>
                 ))}
               </div>
             )}
 
-            {/* Config panel for new bot */}
+            {/* Config panel for new bot — compact chip style */}
             {showFePanel && (
-              <div className="px-5 py-5 space-y-4 border-t border-[#2b3139]">
-                <p className="text-xs font-semibold text-[#f0b90b]">Configure New FinEventAI Bot</p>
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+              <div className="px-5 py-4 space-y-3 border-t border-[#2b3139]">
+                <p className="text-xs font-semibold text-[#f0b90b]">Configure FinEventAI Bot</p>
+
+                {/* Summary chips row */}
+                <div className="flex flex-wrap gap-1.5 text-[10px]">
+                  {[
+                    { label: 'Name', val: feParams.bot_name || `Bot ${feBots.length + 1}`, color: 'text-[#eaecef]' },
+                    { label: 'Tickers', val: feTickerInput || 'BTC-USD,ETH-USD', color: 'text-[#f0b90b]' },
+                    { label: 'Impact', val: `≥${feParams.min_impact_score}`, color: 'text-[#0ecb81]' },
+                    { label: 'Capital', val: `$${feParams.capital_per_trade}`, color: 'text-[#eaecef]' },
+                    { label: 'Max Trades', val: `${feParams.max_trades_per_day}/day`, color: 'text-[#eaecef]' },
+                    { label: 'Signal', val: feParams.sentiment_filter === 'both' ? 'Both ↕' : feParams.sentiment_filter === 'bullish' ? 'Buy ↑' : 'Sell ↓', color: feParams.sentiment_filter === 'bullish' ? 'text-[#0ecb81]' : feParams.sentiment_filter === 'bearish' ? 'text-[#f6465d]' : 'text-[#848e9c]' },
+                  ].map(c => (
+                    <span key={c.label} className="bg-[#0b0e11] border border-[#2b3139] rounded-full px-2 py-0.5">
+                      <span className="text-[#4a5568]">{c.label} </span>
+                      <span className={`font-semibold font-mono ${c.color}`}>{c.val}</span>
+                    </span>
+                  ))}
+                </div>
+
+                {/* Compact grid of inputs */}
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
                   <div>
-                    <label className="text-xs text-[#848e9c] mb-1.5 block">Bot Name</label>
+                    <label className="text-[10px] text-[#848e9c] mb-1 block">Bot Name</label>
                     <input value={feParams.bot_name} onChange={e => setFeParams(p => ({ ...p, bot_name: e.target.value }))}
                       placeholder={`Bot ${feBots.length + 1}`}
-                      className="w-full bg-[#0b0e11] border border-[#2b3139] rounded-xl px-3 py-2.5 text-sm text-[#eaecef] focus:outline-none focus:border-[#f0b90b]" />
+                      className="w-full bg-[#0b0e11] border border-[#2b3139] rounded-lg px-2.5 py-2 text-xs text-[#eaecef] focus:outline-none focus:border-[#f0b90b]" />
                   </div>
                   <div>
-                    <label className="text-xs text-[#848e9c] mb-1.5 block">Min Impact Score (1–10)</label>
+                    <label className="text-[10px] text-[#848e9c] mb-1 block">Tickers</label>
+                    <input value={feTickerInput} onChange={e => setFeTickerInput(e.target.value)}
+                      placeholder="BTC-USD,ETH-USD"
+                      className="w-full bg-[#0b0e11] border border-[#2b3139] rounded-lg px-2.5 py-2 text-xs text-[#eaecef] font-mono focus:outline-none focus:border-[#f0b90b]" />
+                  </div>
+                  <div>
+                    <label className="text-[10px] text-[#848e9c] mb-1 block">Impact Score (1–10)</label>
                     <input type="number" min={1} max={10} value={feParams.min_impact_score}
                       onChange={e => setFeParams(p => ({ ...p, min_impact_score: Number(e.target.value) }))}
-                      className="w-full bg-[#0b0e11] border border-[#2b3139] rounded-xl px-3 py-2.5 text-sm text-[#eaecef] focus:outline-none focus:border-[#f0b90b]" />
+                      className="w-full bg-[#0b0e11] border border-[#2b3139] rounded-lg px-2.5 py-2 text-xs text-[#eaecef] focus:outline-none focus:border-[#f0b90b]" />
                   </div>
                   <div>
-                    <label className="text-xs text-[#848e9c] mb-1.5 block">Capital Per Trade (USDT)</label>
+                    <label className="text-[10px] text-[#848e9c] mb-1 block">Capital / Trade (USDT)</label>
                     <input type="number" min={10} value={feParams.capital_per_trade}
                       onChange={e => setFeParams(p => ({ ...p, capital_per_trade: Number(e.target.value) }))}
-                      className="w-full bg-[#0b0e11] border border-[#2b3139] rounded-xl px-3 py-2.5 text-sm text-[#eaecef] focus:outline-none focus:border-[#f0b90b]" />
+                      className="w-full bg-[#0b0e11] border border-[#2b3139] rounded-lg px-2.5 py-2 text-xs text-[#eaecef] focus:outline-none focus:border-[#f0b90b]" />
                   </div>
                   <div>
-                    <label className="text-xs text-[#848e9c] mb-1.5 block">Max Trades / Day</label>
+                    <label className="text-[10px] text-[#848e9c] mb-1 block">Max Trades / Day</label>
                     <input type="number" min={1} max={100} value={feParams.max_trades_per_day}
                       onChange={e => setFeParams(p => ({ ...p, max_trades_per_day: Number(e.target.value) }))}
-                      className="w-full bg-[#0b0e11] border border-[#2b3139] rounded-xl px-3 py-2.5 text-sm text-[#eaecef] focus:outline-none focus:border-[#f0b90b]" />
+                      className="w-full bg-[#0b0e11] border border-[#2b3139] rounded-lg px-2.5 py-2 text-xs text-[#eaecef] focus:outline-none focus:border-[#f0b90b]" />
                   </div>
                   <div>
-                    <label className="text-xs text-[#848e9c] mb-1.5 block">Tickers (comma-separated)</label>
-                    <input value={feTickerInput} onChange={e => setFeTickerInput(e.target.value)}
-                      placeholder="BTC-USD,ETH-USD,SOL-USD"
-                      className="w-full bg-[#0b0e11] border border-[#2b3139] rounded-xl px-3 py-2.5 text-sm text-[#eaecef] font-mono focus:outline-none focus:border-[#f0b90b]" />
-                  </div>
-                  <div>
-                    <label className="text-xs text-[#848e9c] mb-1.5 block">Sentiment Filter</label>
+                    <label className="text-[10px] text-[#848e9c] mb-1 block">Signal Filter</label>
                     <div className="relative">
                       <select value={feParams.sentiment_filter}
                         onChange={e => setFeParams(p => ({ ...p, sentiment_filter: e.target.value }))}
-                        className="w-full bg-[#0b0e11] border border-[#2b3139] rounded-xl px-3 py-2.5 text-sm text-[#eaecef] focus:outline-none focus:border-[#f0b90b] appearance-none pr-9 cursor-pointer">
-                        <option value="both">Both (Bullish + Bearish)</option>
-                        <option value="bullish">Bullish only (BUY)</option>
-                        <option value="bearish">Bearish only (SELL)</option>
+                        className="w-full bg-[#0b0e11] border border-[#2b3139] rounded-lg px-2.5 py-2 text-xs text-[#eaecef] focus:outline-none focus:border-[#f0b90b] appearance-none pr-7 cursor-pointer">
+                        <option value="both">Both ↕</option>
+                        <option value="bullish">Bullish (BUY) ↑</option>
+                        <option value="bearish">Bearish (SELL) ↓</option>
                       </select>
-                      <ChevronDown size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-[#848e9c] pointer-events-none" />
+                      <ChevronDown size={11} className="absolute right-2 top-1/2 -translate-y-1/2 text-[#848e9c] pointer-events-none" />
                     </div>
                   </div>
                 </div>
-                <div className="flex items-center gap-3 pt-1">
+
+                {/* Action row */}
+                <div className="flex items-center gap-3 pt-1 border-t border-[#2b3139]">
                   <button onClick={handleFeStart} disabled={feLoading}
-                    className="flex items-center gap-2 px-6 py-2.5 bg-[#f0b90b] hover:bg-[#d9a60b] disabled:opacity-60 text-black rounded-xl text-sm font-semibold transition">
-                    {feLoading ? <RefreshCw size={13} className="animate-spin" /> : <Play size={13} />}
+                    className="flex items-center gap-1.5 px-5 py-2 bg-[#f0b90b] hover:bg-[#d9a60b] disabled:opacity-60 text-black rounded-lg text-xs font-bold transition">
+                    {feLoading ? <RefreshCw size={11} className="animate-spin" /> : <Play size={11} />}
                     {feLoading ? 'Starting…' : 'Launch Bot'}
                   </button>
-                  <p className="text-xs text-[#848e9c]">{feBots.filter(b => b.running).length}/{feMaxBots} bot slots used</p>
+                  <button onClick={() => setShowFePanel(false)}
+                    className="text-xs px-3 py-2 rounded-lg border border-[#2b3139] text-[#848e9c] hover:text-[#eaecef] transition">
+                    Cancel
+                  </button>
+                  <p className="text-[10px] text-[#4a5568] ml-auto">{feBots.filter(b => b.running).length}/{feMaxBots} slots used</p>
                 </div>
               </div>
             )}

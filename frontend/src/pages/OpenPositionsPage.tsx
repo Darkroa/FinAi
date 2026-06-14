@@ -176,18 +176,55 @@ export default function OpenPositionsPage() {
   return (
     <div className="space-y-3">
 
-      {/* Page header */}
-      <div className="flex items-center justify-between">
-        <h1 className="text-xl font-bold text-[#eaecef]">Open Positions</h1>
-        <div className="flex items-center gap-1.5">
-          <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${wsConnected ? 'bg-[#0ecb81] animate-pulse' : 'bg-[#2b3139]'}`} />
-          <span className={`text-[10px] ${wsConnected ? 'text-[#0ecb81]' : 'text-[#848e9c]'}`}>
-            <Wifi size={9} className="inline mr-0.5" />{wsConnected ? 'Live' : 'Offline'}
-          </span>
+      {/* ── Sticky Balance / Stats Card with "Open Positions | Live" inside ── */}
+      <div className="sticky top-0 z-20 bg-[#161a1e] border border-[#2b3139] rounded-xl overflow-hidden shadow-lg shadow-black/30">
+        {/* Card header row */}
+        <div className="flex items-center justify-between px-4 py-3 border-b border-[#2b3139]">
+          <div className="flex items-center gap-2">
+            <BarChart2 size={14} className="text-[#f0b90b]" />
+            <span className="text-sm font-bold text-[#eaecef]">Open Positions</span>
+            <span className={`text-[9px] px-1.5 py-0.5 rounded-full font-semibold ${
+              wsConnected ? 'bg-[#0ecb81]/10 text-[#0ecb81] border border-[#0ecb81]/20' : 'bg-[#2b3139] text-[#848e9c]'
+            }`}>
+              {wsConnected ? (
+                <><Wifi size={7} className="inline mr-0.5" />Live</>
+              ) : 'Offline'}
+            </span>
+            {openPositions.length > 0 && (
+              <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-[#f0b90b]/10 border border-[#f0b90b]/20 text-[#f0b90b] font-semibold">
+                {openPositions.length} open
+              </span>
+            )}
+          </div>
+          <button
+            onClick={fetchPositions}
+            className="p-1.5 rounded-lg hover:bg-[#2b3139] text-[#848e9c] hover:text-[#eaecef] transition"
+          >
+            <RefreshCw size={12} className={loading ? 'animate-spin' : ''} />
+          </button>
+        </div>
+
+        {/* Stats grid */}
+        <div className="grid grid-cols-4 gap-0 divide-x divide-[#2b3139]">
+          {[
+            { label: 'Balance', value: `$${formatCompact(liveBalance)}`, color: 'text-[#eaecef]' },
+            { label: 'Free Margin', value: `$${formatCompact(availableMargin)}`, color: 'text-[#0ecb81]' },
+            { label: 'Margin Used', value: `$${formatCompact(marginUsed)}`, color: 'text-[#f0b90b]' },
+            {
+              label: 'Unrealized P&L',
+              value: `${unrealizedPnl >= 0 ? '+' : ''}$${Math.abs(unrealizedPnl).toFixed(2)}`,
+              color: unrealizedPnl >= 0 ? 'text-[#0ecb81]' : 'text-[#f6465d]',
+            },
+          ].map(s => (
+            <div key={s.label} className="px-3 py-2.5 text-center">
+              <p className="text-[9px] text-[#848e9c] mb-0.5 uppercase tracking-wide truncate">{s.label}</p>
+              <p className={`text-xs font-bold font-mono ${s.color}`}>{s.value}</p>
+            </div>
+          ))}
         </div>
       </div>
 
-      {/* FinBot Status Card */}
+      {/* ── FinBot Status Card ── */}
       <div className="bg-[#161a1e] border border-[#2b3139] rounded-xl overflow-hidden">
         <button
           onClick={() => setBotCollapsed(v => !v)}
@@ -237,7 +274,7 @@ export default function OpenPositionsPage() {
         )}
       </div>
 
-      {/* FinEvent AI Signals Card */}
+      {/* ── FinEvent AI Signals Card ── */}
       <div className="bg-[#161a1e] border border-[#2b3139] rounded-xl overflow-hidden">
         <button
           onClick={() => setEventCollapsed(v => !v)}
@@ -276,44 +313,7 @@ export default function OpenPositionsPage() {
         )}
       </div>
 
-      {/* Balance / Margin Stats + P&L */}
-      <div className="bg-[#161a1e] border border-[#2b3139] rounded-xl p-3 space-y-1.5">
-        <div className="flex justify-between items-center bg-[#0b0e11] rounded-xl px-4 py-1.5">
-          <p className="text-[10px] text-[#848e9c]">Free Margin</p>
-          <p className="text-sm font-bold font-mono text-[#0ecb81] text-right">
-            ${availableMargin.toLocaleString('en-US', { maximumFractionDigits: 2 })}
-          </p>
-        </div>
-
-        <div className="flex justify-between items-center bg-[#0b0e11] rounded-xl px-4 py-1.5">
-          <p className="text-[10px] text-[#848e9c]">Balance</p>
-          <p className="text-sm font-bold font-mono text-[#eaecef] text-right">
-            ${formatCompact(liveBalance)}
-          </p>
-        </div>
-
-        <div className="flex justify-between items-center bg-[#0b0e11] rounded-xl px-4 py-1.5">
-          <p className="text-[10px] text-[#848e9c]">Margin Used</p>
-          <p className="text-sm font-bold font-mono text-[#f0b90b] text-right">
-            ${marginUsed.toLocaleString('en-US', { maximumFractionDigits: 2 })}
-          </p>
-        </div>
-
-        {/* Unrealized P&L */}
-        <div className="flex justify-between items-center bg-[#0b0e11] rounded-xl px-4 py-1.5">
-          <p className="text-[10px] text-[#848e9c]">Unrealized P&L</p>
-          <p className={`text-sm font-bold font-mono text-right ${
-            unrealizedPnl >= 0 ? 'text-[#0ecb81]' : 'text-[#f6465d]'
-          }`}>
-            {unrealizedPnl >= 0 ? '+' : ''}${unrealizedPnl.toLocaleString('en-US', { maximumFractionDigits: 2 })}
-          </p>
-        </div>
-
-      </div>
-
-
-
-      {/* Positions List */}
+      {/* ── Positions List ── */}
       <div className="bg-[#161a1e] border border-[#2b3139] rounded-xl overflow-hidden">
         <div className="flex items-center justify-between px-4 py-3 border-b border-[#2b3139]">
           <div className="flex items-center gap-2">
@@ -322,11 +322,9 @@ export default function OpenPositionsPage() {
               {openPositions.length} Open Position{openPositions.length !== 1 ? 's' : ''}
             </span>
           </div>
-          <button
-            onClick={fetchPositions}
-            className="p-1.5 rounded-lg hover:bg-[#2b3139] text-[#848e9c] hover:text-[#eaecef] transition"
-          >
-            <RefreshCw size={12} className={loading ? 'animate-spin' : ''} />
+          <button onClick={() => navigate('/app/trade')}
+            className="text-[10px] text-[#f0b90b] hover:underline transition">
+            + New Trade
           </button>
         </div>
 
@@ -350,69 +348,67 @@ export default function OpenPositionsPage() {
                 (pos.price > 0 ? ((pos.current_price - pos.price) / pos.price) * 100 : 0);
 
               return (
-                <div key={pos.id} className="px-4 py-3 hover:bg-[#1e2329] transition">
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2 mb-1">
-                        <span className="text-sm font-bold text-[#eaecef]">{pos.ticker}</span>
-                        <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-[#f0b90b]/10 text-[#f0b90b] border border-[#f0b90b]/20">
-                          {pos.exchange || 'Platform'}
+                <div key={pos.id} className={`px-4 py-3 hover:bg-[#1e2329] transition ${pnl >= 0 ? 'border-l-2 border-l-[#0ecb81]/30' : 'border-l-2 border-l-[#f6465d]/30'}`}>
+                  {/* Top row: ticker + badges + PnL + close */}
+                  <div className="flex items-center justify-between gap-2 mb-2">
+                    <div className="flex items-center gap-2 min-w-0">
+                      <span className="text-sm font-bold text-[#eaecef]">{pos.ticker}</span>
+                      <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-[#f0b90b]/10 text-[#f0b90b] border border-[#f0b90b]/20 font-semibold uppercase">
+                        BUY
+                      </span>
+                      <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-[#0ecb81]/10 text-[#0ecb81] border border-[#0ecb81]/20">
+                        Live
+                      </span>
+                      {(pos.leverage ?? 1) > 1 && (
+                        <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-[#627eea]/10 text-[#627eea] border border-[#627eea]/20">
+                          {pos.leverage}x
                         </span>
-                        {(pos.leverage ?? 1) > 1 && (
-                          <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-[#627eea]/10 text-[#627eea] border border-[#627eea]/20">
-                            {pos.leverage}x
-                          </span>
-                        )}
-                      </div>
-
-                      <div className="grid grid-cols-3 gap-3 text-[10px]">
-                        <div>
-                          <span className="text-[#848e9c]">Entry</span>
-                          <p className="text-[#eaecef] font-mono font-semibold">
-                            ${pos.price.toLocaleString('en-US', { maximumFractionDigits: 4 })}
-                          </p>
-                        </div>
-                        <div>
-                          <span className="text-[#848e9c]">Current</span>
-                          <p className="text-[#eaecef] font-mono font-semibold">
-                            ${pos.current_price.toLocaleString('en-US', { maximumFractionDigits: 4 })}
-                          </p>
-                        </div>
-                        <div>
-                          <span className="text-[#848e9c]">Qty</span>
-                          <p className="text-[#eaecef] font-mono font-semibold">{pos.qty}</p>
-                        </div>
-                      </div>
+                      )}
+                      <span className="text-[9px] text-[#848e9c] hidden sm:inline">{pos.exchange || 'Platform'}</span>
                     </div>
 
-                    <div className="flex flex-col items-end gap-1.5 flex-shrink-0">
+                    <div className="flex items-center gap-2 flex-shrink-0">
                       <div className="text-right">
-                        <p
-                          className={`text-sm font-bold font-mono ${
-                            pnl >= 0 ? 'text-[#0ecb81]' : 'text-[#f6465d]'
-                          }`}
-                        >
+                        <p className={`text-sm font-bold font-mono ${pnl >= 0 ? 'text-[#0ecb81]' : 'text-[#f6465d]'}`}>
                           {pnl >= 0 ? '+' : ''}${pnl.toFixed(2)}
                         </p>
-                        <p
-                          className={`text-[10px] ${pnlPct >= 0 ? 'text-[#0ecb81]' : 'text-[#f6465d]'}`}
-                        >
-                          {pnlPct >= 0 ? (
-                            <TrendingUp size={8} className="inline mr-0.5" />
-                          ) : (
-                            <TrendingDown size={8} className="inline mr-0.5" />
-                          )}
+                        <p className={`text-[10px] ${pnlPct >= 0 ? 'text-[#0ecb81]' : 'text-[#f6465d]'}`}>
+                          {pnlPct >= 0 ? <TrendingUp size={8} className="inline mr-0.5" /> : <TrendingDown size={8} className="inline mr-0.5" />}
                           {pnlPct >= 0 ? '+' : ''}{pnlPct.toFixed(2)}%
                         </p>
                       </div>
-
                       <button
                         onClick={() => handleClose(pos.id)}
                         disabled={closingId === pos.id}
                         className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-[10px] font-semibold bg-[#f6465d]/10 border border-[#f6465d]/30 text-[#f6465d] hover:bg-[#f6465d] hover:text-white disabled:opacity-50 transition"
                       >
-                        <X size={9} /> {closingId === pos.id ? 'Closing…' : 'Close'}
+                        <X size={9} /> {closingId === pos.id ? '…' : 'Close'}
                       </button>
+                    </div>
+                  </div>
+
+                  {/* Bottom row: price stats */}
+                  <div className="flex items-center gap-4 text-[10px]">
+                    <div>
+                      <span className="text-[#848e9c]">Entry </span>
+                      <span className="text-[#eaecef] font-mono font-semibold">
+                        ${pos.price.toLocaleString('en-US', { maximumFractionDigits: 4 })}
+                      </span>
+                    </div>
+                    <div>
+                      <span className="text-[#848e9c]">Current </span>
+                      <span className={`font-mono font-semibold ${pnl >= 0 ? 'text-[#0ecb81]' : 'text-[#f6465d]'}`}>
+                        ${pos.current_price.toLocaleString('en-US', { maximumFractionDigits: 4 })}
+                      </span>
+                    </div>
+                    <div>
+                      <span className="text-[#848e9c]">Qty </span>
+                      <span className="text-[#f0b90b] font-mono font-semibold">
+                        {Number(pos.qty).toFixed(6)}
+                      </span>
+                    </div>
+                    <div className="ml-auto text-[9px] text-[#4a5568]">
+                      {pos.created_at ? new Date(pos.created_at).toLocaleDateString() : ''}
                     </div>
                   </div>
                 </div>
