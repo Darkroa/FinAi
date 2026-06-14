@@ -525,7 +525,7 @@ export default function TradePage() {
 
       {/* ── Sticky Quick Buy/Sell bar — flush under header ────────────── */}
       {showBuySell && (
-              <div className="sticky top-0 z-50 bg-[#161a1e] border-b border-[#2b3139] rounded-l -mx-3 sm:-mx-4 lg:-mx-5 px-3 sm:px-4 lg:px-5 py-2">
+              <div className="sticky top-0 z-50 bg-[#161a1e] border-b border-[#2b3139] rounded-2 -mx-3 sm:-mx-4 lg:-mx-5 px-3 sm:px-4 lg:px-5 py-2">
           <div className="flex items-center gap-2 py-2">
             <button type="button" disabled={orderLoading}
               onClick={() => handleQuickTrade('sell')}
