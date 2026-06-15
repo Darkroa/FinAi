@@ -362,9 +362,6 @@ export default function TradePage() {
   const [orderLoading, setLoading]  = useState(false)
   const [tradeHistory, setHistory]  = useState<TradeRecord[]>([])
   const [openPositions, setOpenPos] = useState<OpenPosition[]>([])
-  const [setHistLoad]  = useState(false)
-
-
   const leverage = LEVERAGE_STEPS[leverageIdx]
   const navigate = useNavigate()
 
@@ -379,7 +376,14 @@ export default function TradePage() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [exchanges.length])
 
-  
+  const fetchHistory = useCallback(async () => {
+    try {
+      const [posRes, tradesRes] = await Promise.allSettled([
+        getOpenPositions(),
+        getBotTrades(50),
+      ])
+      const trades: TradeRecord[] = tradesRes.status === 'fulfilled' ? (tradesRes.value.data?.trades ?? []) : []
+      setHistory(trades)
       let positions: OpenPosition[] = posRes.status === 'fulfilled' ? (posRes.value.data?.positions ?? []) : []
       if (positions.length === 0 && trades.length > 0) {
         const posMap: Record<string, { qty: number; totalCost: number; trade: TradeRecord }> = {}
@@ -396,10 +400,14 @@ export default function TradePage() {
         })
       }
       setOpenPos(positions)
-  
+    } catch { /* silently ignore */ }
+  }, [])
+
+  useEffect(() => { fetchHistory() }, [fetchHistory])
 
   const unrealizedPnl = useMemo(() => openPositions.reduce((s,p) => s + (p.unrealized_pnl??0), 0), [openPositions])
   const realizedPnl   = useMemo(() => tradeHistory.filter(t => t.pnl !== null).reduce((s,t) => s + (t.pnl ?? 0), 0), [tradeHistory])
+  void realizedPnl
   const totalPositionValue = useMemo(() => openPositions.reduce((s,p) => s + (p.qty * (p.current_price || p.price)), 0), [openPositions])
 
   const { price: livePrice, change: liveChange, live: isLive } = useTradeLivePrice(pair)
