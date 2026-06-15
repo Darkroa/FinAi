@@ -221,7 +221,7 @@ function FinChatPanel({ pair, livePrice, liveChange, collapsed, onToggle }: {
   }
 
   return (
-    <div className="bg-[#161a1e] border border-[#2b3139] rounded-xl flex flex-col overflow-hidden">
+    <div className="bg-[#161a1e] border-y border-[#2b3139] sm:border sm:rounded-xl flex flex-col overflow-hidden">
       {/* Header — always visible */}
       <div className="flex items-center gap-2 px-4 py-3 border-b border-[#2b3139] flex-shrink-0">
         <div className="w-6 h-6 rounded-lg bg-[#f0b90b]/15 flex items-center justify-center">
@@ -547,7 +547,8 @@ export default function TradePage() {
       
       {/* ── 1. Buy/Sell Card - sticky top ───────────────────────────────── */}
       {showBuySell && (
-        <div className="sticky top-0 z-40 bg-[#161a1e] border-[#2b3139]  rounded-xl px-4 py-3 mb-6q">
+        <div className="sticky top-0 z-40 -mx-4 sm:mx-0">
+        <div className="bg-[#161a1e] border-y border-[#2b3139] sm:border sm:rounded-xl px-4 py-3">
           <div className="flex items-center justify-center gap-3 w-full">
             <button type="button" disabled={orderLoading} onClick={() => handleQuickTrade('sell')}
               className="flex-1 px-7 py-2.5 rounded-xl text-sm font-bold bg-[#f6465d] hover:bg-[#d93d51] text-white transition active:scale-[0.98] disabled:opacity-50">
@@ -576,6 +577,7 @@ export default function TradePage() {
               Buy
             </button>
           </div>
+        </div>
         </div>
       )}
 
@@ -847,7 +849,8 @@ export default function TradePage() {
         </button>
       )}
       {showOrderForm && (
-      <div className="bg-[#161a1e] border border-[#f0b90b]/30 rounded-2xl overflow-hidden">
+      <div className="-mx-4 sm:mx-0">
+      <div className="bg-[#161a1e] border-y border-[#2b3139] sm:border sm:rounded-xl overflow-hidden">
         {/* Header */}
         <div className="flex items-center justify-between px-6 py-5 border-b border-[#2b3139]">
           <h3 className="text-sm font-semibold text-[#eaecef] flex items-center gap-2">
@@ -1067,6 +1070,7 @@ export default function TradePage() {
       </form>
         )}
       </div>
+      </div>
       )}
 
         {/* ── Icon tab nav — below chart/chat ──────────────────────────── */}
@@ -1221,10 +1225,12 @@ export default function TradePage() {
          </div>
       )}
       {/* FinChat — full-width below chart */}
+      <div className="-mx-4 sm:mx-0">
         <FinChatPanel
           pair={pair} livePrice={livePrice} liveChange={liveChange}
           collapsed={chatCollapsed} onToggle={() => { const v = !chatCollapsed; setChatCollapsed(v); localStorage.setItem('finai-chat', String(v)) }}
         />
+      </div>
       </div>
     </div>
       
