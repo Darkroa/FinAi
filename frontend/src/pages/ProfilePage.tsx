@@ -13,7 +13,7 @@ import toast from 'react-hot-toast'
 import {
   User, Camera, Shield, CheckCircle, Clock, XCircle,
   Mail, Lock, Key, Zap, Plus, Trash2, Eye, EyeOff,
-  Copy, AlertCircle, Star, Send, MessageCircle, LogOut, ChevronDown,
+  Copy, AlertCircle, Send, MessageCircle, LogOut, ChevronDown,
   Wifi, RefreshCw, Gift, Share2, Users as UsersIcon, TrendingUp,
   ChevronLeft, ChevronRight, Settings, Smartphone,
 } from 'lucide-react'
@@ -377,7 +377,7 @@ function ReferralTab() {
 
 /* ─────────────────────────── PERSONAL TAB ─────────────────────────── */
 function PersonalTab({ user, setUser }: { user: UserProfile | null; setUser: (u: any) => void }) {
-  const tier = TIERS[user?.account_tier ?? 0]
+  const tire = TIERS[user?.account_tier ?? 0]
   const kycBadge = () => {
     switch (user?.kyc_status) {
       case 'approved':  return <span className="inline-flex items-center gap-1 text-[11px] px-2 py-0.5 rounded-full bg-[#0ecb81]/10 text-[#0ecb81]"><CheckCircle size={9}/>Approved</span>
