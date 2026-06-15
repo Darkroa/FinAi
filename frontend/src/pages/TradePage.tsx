@@ -552,30 +552,31 @@ export default function TradePage() {
       {/* ── Chart content + FinChat grid ─────────────────────────────── */}
       <div className={`grid grid-cols-1 gap-3 ${chatCollapsed ? 'lg:grid-cols-1' : 'lg:grid-cols-3'}`}>
 
-        {/* Combined pair header + TradingView chart card */}
-        <div className={`${chatCollapsed ? '' : 'lg:col-span-2'}`}>
-          <div className={`bg-[#161a1e] border border-[#2b3139] rounded-xl overflow-hidden flex flex-col ${chartExpanded ? 'fixed inset-0 z-[9999] rounded-none border-0' : ''}`}>
+        {/* Combined pair header + TradingView chart card — full-bleed on mobile */}
+        <div className={`-mx-4 sm:mx-0 ${chatCollapsed ? '' : 'lg:col-span-2'}`}>
+          <div className={`bg-[#161a1e] border-y border-[#2b3139] sm:border sm:rounded-xl overflow-hidden flex flex-col ${chartExpanded ? 'fixed inset-0 z-[9999] rounded-none border-0' : ''}`}>
 
-            {/* ── Pair header (always visible) ────────────────────────── */}
-            <div className="flex flex-wrap items-center gap-x-3 gap-y-1 px-3 py-2 border-b border-[#2b3139]">
-              <div className="relative">
-                <button onClick={() => setShowP(v => !v)}
-                  className="flex items-center gap-1.5 hover:bg-[#2b3139]/60 rounded-lg px-1.5 py-1 transition">
-                  <span className="text-sm font-bold text-[#eaecef]">{pair}</span>
-                  <ChevronDown size={11} className="text-[#848e9c]" />
-                </button>
-                {showPairs && (
-                  <div className="absolute top-full mt-1 left-0 bg-[#1e2329] border border-[#2b3139] rounded-xl overflow-hidden z-30 min-w-[155px] shadow-xl shadow-black/50 max-h-64 overflow-y-auto">
-                    {PAIRS.map(p => (
-                      <button key={p} onClick={() => { setPair(p); setShowP(false); setAmount('') }}
-                        className={`w-full text-left px-3 py-2 text-xs transition hover:bg-[#2b3139] ${p === pair ? 'text-[#f0b90b] font-semibold' : 'text-[#eaecef]'}`}>
-                        {p}
-                      </button>
-                    ))}
-                  </div>
-                )}
-              </div>
-              <div className="flex items-center gap-1.5 flex-1 flex-wrap">
+            {/* ── Pair header ─────────────────────────────────────────── */}
+            <div className="px-3 pt-2.5 pb-1.5 border-b border-[#2b3139]">
+              {/* Row 1: pair selector + price + change + live dot */}
+              <div className="flex items-center gap-2 flex-wrap">
+                <div className="relative">
+                  <button onClick={() => setShowP(v => !v)}
+                    className="flex items-center gap-1.5 hover:bg-[#2b3139]/60 rounded-lg px-1.5 py-0.5 transition">
+                    <span className="text-sm font-bold text-[#eaecef]">{pair}</span>
+                    <ChevronDown size={11} className="text-[#848e9c]" />
+                  </button>
+                  {showPairs && (
+                    <div className="absolute top-full mt-1 left-0 bg-[#1e2329] border border-[#2b3139] rounded-xl overflow-hidden z-30 min-w-[155px] shadow-xl shadow-black/50 max-h-64 overflow-y-auto">
+                      {PAIRS.map(p => (
+                        <button key={p} onClick={() => { setPair(p); setShowP(false); setAmount('') }}
+                          className={`w-full text-left px-3 py-2 text-xs transition hover:bg-[#2b3139] ${p === pair ? 'text-[#f0b90b] font-semibold' : 'text-[#eaecef]'}`}>
+                          {p}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
                 <span className="text-base font-bold font-mono text-[#eaecef]">
                   ${livePrice > 0 ? livePrice.toLocaleString('en-US', { maximumFractionDigits: 2 }) : '—'}
                 </span>
@@ -586,17 +587,20 @@ export default function TradePage() {
                   {isLive ? <Wifi size={8} /> : <WifiOff size={8} />}
                   {isLive ? 'live' : 'cached'}
                 </span>
-                <span className="text-[10px] text-[#848e9c] ml-auto hidden sm:flex items-center gap-1">
-                  <span>24h H <span className="text-[#eaecef] font-mono">${high24}</span></span>
-                  <span className="text-[#2b3139]">|</span>
-                  <span>24h L <span className="text-[#eaecef] font-mono">${low24}</span></span>
+                {wsConnected && <span className="w-1.5 h-1.5 rounded-full bg-[#0ecb81] animate-pulse" />}
+              </div>
+              {/* Row 2: 24h H / L + bid/ask — always visible */}
+              <div className="flex items-center gap-3 mt-1">
+                <span className="text-[10px] text-[#848e9c]">
+                  H <span className="text-[#eaecef] font-mono">${high24}</span>
                 </span>
-                <span className="text-[10px] text-[#848e9c] hidden sm:flex items-center gap-1">
-                  <span className="text-[#f6465d] font-mono">{orderBook.bids[0] ? orderBook.bids[0].price.toLocaleString('en-US', { maximumFractionDigits: 2 }) : '—'}</span>
-                  <span className="text-[#4a5568]">bid/ask</span>
-                  <span className="text-[#0ecb81] font-mono">{orderBook.asks[0] ? orderBook.asks[0].price.toLocaleString('en-US', { maximumFractionDigits: 2 }) : '—'}</span>
+                <span className="text-[10px] text-[#848e9c]">
+                  L <span className="text-[#eaecef] font-mono">${low24}</span>
                 </span>
-                {wsConnected && <span className="w-1.5 h-1.5 rounded-full bg-[#0ecb81] animate-pulse flex-shrink-0" />}
+                <span className="text-[#2b3139] text-[10px]">|</span>
+                <span className="text-[10px] text-[#f6465d] font-mono">{orderBook.bids[0] ? orderBook.bids[0].price.toLocaleString('en-US', { maximumFractionDigits: 2 }) : '—'}</span>
+                <span className="text-[10px] text-[#4a5568]">bid/ask</span>
+                <span className="text-[10px] text-[#0ecb81] font-mono">{orderBook.asks[0] ? orderBook.asks[0].price.toLocaleString('en-US', { maximumFractionDigits: 2 }) : '—'}</span>
               </div>
             </div>
 
@@ -606,7 +610,7 @@ export default function TradePage() {
                 Chart collapsed — click <span className="text-[#f0b90b] font-semibold">↑</span> to expand
               </div>
             ) : chartTab === 'chart' ? (
-              <div className="flex-1 relative">
+              <div className="flex-1 relative pt-px">
                 <iframe
                   key={`${pair}-${tvStyle}`}
                   src={`https://s.tradingview.com/widgetembed/?symbol=${TV_SYMBOLS[pair] ?? 'BINANCE:BTCUSDT'}&theme=dark&style=${tvStyle}&locale=en&toolbar_bg=%230b0e11&withdateranges=0&hide_side_toolbar=1&hide_top_toolbar=1&hide_legend=1&allow_symbol_change=0&save_image=0&show_popup_button=0`}
