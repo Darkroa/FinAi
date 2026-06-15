@@ -364,7 +364,12 @@ export default function TradePage() {
   const [lotSize, setLotSize]       = useState('0.01')
 
   // Chart / UI state
-  const [tvStyle, setTvStyle]       = useState('1')       // TradingView chart style
+  const [tvStyle, setTvStyle]       = useState(() => localStorage.getItem('finai-tv-style') || '1')
+  const [tvInterval, setTvInterval] = useState(() => localStorage.getItem('finai-tv-interval') || '60')
+  const [tvTopBar,   setTvTopBar]   = useState(() => localStorage.getItem('finai-tv-topbar')   === 'true')
+  const [tvSideBar,  setTvSideBar]  = useState(() => localStorage.getItem('finai-tv-sidebar')  === 'true')
+  const [tvLegend,   setTvLegend]   = useState(() => localStorage.getItem('finai-tv-legend')   === 'true')
+  const [tvDateRng,  setTvDateRng]  = useState(() => localStorage.getItem('finai-tv-daterng')  === 'true')
   const [showPrefs, setShowPrefs]   = useState(false)
   const [showTvSettings, setShowTvSettings] = useState(false)  // pair-header TV settings popup
   const tvSettingsRef = useRef<HTMLDivElement>(null)
@@ -574,11 +579,11 @@ export default function TradePage() {
         </div>
       )}
 
-      {/* ── Chart content + FinChat grid ─────────────────────────────── */}
-      <div className={`grid grid-cols-1 gap-3 ${chatCollapsed ? 'lg:grid-cols-1' : 'lg:grid-cols-3'}`}>
+      {/* ── Chart + FinChat + Order (all full-width stacked) ────────── */}
+      <div className="space-y-3">
 
         {/* Combined pair header + TradingView chart card — full-bleed on mobile */}
-        <div className={`-mx-4 sm:mx-0 ${chatCollapsed ? '' : 'lg:col-span-2'}`}>
+        <div className="-mx-4 sm:mx-0">
           <div className={`bg-[#161a1e] border-y border-[#2b3139] sm:border sm:rounded-xl overflow-hidden flex flex-col ${chartExpanded ? 'fixed inset-0 z-[9999] rounded-none border-0' : ''}`}>
 
             {/* ── Pair header ─────────────────────────────────────────── */}
@@ -624,14 +629,32 @@ export default function TradePage() {
                     <SlidersHorizontal size={13} />
                   </button>
                   {showTvSettings && (
-                    <div className="absolute right-0 top-full mt-1.5 bg-[#1e2329] border border-[#2b3139] rounded-xl shadow-2xl shadow-black/60 z-50 w-52 overflow-hidden">
-                      {/* Chart style section */}
-                      <div className="px-3 pt-3 pb-1">
+                    <div className="absolute right-0 top-full mt-1.5 bg-[#1e2329] border border-[#2b3139] rounded-xl shadow-2xl shadow-black/60 z-50 w-60 max-h-[480px] overflow-y-auto">
+
+                      {/* ── Timeframe ── */}
+                      <div className="px-3 pt-3 pb-2">
+                        <p className="text-[9px] font-semibold text-[#848e9c] uppercase tracking-widest mb-2">Timeframe</p>
+                        <div className="grid grid-cols-4 gap-1">
+                          {[
+                            { v:'1',  l:'1m'  }, { v:'5',  l:'5m'  }, { v:'15', l:'15m' }, { v:'30', l:'30m' },
+                            { v:'60', l:'1h'  }, { v:'240',l:'4h'  }, { v:'D',  l:'1D'  }, { v:'W',  l:'1W'  },
+                          ].map(tf => (
+                            <button key={tf.v}
+                              onClick={() => { setTvInterval(tf.v); localStorage.setItem('finai-tv-interval', tf.v) }}
+                              className={`py-1.5 rounded-lg text-[10px] font-mono font-semibold transition ${tvInterval === tf.v ? 'bg-[#f0b90b] text-black' : 'bg-[#0b0e11] text-[#848e9c] hover:text-[#eaecef] hover:bg-[#2b3139]'}`}>
+                              {tf.l}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+
+                      {/* ── Chart Style ── */}
+                      <div className="px-3 py-2 border-t border-[#2b3139]">
                         <p className="text-[9px] font-semibold text-[#848e9c] uppercase tracking-widest mb-1.5">Chart Style</p>
                         <div className="space-y-0.5">
                           {TV_STYLES.map(s => (
                             <button key={s.value}
-                              onClick={() => { setTvStyle(s.value); setShowTvSettings(false) }}
+                              onClick={() => { setTvStyle(s.value); localStorage.setItem('finai-tv-style', s.value) }}
                               className={`w-full text-left px-2.5 py-1.5 rounded-lg text-xs transition flex items-center justify-between ${tvStyle === s.value ? 'bg-[#f0b90b]/15 text-[#f0b90b] font-semibold' : 'text-[#848e9c] hover:bg-[#2b3139] hover:text-[#eaecef]'}`}>
                               {s.label}
                               {tvStyle === s.value && <span className="text-[#f0b90b] text-[10px]">✓</span>}
@@ -639,17 +662,36 @@ export default function TradePage() {
                           ))}
                         </div>
                       </div>
-                      {/* Panel toggles */}
-                      <div className="px-3 pt-2 pb-3 border-t border-[#2b3139] mt-1">
+
+                      {/* ── TradingView Toolbars ── */}
+                      <div className="px-3 py-2 border-t border-[#2b3139]">
+                        <p className="text-[9px] font-semibold text-[#848e9c] uppercase tracking-widest mb-1.5">TradingView Components</p>
+                        {([
+                          { label: 'Top Toolbar',  val: tvTopBar,  set: (v: boolean) => { setTvTopBar(v);  localStorage.setItem('finai-tv-topbar',  String(v)) } },
+                          { label: 'Side Toolbar', val: tvSideBar, set: (v: boolean) => { setTvSideBar(v); localStorage.setItem('finai-tv-sidebar', String(v)) } },
+                          { label: 'Price Legend', val: tvLegend,  set: (v: boolean) => { setTvLegend(v);  localStorage.setItem('finai-tv-legend',  String(v)) } },
+                          { label: 'Date Ranges',  val: tvDateRng, set: (v: boolean) => { setTvDateRng(v); localStorage.setItem('finai-tv-daterng', String(v)) } },
+                        ] as { label: string; val: boolean; set: (v: boolean) => void }[]).map(row => (
+                          <button key={row.label}
+                            onClick={() => row.set(!row.val)}
+                            className="w-full text-left px-2.5 py-1.5 rounded-lg text-xs text-[#848e9c] hover:bg-[#2b3139] hover:text-[#eaecef] transition flex items-center justify-between">
+                            {row.label}
+                            <span className={`text-[10px] font-bold ${row.val ? 'text-[#0ecb81]' : 'text-[#f6465d]'}`}>{row.val ? 'ON' : 'OFF'}</span>
+                          </button>
+                        ))}
+                      </div>
+
+                      {/* ── Panels ── */}
+                      <div className="px-3 py-2 pb-3 border-t border-[#2b3139]">
                         <p className="text-[9px] font-semibold text-[#848e9c] uppercase tracking-widest mb-1.5">Panels</p>
                         <button
-                          onClick={() => { const v = !chatCollapsed; setChatCollapsed(v); localStorage.setItem('finai-chat', String(v)); setShowTvSettings(false) }}
+                          onClick={() => { const v = !chatCollapsed; setChatCollapsed(v); localStorage.setItem('finai-chat', String(v)) }}
                           className="w-full text-left px-2.5 py-1.5 rounded-lg text-xs text-[#848e9c] hover:bg-[#2b3139] hover:text-[#eaecef] transition flex items-center justify-between">
                           FinChat
                           <span className={`text-[10px] font-bold ${!chatCollapsed ? 'text-[#0ecb81]' : 'text-[#f6465d]'}`}>{!chatCollapsed ? 'ON' : 'OFF'}</span>
                         </button>
                         <button
-                          onClick={() => { const v = !showEntryLines; setShowEntryLines(v); localStorage.setItem('finai-entry-lines', String(v)); setShowTvSettings(false) }}
+                          onClick={() => { const v = !showEntryLines; setShowEntryLines(v); localStorage.setItem('finai-entry-lines', String(v)) }}
                           className="w-full text-left px-2.5 py-1.5 rounded-lg text-xs text-[#848e9c] hover:bg-[#2b3139] hover:text-[#eaecef] transition flex items-center justify-between">
                           Entry Badge
                           <span className={`text-[10px] font-bold ${showEntryLines ? 'text-[#0ecb81]' : 'text-[#f6465d]'}`}>{showEntryLines ? 'ON' : 'OFF'}</span>
@@ -682,8 +724,8 @@ export default function TradePage() {
             ) : chartTab === 'chart' ? (
               <div className="flex-1 relative pt-px">
                 <iframe
-                  key={`${pair}-${tvStyle}`}
-                  src={`https://s.tradingview.com/widgetembed/?symbol=${TV_SYMBOLS[pair] ?? 'BINANCE:BTCUSDT'}&theme=dark&style=${tvStyle}&locale=en&toolbar_bg=%230b0e11&withdateranges=0&hide_side_toolbar=1&hide_top_toolbar=1&hide_legend=1&allow_symbol_change=0&save_image=0&show_popup_button=0`}
+                  key={`${pair}-${tvStyle}-${tvInterval}-${tvTopBar}-${tvSideBar}-${tvLegend}-${tvDateRng}`}
+                  src={`https://s.tradingview.com/widgetembed/?symbol=${TV_SYMBOLS[pair] ?? 'BINANCE:BTCUSDT'}&theme=dark&style=${tvStyle}&interval=${tvInterval}&locale=en&toolbar_bg=%230b0e11&withdateranges=${tvDateRng ? 1 : 0}&hide_side_toolbar=${tvSideBar ? 0 : 1}&hide_top_toolbar=${tvTopBar ? 0 : 1}&hide_legend=${tvLegend ? 0 : 1}&allow_symbol_change=0&save_image=0&show_popup_button=0`}
                   width="100%"
                   style={{ border: 'none', display: 'block', height: chartExpanded ? 'calc(100vh - 46px)' : '420px' }}
                   allowFullScreen title="TradingView Chart"
@@ -1178,22 +1220,11 @@ export default function TradePage() {
             </div>
          </div>
       )}
-      {/* FinChat side panel */}
-        {!chatCollapsed ? (
-          <FinChatPanel
-            pair={pair} livePrice={livePrice} liveChange={liveChange}
-            collapsed={false} onToggle={() => setChatCollapsed(true)}
-          />
-        ) : (
-          <button
-            onClick={() => setChatCollapsed(false)}
-            className="hidden lg:flex flex-col items-center justify-center gap-2 bg-[#161a1e] border border-[#2b3139] hover:border-[#f0b90b]/40 rounded-xl px-3 py-6 transition group"
-          >
-            <MessageSquare size={14} className="text-[#f0b90b]" />
-            <span className="text-[9px] font-semibold text-[#848e9c] group-hover:text-[#eaecef] tracking-widest transition" style={{ writingMode: 'vertical-rl' }}>FinChat</span>
-            <ChevronDown size={11} className="text-[#848e9c] group-hover:text-[#eaecef] transition" />
-          </button>
-        )}
+      {/* FinChat — full-width below chart */}
+        <FinChatPanel
+          pair={pair} livePrice={livePrice} liveChange={liveChange}
+          collapsed={chatCollapsed} onToggle={() => { const v = !chatCollapsed; setChatCollapsed(v); localStorage.setItem('finai-chat', String(v)) }}
+        />
       </div>
     </div>
       

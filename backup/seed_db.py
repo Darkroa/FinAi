@@ -60,6 +60,10 @@ SEED_ORDER = [
     "user_bonus_claims",
     "events",
     "trend_analyses",
+    # Additional tables created via startup migrations
+    "user_activity_logs",
+    "referrals",
+    "subscriptions",
 ]
 
 
