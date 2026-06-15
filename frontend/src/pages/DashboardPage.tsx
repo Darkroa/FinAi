@@ -52,7 +52,7 @@ export default function DashboardPage() {
   const [botRunning, setBotRunning] = useState(false);
   const [finEventRunning, setFinEventRunning] = useState(false);
   const [hideBalance, setHideBalance] = useState(false);
-  const [btcToggle, setBtcToggle] = useState<'BTC' | 'ETH'>('BTC');
+  const [btcToggle] = useState<'BTC'>('BTC');
   const [todayPnl, setTodayPnl] = useState(0);
   const [realizedPnl, setRealizedPnl] = useState(0);
   const [openPositions, setOpenPositions] = useState(0);
@@ -231,44 +231,29 @@ export default function DashboardPage() {
               {hideBalance ? <EyeOff size={13} /> : <Eye size={13} />}
             </button>
           </div>
-          <p className="text-4xl font-extrabold font-mono text-[#eaecef] leading-none tracking-tight">
+          <p className="text-4xl font-extrabold font-mono text-[#eaecef] leading-none tracking-tight pl-2">
             {hideBalance ? '••••••' : formatCurrency(balance, currency)}
           </p>
         </div>
 
-        {/* BTC/ETH Toggle + Rate Info */}
-        <div className="flex items-center gap-3 mt-2 mb-5">
-          <div className="flex items-center gap-1 bg-[#0b0e11]/50 rounded-lg p-1">
-            {(['BTC', 'ETH'] as const).map((c) => (
-              <button
-                key={c}
-                onClick={() => setBtcToggle(c)}
-                className={`px-2.5 py-0.5 rounded text-[10px] font-bold transition-all ${
-                  btcToggle === c
-                    ? 'bg-[#f0b90b] text-black'
-                    : 'text-[#848e9c] hover:text-[#eaecef]'
-                }`}
-              >
-                {c}
-              </button>
-            ))}
-          </div>
-
+        {/* BTC Rate Info */}
+        <div className="flex items-center gap-2 mt-2 mb-5">
           {priceLoading ? (
-            <div className="h-3 w-24 bg-[#2b3139] rounded animate-pulse" />
+            <div className="h-3 w-36 bg-[#2b3139] rounded animate-pulse" />
           ) : (
-            <div className="flex items-center gap-2">
+            <>
+              <span className="text-[10px] font-bold text-[#f0b90b] bg-[#f0b90b]/10 px-2 py-0.5 rounded">BTC</span>
               <span className="text-xs text-[#848e9c] font-mono">
-                {hideBalance ? '••••••' : btcEquiv} {btcToggle}
+                {hideBalance ? '••••••' : btcEquiv} BTC
               </span>
-              <span className="text-[10px] text-[#848e9c]">·</span>
+              <span className="text-[10px] text-[#2b3139]">·</span>
               <span className="text-[10px] text-[#848e9c]">
-                Rate: 1 {btcToggle} = ${displayPrice.toLocaleString('en-US', { maximumFractionDigits: 0 })}
+                1 BTC = ${displayPrice.toLocaleString('en-US', { maximumFractionDigits: 0 })}
               </span>
-              <button onClick={fetchData} className="text-[#848e9c] hover:text-[#f0b90b] transition">
+              <button onClick={fetchData} className="text-[#848e9c] hover:text-[#f0b90b] transition ml-1">
                 <RefreshCw size={10} />
               </button>
-            </div>
+            </>
           )}
         </div>
 

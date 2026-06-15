@@ -526,46 +526,6 @@ export default function TradePage() {
   return (
     <div className="space-y-3">
 
-      {/* ── Top Buy/Sell + Lot size bar ─────────────────────────────── */}
-      {showBuySell && (
-        <div className="bg-[#161a1e] border border-[#2b3139] rounded-xl px-4 py-3 flex flex-col items-center gap-2">
-          {/* Centered: Sell | [− lot +] | Buy */}
-          <div className="flex items-center justify-center gap-3 w-full">
-            <button type="button" disabled={orderLoading} onClick={() => handleQuickTrade('sell')}
-              className="px-7 py-2.5 rounded-xl text-sm font-bold bg-[#f6465d] hover:bg-[#d93d51] text-white transition active:scale-[0.98] disabled:opacity-50">
-              Sell
-            </button>
-            {/* Editable lot size in the middle */}
-            <div className="flex flex-col items-center gap-0.5">
-              <span className="text-[9px] text-[#4a5568] uppercase tracking-widest">Lot Size</span>
-              <div className="flex items-center bg-[#0b0e11] border border-[#2b3139] rounded-lg overflow-hidden">
-                <button type="button" onClick={() => { const n = Math.max(0.01, parseFloat(lotSize||'0.01') - 0.01); const s = n.toFixed(2); setLotSize(s); setAmount(s) }}
-                  className="px-2.5 py-1.5 text-[#848e9c] hover:text-[#eaecef] hover:bg-[#2b3139] transition"><Minus size={9} /></button>
-                <input
-                  value={lotSize}
-                  onChange={e => { setLotSize(e.target.value); setAmount(e.target.value) }}
-                  onBlur={e => { const n = parseFloat(e.target.value); if (!isNaN(n) && n > 0) { const s = Math.min(100, Math.max(0.01, n)).toFixed(2); setLotSize(s); setAmount(s) } }}
-                  className="w-16 text-center text-xs font-mono text-[#f0b90b] font-bold py-1.5 bg-transparent focus:outline-none"
-                  inputMode="decimal"
-                />
-                <button type="button" onClick={() => { const n = Math.min(100, parseFloat(lotSize||'1') + 0.01); const s = n.toFixed(2); setLotSize(s); setAmount(s) }}
-                  className="px-2.5 py-1.5 text-[#848e9c] hover:text-[#eaecef] hover:bg-[#2b3139] transition"><Plus size={9} /></button>
-              </div>
-            </div>
-            <button type="button" disabled={orderLoading} onClick={() => handleQuickTrade('buy')}
-              className="px-7 py-2.5 rounded-xl text-sm font-bold bg-[#0ecb81] hover:bg-[#0ab56f] text-black transition active:scale-[0.98] disabled:opacity-50">
-              Buy
-            </button>
-          </div>
-          {/* Bid / Ask subtitle */}
-          <div className="flex items-center gap-2 text-[10px] font-mono">
-            <span className="text-[#f6465d] font-semibold">{orderBook.bids[0] ? orderBook.bids[0].price.toLocaleString('en-US', { maximumFractionDigits: 2 }) : '—'}</span>
-            <span className="text-[#4a5568]">bid / ask</span>
-            <span className="text-[#0ecb81] font-semibold">{orderBook.asks[0] ? orderBook.asks[0].price.toLocaleString('en-US', { maximumFractionDigits: 2 }) : '—'}</span>
-          </div>
-        </div>
-      )}
-
       {/* ── Pair Selector Card ───────────────────────────────────────── */}
       <div className="bg-[#161a1e] border border-[#2b3139] rounded-xl overflow-visible">
         {/* Row 1: pair + price + change + live + 24h stats */}
@@ -619,6 +579,41 @@ export default function TradePage() {
             {realizedPnl >= 0 ? '+' : ''}${realizedPnl.toFixed(2)}
           </span>
         </div>
+        {showBuySell && (
+          <div className="border-t border-[#2b3139] px-4 py-3 flex flex-col items-center gap-2">
+            <div className="flex items-center justify-center gap-3 w-full">
+              <button type="button" disabled={orderLoading} onClick={() => handleQuickTrade('sell')}
+                className="px-7 py-2.5 rounded-xl text-sm font-bold bg-[#f6465d] hover:bg-[#d93d51] text-white transition active:scale-[0.98] disabled:opacity-50">
+                Sell
+              </button>
+              <div className="flex flex-col items-center gap-0.5">
+                <span className="text-[9px] text-[#4a5568] uppercase tracking-widest">Lot Size</span>
+                <div className="flex items-center bg-[#0b0e11] border border-[#2b3139] rounded-lg overflow-hidden">
+                  <button type="button" onClick={() => { const n = Math.max(0.01, parseFloat(lotSize||'0.01') - 0.01); const s = n.toFixed(2); setLotSize(s); setAmount(s) }}
+                    className="px-2.5 py-1.5 text-[#848e9c] hover:text-[#eaecef] hover:bg-[#2b3139] transition"><Minus size={9} /></button>
+                  <input
+                    value={lotSize}
+                    onChange={e => { setLotSize(e.target.value); setAmount(e.target.value) }}
+                    onBlur={e => { const n = parseFloat(e.target.value); if (!isNaN(n) && n > 0) { const s = Math.min(100, Math.max(0.01, n)).toFixed(2); setLotSize(s); setAmount(s) } }}
+                    className="w-16 text-center text-xs font-mono text-[#f0b90b] font-bold py-1.5 bg-transparent focus:outline-none"
+                    inputMode="decimal"
+                  />
+                  <button type="button" onClick={() => { const n = Math.min(100, parseFloat(lotSize||'1') + 0.01); const s = n.toFixed(2); setLotSize(s); setAmount(s) }}
+                    className="px-2.5 py-1.5 text-[#848e9c] hover:text-[#eaecef] hover:bg-[#2b3139] transition"><Plus size={9} /></button>
+                </div>
+              </div>
+              <button type="button" disabled={orderLoading} onClick={() => handleQuickTrade('buy')}
+                className="px-7 py-2.5 rounded-xl text-sm font-bold bg-[#0ecb81] hover:bg-[#0ab56f] text-black transition active:scale-[0.98] disabled:opacity-50">
+                Buy
+              </button>
+            </div>
+            <div className="flex items-center gap-2 text-[10px] font-mono">
+              <span className="text-[#f6465d] font-semibold">{orderBook.bids[0] ? orderBook.bids[0].price.toLocaleString('en-US', { maximumFractionDigits: 2 }) : '—'}</span>
+              <span className="text-[#4a5568]">bid / ask</span>
+              <span className="text-[#0ecb81] font-semibold">{orderBook.asks[0] ? orderBook.asks[0].price.toLocaleString('en-US', { maximumFractionDigits: 2 }) : '—'}</span>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Open Positions - Compact Style */}
@@ -678,90 +673,6 @@ export default function TradePage() {
           </div>
         </div>
       )}
-      {/* ── Icon tab nav — standalone card, separate from TradingView ── */}
-      <div className="flex items-center gap-0.5 bg-[#161a1e] border border-[#2b3139] rounded-xl px-2 py-1.5" ref={prefsRef}>
-        {([
-          { id: 'chart',     Icon: Tv,         title: 'Chart'      },
-          { id: 'orderbook', Icon: ArrowUpDown, title: 'Order Book' },
-          { id: 'trades',    Icon: Clock,       title: 'Trades'     },
-          { id: 'info',      Icon: BarChart2,   title: 'Info'       },
-        ] as const).map(tab => (
-          <button key={tab.id} onClick={() => setChartTab(tab.id)} title={tab.title}
-            className={`p-2.5 rounded-lg transition ${chartTab === tab.id ? 'bg-[#f0b90b]/15 text-[#f0b90b]' : 'text-[#848e9c] hover:text-[#eaecef] hover:bg-[#2b3139]'}`}>
-            <tab.Icon size={14} />
-          </button>
-        ))}
-        <div className="flex-1" />
-        {/* FinChat toggle — persisted */}
-        <button onClick={() => { const v = !chatCollapsed; setChatCollapsed(v); localStorage.setItem('finai-chat', String(v)) }} title={chatCollapsed ? 'Show FinChat' : 'Hide FinChat'}
-          className={`p-2.5 rounded-lg transition ${!chatCollapsed ? 'text-[#f0b90b] bg-[#f0b90b]/10' : 'text-[#848e9c] hover:text-[#eaecef] hover:bg-[#2b3139]'}`}>
-          <MessageSquare size={14} />
-        </button>
-        {/* Order form toggle — persisted */}
-        <button onClick={() => { const v = !showOrderForm; setShowOrderForm(v); localStorage.setItem('finai-order-form', String(v)) }} title={showOrderForm ? 'Hide Order Form' : 'Show Order Form'}
-          className={`p-2.5 rounded-lg transition ${showOrderForm ? 'text-[#f0b90b] bg-[#f0b90b]/10' : 'text-[#848e9c] hover:text-[#eaecef] hover:bg-[#2b3139]'}`}>
-          <TrendingUp size={14} />
-        </button>
-        {/* Settings — now lives here, not inside the chart card */}
-        <div className="relative">
-          <button onClick={() => setShowPrefs(v => !v)} title="Settings"
-            className={`p-2.5 rounded-lg transition ${showPrefs ? 'text-[#eaecef] bg-[#2b3139]' : 'text-[#848e9c] hover:text-[#eaecef] hover:bg-[#2b3139]'}`}>
-            <Settings size={14} />
-          </button>
-          {showPrefs && (
-            <div className="absolute right-0 top-full mt-1 p-3 bg-[#1e2329] border border-[#2b3139] rounded-xl shadow-2xl z-50 w-[270px] max-h-[400px] overflow-y-auto">
-              {/* Visibility section */}
-              <p className="text-[10px] text-[#848e9c] uppercase tracking-widest mb-2">Show / Hide</p>
-              <div className="space-y-0.5 mb-3">
-                <button onClick={() => { const v = !showBuySell; setShowBuySell(v); localStorage.setItem('finai-buy-sell', String(v)) }}
-                  className="w-full text-left px-3 py-2 rounded-lg text-xs text-[#848e9c] hover:bg-[#2b3139] hover:text-[#eaecef] transition flex items-center justify-between">
-                  Buy / Sell Bar <span className={showBuySell ? 'text-[#0ecb81] text-[10px] font-bold' : 'text-[#f6465d] text-[10px] font-bold'}>{showBuySell ? 'ON' : 'OFF'}</span>
-                </button>
-                <button onClick={() => { const v = !chatCollapsed; setChatCollapsed(v); localStorage.setItem('finai-chat', String(v)) }}
-                  className="w-full text-left px-3 py-2 rounded-lg text-xs text-[#848e9c] hover:bg-[#2b3139] hover:text-[#eaecef] transition flex items-center justify-between">
-                  FinChat Panel <span className={!chatCollapsed ? 'text-[#0ecb81] text-[10px] font-bold' : 'text-[#f6465d] text-[10px] font-bold'}>{!chatCollapsed ? 'ON' : 'OFF'}</span>
-                </button>
-                <button onClick={() => { const v = !showOrderForm; setShowOrderForm(v); localStorage.setItem('finai-order-form', String(v)) }}
-                  className="w-full text-left px-3 py-2 rounded-lg text-xs text-[#848e9c] hover:bg-[#2b3139] hover:text-[#eaecef] transition flex items-center justify-between">
-                  Order Form <span className={showOrderForm ? 'text-[#0ecb81] text-[10px] font-bold' : 'text-[#f6465d] text-[10px] font-bold'}>{showOrderForm ? 'ON' : 'OFF'}</span>
-                </button>
-                <button onClick={() => { const v = !chartCollapsed; setChartCollapsed(v); localStorage.setItem('finai-chart-collapsed', String(v)) }}
-                  className="w-full text-left px-3 py-2 rounded-lg text-xs text-[#848e9c] hover:bg-[#2b3139] hover:text-[#eaecef] transition flex items-center justify-between">
-                  Chart <span className={!chartCollapsed ? 'text-[#0ecb81] text-[10px] font-bold' : 'text-[#f6465d] text-[10px] font-bold'}>{!chartCollapsed ? 'ON' : 'OFF'}</span>
-                </button>
-                <button onClick={() => { const v = !showEntryLines; setShowEntryLines(v); localStorage.setItem('finai-entry-lines', String(v)) }}
-                  className="w-full text-left px-3 py-2 rounded-lg text-xs text-[#848e9c] hover:bg-[#2b3139] hover:text-[#eaecef] transition flex items-center justify-between">
-                  Entry Lines <span className={showEntryLines ? 'text-[#0ecb81] text-[10px] font-bold' : 'text-[#f6465d] text-[10px] font-bold'}>{showEntryLines ? 'ON' : 'OFF'}</span>
-                </button>
-              </div>
-              {/* Chart style section */}
-              <div className="pt-2 border-t border-[#2b3139]">
-                <p className="text-[10px] text-[#848e9c] uppercase tracking-widest mb-2">Chart Style</p>
-                <div className="space-y-0.5">
-                  {TV_STYLES.map(s => (
-                    <button key={s.value} onClick={() => { setTvStyle(s.value); setShowPrefs(false) }}
-                      className={`w-full text-left px-3 py-2 rounded-lg text-xs transition ${tvStyle === s.value ? 'bg-[#f0b90b]/15 text-[#f0b90b] font-semibold' : 'text-[#848e9c] hover:bg-[#2b3139] hover:text-[#eaecef]'}`}>
-                      {s.label}{tvStyle === s.value && <span className="float-right text-[#f0b90b]">✓</span>}
-                    </button>
-                  ))}
-                </div>
-              </div>
-              {/* Lot size section */}
-              <div className="mt-3 pt-2 border-t border-[#2b3139]">
-                <p className="text-[10px] text-[#848e9c] uppercase tracking-widest mb-2">Default Lot Size</p>
-                <div className="flex items-center bg-[#0b0e11] border border-[#2b3139] rounded-lg overflow-hidden">
-                  <button type="button" onClick={() => { const n = Math.max(0.01, parseFloat(lotSize||'0.01') - 0.01); const s = n.toFixed(2); setLotSize(s); setAmount(s) }}
-                    className="px-2 py-1.5 text-[#848e9c] hover:text-[#eaecef] hover:bg-[#2b3139] transition"><Minus size={9} /></button>
-                  <input value={lotSize} onChange={e => { setLotSize(e.target.value); setAmount(e.target.value) }}
-                    className="flex-1 bg-transparent text-center text-xs font-mono text-[#eaecef] focus:outline-none min-w-0 py-1.5 w-16" />
-                  <button type="button" onClick={() => { const n = Math.min(100, parseFloat(lotSize||'1') + 1); const s = n.toFixed(2); setLotSize(s); setAmount(s) }}
-                    className="px-2 py-1.5 text-[#848e9c] hover:text-[#eaecef] hover:bg-[#2b3139] transition"><Plus size={9} /></button>
-                </div>
-              </div>
-            </div>
-          )}
-        </div>
-      </div>
 
       {/* ── Chart content + FinChat grid ─────────────────────────────── */}
       <div className={`grid grid-cols-1 gap-3 ${chatCollapsed ? 'lg:grid-cols-1' : 'lg:grid-cols-3'}`}>
@@ -769,29 +680,6 @@ export default function TradePage() {
         {/* Content card — TradingView chart OR Order Book / Trades / Info */}
         <div className={`${chatCollapsed ? '' : 'lg:col-span-2'}`}>
           <div className={`bg-[#161a1e] border border-[#2b3139] rounded-xl overflow-hidden flex flex-col ${chartExpanded ? 'fixed inset-0 z-[9999] rounded-none border-0' : ''}`}>
-
-            {/* Slim chart-card header: bid/ask + collapse + fullscreen */}
-            <div className="flex items-center gap-1 px-3 py-1.5 border-b border-[#2b3139] flex-shrink-0">
-              <div className="flex items-center gap-1 text-[10px] font-mono">
-                <span className="text-[#f6465d] font-semibold">
-                  {orderBook.bids[0] ? orderBook.bids[0].price.toLocaleString('en-US', { maximumFractionDigits: 2 }) : '—'}
-                </span>
-                <span className="text-[#4a5568] text-[8px]">B/A</span>
-                <span className="text-[#0ecb81] font-semibold">
-                  {orderBook.asks[0] ? orderBook.asks[0].price.toLocaleString('en-US', { maximumFractionDigits: 2 }) : '—'}
-                </span>
-              </div>
-              <div className="flex-1" />
-              <button onClick={() => { const v = !chartCollapsed; setChartCollapsed(v); localStorage.setItem('finai-chart-collapsed', String(v)) }}
-                title={chartCollapsed ? 'Expand chart' : 'Collapse chart'}
-                className={`p-1.5 rounded-lg transition ${chartCollapsed ? 'text-[#f0b90b] bg-[#f0b90b]/10' : 'text-[#848e9c] hover:text-[#eaecef] hover:bg-[#2b3139]'}`}>
-                {chartCollapsed ? <ChevronDown size={12} /> : <ChevronUp size={12} />}
-              </button>
-              <button onClick={() => setChartExpanded(v => !v)} title={chartExpanded ? 'Exit fullscreen' : 'Fullscreen'}
-                className={`p-1.5 rounded-lg transition ${chartExpanded ? 'text-[#f0b90b] bg-[#f0b90b]/10' : 'text-[#848e9c] hover:text-[#eaecef] hover:bg-[#2b3139]'}`}>
-                <Maximize2 size={12} />
-              </button>
-            </div>
 
             {/* Content switches per tab */}
             {chartCollapsed ? (
@@ -931,6 +819,94 @@ export default function TradePage() {
             <ChevronDown size={11} className="text-[#848e9c] group-hover:text-[#eaecef] transition" />
           </button>
         )}
+      </div>
+
+      {/* ── Icon tab nav — below chart/chat ──────────────────────────── */}
+      <div className="flex items-center gap-0.5 bg-[#161a1e] border border-[#2b3139] rounded-xl px-1.5 py-1" ref={prefsRef}>
+        {([
+          { id: 'chart',     Icon: Tv,         title: 'Chart'      },
+          { id: 'orderbook', Icon: ArrowUpDown, title: 'Order Book' },
+          { id: 'trades',    Icon: Clock,       title: 'Trades'     },
+          { id: 'info',      Icon: BarChart2,   title: 'Info'       },
+        ] as const).map(tab => (
+          <button key={tab.id} onClick={() => setChartTab(tab.id)} title={tab.title}
+            className={`p-2 rounded-lg transition ${chartTab === tab.id ? 'bg-[#f0b90b]/15 text-[#f0b90b]' : 'text-[#848e9c] hover:text-[#eaecef] hover:bg-[#2b3139]'}`}>
+            <tab.Icon size={12} />
+          </button>
+        ))}
+        <div className="flex-1" />
+        <button onClick={() => { const v = !chatCollapsed; setChatCollapsed(v); localStorage.setItem('finai-chat', String(v)) }} title={chatCollapsed ? 'Show FinChat' : 'Hide FinChat'}
+          className={`p-2 rounded-lg transition ${!chatCollapsed ? 'text-[#f0b90b] bg-[#f0b90b]/10' : 'text-[#848e9c] hover:text-[#eaecef] hover:bg-[#2b3139]'}`}>
+          <MessageSquare size={12} />
+        </button>
+        <button onClick={() => { const v = !showOrderForm; setShowOrderForm(v); localStorage.setItem('finai-order-form', String(v)) }} title={showOrderForm ? 'Hide Order Form' : 'Show Order Form'}
+          className={`p-2 rounded-lg transition ${showOrderForm ? 'text-[#f0b90b] bg-[#f0b90b]/10' : 'text-[#848e9c] hover:text-[#eaecef] hover:bg-[#2b3139]'}`}>
+          <TrendingUp size={12} />
+        </button>
+        <button onClick={() => { const v = !chartCollapsed; setChartCollapsed(v); localStorage.setItem('finai-chart-collapsed', String(v)) }}
+          title={chartCollapsed ? 'Expand chart' : 'Collapse chart'}
+          className={`p-2 rounded-lg transition ${chartCollapsed ? 'text-[#f0b90b] bg-[#f0b90b]/10' : 'text-[#848e9c] hover:text-[#eaecef] hover:bg-[#2b3139]'}`}>
+          {chartCollapsed ? <ChevronDown size={12} /> : <ChevronUp size={12} />}
+        </button>
+        <button onClick={() => setChartExpanded(v => !v)} title={chartExpanded ? 'Exit fullscreen' : 'Fullscreen'}
+          className={`p-2 rounded-lg transition ${chartExpanded ? 'text-[#f0b90b] bg-[#f0b90b]/10' : 'text-[#848e9c] hover:text-[#eaecef] hover:bg-[#2b3139]'}`}>
+          <Maximize2 size={12} />
+        </button>
+        <div className="relative">
+          <button onClick={() => setShowPrefs(v => !v)} title="Settings"
+            className={`p-2 rounded-lg transition ${showPrefs ? 'text-[#eaecef] bg-[#2b3139]' : 'text-[#848e9c] hover:text-[#eaecef] hover:bg-[#2b3139]'}`}>
+            <Settings size={12} />
+          </button>
+          {showPrefs && (
+            <div className="absolute right-0 bottom-full mb-1 p-3 bg-[#1e2329] border border-[#2b3139] rounded-xl shadow-2xl z-50 w-[270px] max-h-[400px] overflow-y-auto">
+              <p className="text-[10px] text-[#848e9c] uppercase tracking-widest mb-2">Show / Hide</p>
+              <div className="space-y-0.5 mb-3">
+                <button onClick={() => { const v = !showBuySell; setShowBuySell(v); localStorage.setItem('finai-buy-sell', String(v)) }}
+                  className="w-full text-left px-3 py-2 rounded-lg text-xs text-[#848e9c] hover:bg-[#2b3139] hover:text-[#eaecef] transition flex items-center justify-between">
+                  Buy / Sell Bar <span className={showBuySell ? 'text-[#0ecb81] text-[10px] font-bold' : 'text-[#f6465d] text-[10px] font-bold'}>{showBuySell ? 'ON' : 'OFF'}</span>
+                </button>
+                <button onClick={() => { const v = !chatCollapsed; setChatCollapsed(v); localStorage.setItem('finai-chat', String(v)) }}
+                  className="w-full text-left px-3 py-2 rounded-lg text-xs text-[#848e9c] hover:bg-[#2b3139] hover:text-[#eaecef] transition flex items-center justify-between">
+                  FinChat Panel <span className={!chatCollapsed ? 'text-[#0ecb81] text-[10px] font-bold' : 'text-[#f6465d] text-[10px] font-bold'}>{!chatCollapsed ? 'ON' : 'OFF'}</span>
+                </button>
+                <button onClick={() => { const v = !showOrderForm; setShowOrderForm(v); localStorage.setItem('finai-order-form', String(v)) }}
+                  className="w-full text-left px-3 py-2 rounded-lg text-xs text-[#848e9c] hover:bg-[#2b3139] hover:text-[#eaecef] transition flex items-center justify-between">
+                  Order Form <span className={showOrderForm ? 'text-[#0ecb81] text-[10px] font-bold' : 'text-[#f6465d] text-[10px] font-bold'}>{showOrderForm ? 'ON' : 'OFF'}</span>
+                </button>
+                <button onClick={() => { const v = !chartCollapsed; setChartCollapsed(v); localStorage.setItem('finai-chart-collapsed', String(v)) }}
+                  className="w-full text-left px-3 py-2 rounded-lg text-xs text-[#848e9c] hover:bg-[#2b3139] hover:text-[#eaecef] transition flex items-center justify-between">
+                  Chart <span className={!chartCollapsed ? 'text-[#0ecb81] text-[10px] font-bold' : 'text-[#f6465d] text-[10px] font-bold'}>{!chartCollapsed ? 'ON' : 'OFF'}</span>
+                </button>
+                <button onClick={() => { const v = !showEntryLines; setShowEntryLines(v); localStorage.setItem('finai-entry-lines', String(v)) }}
+                  className="w-full text-left px-3 py-2 rounded-lg text-xs text-[#848e9c] hover:bg-[#2b3139] hover:text-[#eaecef] transition flex items-center justify-between">
+                  Entry Lines <span className={showEntryLines ? 'text-[#0ecb81] text-[10px] font-bold' : 'text-[#f6465d] text-[10px] font-bold'}>{showEntryLines ? 'ON' : 'OFF'}</span>
+                </button>
+              </div>
+              <div className="pt-2 border-t border-[#2b3139]">
+                <p className="text-[10px] text-[#848e9c] uppercase tracking-widest mb-2">Chart Style</p>
+                <div className="space-y-0.5">
+                  {TV_STYLES.map(s => (
+                    <button key={s.value} onClick={() => { setTvStyle(s.value); setShowPrefs(false) }}
+                      className={`w-full text-left px-3 py-2 rounded-lg text-xs transition ${tvStyle === s.value ? 'bg-[#f0b90b]/15 text-[#f0b90b] font-semibold' : 'text-[#848e9c] hover:bg-[#2b3139] hover:text-[#eaecef]'}`}>
+                      {s.label}{tvStyle === s.value && <span className="float-right text-[#f0b90b]">✓</span>}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <div className="mt-3 pt-2 border-t border-[#2b3139]">
+                <p className="text-[10px] text-[#848e9c] uppercase tracking-widest mb-2">Default Lot Size</p>
+                <div className="flex items-center bg-[#0b0e11] border border-[#2b3139] rounded-lg overflow-hidden">
+                  <button type="button" onClick={() => { const n = Math.max(0.01, parseFloat(lotSize||'0.01') - 0.01); const s = n.toFixed(2); setLotSize(s); setAmount(s) }}
+                    className="px-2 py-1.5 text-[#848e9c] hover:text-[#eaecef] hover:bg-[#2b3139] transition"><Minus size={9} /></button>
+                  <input value={lotSize} onChange={e => { setLotSize(e.target.value); setAmount(e.target.value) }}
+                    className="flex-1 bg-transparent text-center text-xs font-mono text-[#eaecef] focus:outline-none min-w-0 py-1.5 w-16" />
+                  <button type="button" onClick={() => { const n = Math.min(100, parseFloat(lotSize||'1') + 1); const s = n.toFixed(2); setLotSize(s); setAmount(s) }}
+                    className="px-2 py-1.5 text-[#848e9c] hover:text-[#eaecef] hover:bg-[#2b3139] transition"><Plus size={9} /></button>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
       </div>
 
       {/* ── Order Form — BotsPage config style ──────────────────────── */}
