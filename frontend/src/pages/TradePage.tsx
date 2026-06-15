@@ -5,7 +5,8 @@ import {
   ArrowUpDown, TrendingUp, ChevronDown, ChevronUp,
   Wifi, WifiOff, Link2, Clock, CheckCircle2, 
   Target, AlertTriangle, ArrowRight, Zap, Minus, Plus,
-  MessageSquare, Tv, Bot, Settings, BarChart2, Maximize2,
+  MessageSquare, Tv, Bot, Settings, BarChart2, Maximize2, X,
+  SlidersHorizontal,
 } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { useAuthStore } from '../store/authStore'
@@ -177,8 +178,16 @@ function FinChatPanel({ pair, livePrice, liveChange, collapsed, onToggle }: {
   const [chatInput, setChatInput] = useState('')
   const [userMessages, setUserMessages] = useState<{ id: number; text: string; reply: string }[]>([])
   const chatEndRef = useRef<HTMLDivElement>(null)
+  // Track rendered height for smooth collapse animation
+  const [bodyHeight, setBodyHeight] = useState<number>(0)
+  const bodyRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => { chatEndRef.current?.scrollIntoView({ behavior: 'smooth' }) }, [userMessages])
+  useEffect(() => {
+    if (!collapsed && bodyRef.current) {
+      setBodyHeight(bodyRef.current.scrollHeight)
+    }
+  })
 
   const baseMessages = useMemo(() => {
     if (livePrice <= 0) return []
@@ -212,7 +221,7 @@ function FinChatPanel({ pair, livePrice, liveChange, collapsed, onToggle }: {
   }
 
   return (
-    <div className="bg-[#161a1e] border border-[#2b3139] rounded-xl flex flex-col overflow-hidden transition-all" style={{ minHeight: collapsed ? 'auto' : 420 }}>
+    <div className="bg-[#161a1e] border border-[#2b3139] rounded-xl flex flex-col overflow-hidden">
       {/* Header — always visible */}
       <div className="flex items-center gap-2 px-4 py-3 border-b border-[#2b3139] flex-shrink-0">
         <div className="w-6 h-6 rounded-lg bg-[#f0b90b]/15 flex items-center justify-center">
@@ -226,16 +235,27 @@ function FinChatPanel({ pair, livePrice, liveChange, collapsed, onToggle }: {
           <span className="w-1.5 h-1.5 rounded-full bg-[#0ecb81] animate-pulse" />
           <span className="text-[10px] text-[#0ecb81]">Live</span>
         </div>
+        {/* Close button — X icon, distinct from chart collapse chevron */}
         <button
           onClick={onToggle}
-          className="ml-auto p-1.5 rounded-lg hover:bg-[#2b3139] text-[#848e9c] hover:text-[#eaecef] transition"
-          title={collapsed ? 'Expand FinChat' : 'Collapse FinChat'}
+          className="ml-auto flex items-center gap-1 px-2 py-1 rounded-lg hover:bg-[#f6465d]/10 text-[#848e9c] hover:text-[#f6465d] transition group"
+          title="Close FinChat"
         >
-          {collapsed ? <ChevronDown size={12} /> : <ChevronUp size={12} />}
+          <X size={11} className="transition" />
+          <span className="text-[9px] font-semibold hidden group-hover:inline">close</span>
         </button>
       </div>
 
-      {!collapsed && (
+      {/* Collapsible body — smooth slide via max-height transition */}
+      <div
+        ref={bodyRef}
+        style={{
+          maxHeight: collapsed ? 0 : (bodyHeight > 0 ? bodyHeight : 600),
+          opacity: collapsed ? 0 : 1,
+          overflow: 'hidden',
+          transition: 'max-height 0.32s cubic-bezier(0.4,0,0.2,1), opacity 0.22s ease',
+        }}
+      >
         <>
           {/* Pair context */}
           <div className="px-4 py-2 bg-[#0b0e11]/50 border-b border-[#2b3139]/60 flex items-center gap-2 flex-shrink-0">
@@ -248,7 +268,7 @@ function FinChatPanel({ pair, livePrice, liveChange, collapsed, onToggle }: {
           </div>
 
           {/* Chat messages */}
-          <div className="flex-1 overflow-y-auto p-3 space-y-2.5">
+          <div className="flex-1 overflow-y-auto p-3 space-y-2.5" style={{ maxHeight: 320 }}>
             {baseMessages.map(msg =>
               msg.role === 'signal' ? (
                 <div key={msg.id} className="flex items-start gap-2">
@@ -316,7 +336,7 @@ function FinChatPanel({ pair, livePrice, liveChange, collapsed, onToggle }: {
                 onChange={e => setChatInput(e.target.value)}
                 onKeyDown={e => e.key === 'Enter' && handleSend()}
                 placeholder={`Ask about ${pair}…`}
-                className="flex-1 bg-[#0b0e11] border border-[#2b3139] focus:border-[#f0b90b]/40 rounded-lg px-9 py-4 text-xs text-[#eaecef] placeholder-[#4a5568] focus:outline-none transition"
+                className="flex-1 bg-[#0b0e11] border border-[#2b3139] focus:border-[#f0b90b]/40 rounded-lg px-3 py-2 text-xs text-[#eaecef] placeholder-[#4a5568] focus:outline-none transition"
               />
               <button onClick={handleSend} className="px-3 py-2 rounded-lg bg-[#f0b90b]/10 border border-[#f0b90b]/20 text-[#f0b90b] hover:bg-[#f0b90b]/20 transition">
                 <ArrowRight size={12} />
@@ -324,7 +344,7 @@ function FinChatPanel({ pair, livePrice, liveChange, collapsed, onToggle }: {
             </div>
           </div>
         </>
-      )}
+      </div>
     </div>
   )
 }
@@ -346,6 +366,8 @@ export default function TradePage() {
   // Chart / UI state
   const [tvStyle, setTvStyle]       = useState('1')       // TradingView chart style
   const [showPrefs, setShowPrefs]   = useState(false)
+  const [showTvSettings, setShowTvSettings] = useState(false)  // pair-header TV settings popup
+  const tvSettingsRef = useRef<HTMLDivElement>(null)
   const [pair, setPair]             = useState('BTC/USDT')
   const [showPairs, setShowP]       = useState(false)
   const [chatCollapsed, setChatCollapsed] = useState(() => localStorage.getItem('finai-chat') === 'true')
@@ -431,6 +453,7 @@ export default function TradePage() {
   useEffect(() => {
     const handler = (e: MouseEvent) => {
       if (prefsRef.current && !prefsRef.current.contains(e.target as Node)) setShowPrefs(false)
+      if (tvSettingsRef.current && !tvSettingsRef.current.contains(e.target as Node)) setShowTvSettings(false)
     }
     document.addEventListener('mousedown', handler)
     return () => document.removeEventListener('mousedown', handler)
@@ -590,6 +613,51 @@ export default function TradePage() {
                   {isLive ? 'live' : 'cached'}
                 </span>
                 {wsConnected && <span className="w-1.5 h-1.5 rounded-full bg-[#0ecb81] animate-pulse" />}
+
+                {/* TV chart settings icon — right side of header */}
+                <div className="relative ml-auto" ref={tvSettingsRef}>
+                  <button
+                    onClick={() => setShowTvSettings(v => !v)}
+                    title="Chart settings"
+                    className={`p-1.5 rounded-lg transition ${showTvSettings ? 'bg-[#f0b90b]/15 text-[#f0b90b]' : 'text-[#848e9c] hover:text-[#eaecef] hover:bg-[#2b3139]'}`}
+                  >
+                    <SlidersHorizontal size={13} />
+                  </button>
+                  {showTvSettings && (
+                    <div className="absolute right-0 top-full mt-1.5 bg-[#1e2329] border border-[#2b3139] rounded-xl shadow-2xl shadow-black/60 z-50 w-52 overflow-hidden">
+                      {/* Chart style section */}
+                      <div className="px-3 pt-3 pb-1">
+                        <p className="text-[9px] font-semibold text-[#848e9c] uppercase tracking-widest mb-1.5">Chart Style</p>
+                        <div className="space-y-0.5">
+                          {TV_STYLES.map(s => (
+                            <button key={s.value}
+                              onClick={() => { setTvStyle(s.value); setShowTvSettings(false) }}
+                              className={`w-full text-left px-2.5 py-1.5 rounded-lg text-xs transition flex items-center justify-between ${tvStyle === s.value ? 'bg-[#f0b90b]/15 text-[#f0b90b] font-semibold' : 'text-[#848e9c] hover:bg-[#2b3139] hover:text-[#eaecef]'}`}>
+                              {s.label}
+                              {tvStyle === s.value && <span className="text-[#f0b90b] text-[10px]">✓</span>}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                      {/* Panel toggles */}
+                      <div className="px-3 pt-2 pb-3 border-t border-[#2b3139] mt-1">
+                        <p className="text-[9px] font-semibold text-[#848e9c] uppercase tracking-widest mb-1.5">Panels</p>
+                        <button
+                          onClick={() => { const v = !chatCollapsed; setChatCollapsed(v); localStorage.setItem('finai-chat', String(v)); setShowTvSettings(false) }}
+                          className="w-full text-left px-2.5 py-1.5 rounded-lg text-xs text-[#848e9c] hover:bg-[#2b3139] hover:text-[#eaecef] transition flex items-center justify-between">
+                          FinChat
+                          <span className={`text-[10px] font-bold ${!chatCollapsed ? 'text-[#0ecb81]' : 'text-[#f6465d]'}`}>{!chatCollapsed ? 'ON' : 'OFF'}</span>
+                        </button>
+                        <button
+                          onClick={() => { const v = !showEntryLines; setShowEntryLines(v); localStorage.setItem('finai-entry-lines', String(v)); setShowTvSettings(false) }}
+                          className="w-full text-left px-2.5 py-1.5 rounded-lg text-xs text-[#848e9c] hover:bg-[#2b3139] hover:text-[#eaecef] transition flex items-center justify-between">
+                          Entry Badge
+                          <span className={`text-[10px] font-bold ${showEntryLines ? 'text-[#0ecb81]' : 'text-[#f6465d]'}`}>{showEntryLines ? 'ON' : 'OFF'}</span>
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </div>
               </div>
               {/* Row 2: 24h H / L + bid/ask — always visible */}
               <div className="flex items-center gap-3 mt-1">
