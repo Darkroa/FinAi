@@ -370,6 +370,16 @@ export default function TradePage() {
   const [tvSideBar,  setTvSideBar]  = useState(() => localStorage.getItem('finai-tv-sidebar')  === 'true')
   const [tvLegend,   setTvLegend]   = useState(() => localStorage.getItem('finai-tv-legend')   === 'true')
   const [tvDateRng,  setTvDateRng]  = useState(() => localStorage.getItem('finai-tv-daterng')  === 'true')
+  const [tvTheme,    setTvTheme]    = useState<'dark'|'light'>(() =>
+    localStorage.getItem('finai-theme') === 'light' ? 'light' : 'dark'
+  )
+  useEffect(() => {
+    const obs = new MutationObserver(() => {
+      setTvTheme(document.documentElement.classList.contains('light') ? 'light' : 'dark')
+    })
+    obs.observe(document.documentElement, { attributes: true, attributeFilter: ['class'] })
+    return () => obs.disconnect()
+  }, [])
   const [showPrefs, setShowPrefs]   = useState(false)
   const [showTvSettings, setShowTvSettings] = useState(false)  // pair-header TV settings popup
   const tvSettingsRef = useRef<HTMLDivElement>(null)
@@ -726,8 +736,8 @@ export default function TradePage() {
             ) : chartTab === 'chart' ? (
               <div className="flex-1 relative pt-px">
                 <iframe
-                  key={`${pair}-${tvStyle}-${tvInterval}-${tvTopBar}-${tvSideBar}-${tvLegend}-${tvDateRng}`}
-                  src={`https://s.tradingview.com/widgetembed/?symbol=${TV_SYMBOLS[pair] ?? 'BINANCE:BTCUSDT'}&theme=dark&style=${tvStyle}&interval=${tvInterval}&locale=en&toolbar_bg=%230b0e11&withdateranges=${tvDateRng ? 1 : 0}&hide_side_toolbar=${tvSideBar ? 0 : 1}&hide_top_toolbar=${tvTopBar ? 0 : 1}&hide_legend=${tvLegend ? 0 : 1}&allow_symbol_change=0&save_image=0&show_popup_button=0`}
+                  key={`${pair}-${tvStyle}-${tvInterval}-${tvTopBar}-${tvSideBar}-${tvLegend}-${tvDateRng}-${tvTheme}`}
+                  src={`https://s.tradingview.com/widgetembed/?symbol=${TV_SYMBOLS[pair] ?? 'BINANCE:BTCUSDT'}&theme=${tvTheme}&style=${tvStyle}&interval=${tvInterval}&locale=en&toolbar_bg=${tvTheme==='light'?'%23ffffff':'%230b0e11'}&withdateranges=${tvDateRng ? 1 : 0}&hide_side_toolbar=${tvSideBar ? 0 : 1}&hide_top_toolbar=${tvTopBar ? 0 : 1}&hide_legend=${tvLegend ? 0 : 1}&allow_symbol_change=0&save_image=0&show_popup_button=0`}
                   width="100%"
                   style={{ border: 'none', display: 'block', height: chartExpanded ? 'calc(100vh - 46px)' : '420px' }}
                   allowFullScreen title="TradingView Chart"
@@ -1073,8 +1083,50 @@ export default function TradePage() {
       </div>
       )}
 
-        {/* ── Icon tab nav — below chart/chat ──────────────────────────── */}
-        <div className="flex items-center gap-0.5 bg-[#161a1e] border border-[#2b3139] rounded-xl px-1.5 py-1" ref={prefsRef}>
+        {/* Open Positions - Compact Style */}
+        {openPositions.length > 0 && (
+          <div className="bg-[#161a1e] border border-[#f0b90b]/15 rounded-2xl px-3 py-2">
+            <div className="flex items-center justify-between">
+              {/* Left Side */}
+              <div className="flex items-center gap-3">
+                <div className="w-6 h-6 rounded-xl bg-[#f0b90b]/10 flex items-center justify-center">
+                  <BarChart2 size={13} className="text-[#f0b90b]" />
+                </div>
+                <div>
+                  <p className="text-sm font-semibold text-white">
+                    {openPositions.length} Open Position{openPositions.length !== 1 ? 's' : ''}
+                  </p>
+                  <div className="flex items-center gap-1 text-[10px] text-[#848e9c]">
+                    <span>Position Value</span>
+                    <span className="font-mono text-[#eaecef]">
+                      ${totalPositionValue.toLocaleString('en-US', { maximumFractionDigits: 0 })}
+                    </span>
+                  </div>
+                </div>
+              </div>
+              {/* Right Side */}
+              <div className="text-right">
+                <p className={`text-base font-bold font-mono ${unrealizedPnl >= 0 ? 'text-[#0ecb81]' : 'text-[#f6465d]'}`}>
+                  {unrealizedPnl >= 0 ? '+' : ''}${Math.abs(unrealizedPnl).toLocaleString('en-US', { minimumFractionDigits: 1, maximumFractionDigits: 1 })}
+                </p>
+                <div className="flex items-center justify-end gap-2 mt-1">
+                  <div className="flex items-center gap-1">
+                    <span className={`w-1.5 h-1.5 rounded-full ${wsConnected ? 'bg-[#0ecb81] animate-pulse' : 'bg-[#848e9c]'}`} />
+                    <span className="text-[9px] text-[#848e9c]">live</span>
+                  </div>
+                  <button onClick={() => navigate('/app/positions')}
+                    className="text-[#f0b90b] hover:text-[#eaecef] text-xs font-medium flex items-center gap-0.5 transition">
+                    View →
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ── Icon tab nav — full-bleed, below Open Positions ─────────── */}
+        <div className="-mx-4 sm:mx-0">
+        <div className="flex items-center gap-0.5 bg-[#161a1e] border-y border-[#2b3139] sm:border sm:rounded-xl px-1.5 py-1" ref={prefsRef}>
           {([
             { id: 'chart',     Icon: Tv,         title: 'Chart'      },
             { id: 'orderbook', Icon: ArrowUpDown, title: 'Order Book' },
@@ -1164,66 +1216,8 @@ export default function TradePage() {
             )}
           </div>
         </div>
+        </div>
 
-    
-
-        {/* Open Positions - Compact Style */}
-        {openPositions.length > 0 && (
-          <div className="bg-[#161a1e] border border-[#f0b90b]/15 rounded-2xl px-3 py-2">
-            <div className="flex items-center justify-between">
-              {/* Left Side */}
-              <div className="flex items-center gap-3">
-                <div className="w-6 h-6 rounded-xl bg-[#f0b90b]/10 flex items-center justify-center">
-                  <BarChart2 size={13} className="text-[#f0b90b]" />
-                </div>
-
-                <div>
-                  <p className="text-sm font-semibold text-white">
-                    {openPositions.length} Open Position{openPositions.length !== 1 ? 's' : ''}
-                  </p>
-
-                  {/* Position Value with label - very small */}
-                  <div className="flex items-center gap-1 text-[10px] text-[#848e9c]">
-                    <span>Position Value</span>
-                    <span className="font-mono text-[#eaecef]">
-                      ${totalPositionValue.toLocaleString('en-US', { maximumFractionDigits: 0 })}
-                    </span>
-                  </div>
-                </div>
-              </div>
-
-              {/* Right Side */}
-              <div className="text-right">
-                {/* Unrealized PnL */}
-                <p
-                  className={`text-base font-bold font-mono ${
-                    unrealizedPnl >= 0 ? 'text-[#0ecb81]' : 'text-[#f6465d]'
-                  }`}
-                >
-                  {unrealizedPnl >= 0 ? '+' : ''}${Math.abs(unrealizedPnl).toLocaleString('en-US', { 
-                    minimumFractionDigits: 1, 
-                    maximumFractionDigits: 1 
-                  })}
-                </p>
-
-                {/* Live Indicator + View Button */}
-                <div className="flex items-center justify-end gap-2 mt-1">
-                  <div className="flex items-center gap-1">
-                    <span className={`w-1.5 h-1.5 rounded-full ${wsConnected ? 'bg-[#0ecb81] animate-pulse' : 'bg-[#848e9c]'}`} />
-                    <span className="text-[9px] text-[#848e9c]">live</span>
-                  </div>
-
-                  <button
-                    onClick={() => navigate('/app/positions')}
-                    className="text-[#f0b90b] hover:text-[#eaecef] text-xs font-medium flex items-center gap-0.5 transition"
-                  >
-                    View →
-                  </button>
-                </div>
-              </div>
-            </div>
-         </div>
-      )}
       {/* FinChat — full-width below chart */}
       <div className="-mx-4 sm:mx-0">
         <FinChatPanel
