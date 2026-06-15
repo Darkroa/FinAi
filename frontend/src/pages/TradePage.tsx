@@ -3,13 +3,13 @@ import { useNavigate } from 'react-router-dom'
 
 import {
   ArrowUpDown, TrendingUp, ChevronDown, ChevronUp,
-  Wifi, WifiOff, Link2, RefreshCw, Clock, CheckCircle2, X,
+  Wifi, WifiOff, Link2, Clock, CheckCircle2, 
   Target, AlertTriangle, ArrowRight, Zap, Minus, Plus,
   MessageSquare, Tv, Bot, Settings, BarChart2, Maximize2,
 } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { useAuthStore } from '../store/authStore'
-import { executeTrade, getBotTrades, getOpenPositions, closeManualTrade } from '../lib/api'
+import { executeTrade, getBotTrades, getOpenPositions    } from '../lib/api'
 
 const PAIRS = [
   'BTC/USDT', 'ETH/USDT', 'BNB/USDT', 'SOL/USDT',
@@ -316,7 +316,7 @@ function FinChatPanel({ pair, livePrice, liveChange, collapsed, onToggle }: {
                 onChange={e => setChatInput(e.target.value)}
                 onKeyDown={e => e.key === 'Enter' && handleSend()}
                 placeholder={`Ask about ${pair}…`}
-                className="flex-1 bg-[#0b0e11] border border-[#2b3139] focus:border-[#f0b90b]/40 rounded-lg px-3 py-2 text-xs text-[#eaecef] placeholder-[#4a5568] focus:outline-none transition"
+                className="flex-1 bg-[#0b0e11] border border-[#2b3139] focus:border-[#f0b90b]/40 rounded-lg px-9 py-4 text-xs text-[#eaecef] placeholder-[#4a5568] focus:outline-none transition"
               />
               <button onClick={handleSend} className="px-3 py-2 rounded-lg bg-[#f0b90b]/10 border border-[#f0b90b]/20 text-[#f0b90b] hover:bg-[#f0b90b]/20 transition">
                 <ArrowRight size={12} />
@@ -362,8 +362,8 @@ export default function TradePage() {
   const [orderLoading, setLoading]  = useState(false)
   const [tradeHistory, setHistory]  = useState<TradeRecord[]>([])
   const [openPositions, setOpenPos] = useState<OpenPosition[]>([])
-  const [histLoading, setHistLoad]  = useState(false)
-  const [closingId, setClosingId]   = useState<number | null>(null)
+  const [setHistLoad]  = useState(false)
+
 
   const leverage = LEVERAGE_STEPS[leverageIdx]
   const navigate = useNavigate()
@@ -379,13 +379,7 @@ export default function TradePage() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [exchanges.length])
 
-  const fetchHistory = useCallback(async () => {
-    setHistLoad(true)
-    try {
-      const [tradesRes, posRes] = await Promise.allSettled([getBotTrades(100), getOpenPositions()])
-      const trades: TradeRecord[] = tradesRes.status === 'fulfilled' ? (tradesRes.value.data?.trades ?? []) : []
-      setHistory(trades)
-
+  
       let positions: OpenPosition[] = posRes.status === 'fulfilled' ? (posRes.value.data?.positions ?? []) : []
       if (positions.length === 0 && trades.length > 0) {
         const posMap: Record<string, { qty: number; totalCost: number; trade: TradeRecord }> = {}
@@ -402,10 +396,7 @@ export default function TradePage() {
         })
       }
       setOpenPos(positions)
-    } catch { /* silent */ } finally { setHistLoad(false) }
-  }, [])
-
-  useEffect(() => { fetchHistory() }, [fetchHistory])
+  
 
   const unrealizedPnl = useMemo(() => openPositions.reduce((s,p) => s + (p.unrealized_pnl??0), 0), [openPositions])
   const realizedPnl   = useMemo(() => tradeHistory.filter(t => t.pnl !== null).reduce((s,t) => s + (t.pnl ?? 0), 0), [tradeHistory])
@@ -509,37 +500,62 @@ export default function TradePage() {
     } finally { setLoading(false) }
   }
 
-  const handleClosePosition = async (tradeId: number) => {
-    setClosingId(tradeId)
-    try {
-      const res = await closeManualTrade(tradeId)
-      const d = res.data; const pnl = d.pnl ?? 0
-      toast.success(`Position closed @ $${d.close_price?.toLocaleString('en-US',{maximumFractionDigits:2})} — P&L: ${pnl>=0?'+':''}$${pnl.toFixed(2)}`, { duration: 5000 })
-      if (d.new_balance !== undefined) useAuthStore.getState().setUser({ ...useAuthStore.getState().user!, balance_usdt: d.new_balance })
-      fetchHistory()
-    } catch (err: unknown) {
-      toast.error((err as { response?: { data?: { detail?: string } } })?.response?.data?.detail || 'Failed to close position')
-    } finally { setClosingId(null) }
-  }
 
   return (
     <div className="space-y-3">
 
-      {/* ── Pair Selector Card ───────────────────────────────────────── */}
-      <div className="bg-[#161a1e] border border-[#2b3139] rounded-xl overflow-visible">
+
+
+      
+      {/* ── 1. Buy/Sell Card - sticky top ───────────────────────────────── */}
+      {showBuySell && (
+        <div className="sticky top-0 z-40 bg-[#161a1e] border-[#2b3139]  rounded-xl px-4 py-3 mb-6q">
+          <div className="flex items-center justify-center gap-3 w-full">
+            <button type="button" disabled={orderLoading} onClick={() => handleQuickTrade('sell')}
+              className="flex-1 px-7 py-2.5 rounded-xl text-sm font-bold bg-[#f6465d] hover:bg-[#d93d51] text-white transition active:scale-[0.98] disabled:opacity-50">
+              Sell
+            </button>
+
+            <div className="flex flex-col items-center gap-0.5">
+              <span className="text-[9px] text-[#4a5568] uppercase tracking-widest">Lot Size</span>
+              <div className="flex items-center bg-[#0b0e11] border-[#2b3139] rounded-lg overflow-hidden">
+                <button type="button" onClick={() => { const n = Math.max(0.01, parseFloat(lotSize||'0.01') - 0.01); const s = n.toFixed(2); setLotSize(s); setAmount(s) }}
+                  className="px-2.5 py-1.5 text-[#848e9c] hover:text-[#eaecef] hover:bg-[#2b3139] transition"><Minus size={12} /></button>
+                <input
+                  value={lotSize}
+                  onChange={e => { setLotSize(e.target.value); setAmount(e.target.value) }}
+                  onBlur={e => { const n = parseFloat(e.target.value); if (!isNaN(n) && n > 0) { const s = Math.min(100, Math.max(0.01, n)).toFixed(2); setLotSize(s); setAmount(s) } }}
+                  className="w-16 text-center text-xs font-mono text-[#f0b90b] font-bold py-1.5 bg-transparent focus:outline-none"
+                  inputMode="decimal"
+                />
+                <button type="button" onClick={() => { const n = Math.min(100, parseFloat(lotSize||'1') + 0.01); const s = n.toFixed(2); setLotSize(s); setAmount(s) }}
+                  className="px-2.5 py-1.5 text-[#848e9c] hover:text-[#eaecef] hover:bg-[#2b3139] transition"><Plus size={12} /></button>
+              </div>
+            </div>
+
+            <button type="button" disabled={orderLoading} onClick={() => handleQuickTrade('buy')}
+              className="flex-1 px-7 py-2.5 rounded-xl text-sm font-bold bg-[#0ecb81] hover:bg-[#0ab56f] text-black transition active:scale-[0.98] disabled:opacity-50">
+              Buy
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* ── 2. Pair Selector Card - below sticky card ───────────────────── */}
+      <div className="bg-[#161a1e] border-[#2b3139] rounded-xl overflow-hidden">
         {/* Row 1: pair + price + change + live + 24h stats */}
         <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 px-3 py-2.5">
           <div className="relative">
-            <button onClick={() => setShowP(v => !v)}
+            <button onClick={() => setShowP(v =>!v)}
               className="flex items-center gap-1.5 hover:bg-[#2b3139]/60 rounded-lg px-1.5 py-1 transition">
               <span className="text-sm font-bold text-[#eaecef]">{pair}</span>
               <ChevronDown size={11} className="text-[#848e9c]" />
             </button>
             {showPairs && (
-              <div className="absolute top-full mt-1 left-0 bg-[#1e2329] border border-[#2b3139] rounded-xl overflow-hidden z-30 min-w-[155px] shadow-xl shadow-black/50 max-h-64 overflow-y-auto">
+              <div className="absolute top-full mt-1 left-0 bg-[#1e2329] border-[#2b3139] rounded-xl overflow-hidden z-30 min-w-[155px] shadow-xl shadow-black/50 max-h-64 overflow-y-auto">
                 {PAIRS.map(p => (
                   <button key={p} onClick={() => { setPair(p); setShowP(false); setAmount('') }}
-                    className={`w-full text-left px-3 py-2 text-xs transition hover:bg-[#2b3139] ${p === pair ? 'text-[#f0b90b] font-semibold' : 'text-[#eaecef]'}`}>
+                    className={`w-full text-left px-3 py-2 text-xs transition hover:bg-[#2b3139] ${p === pair? 'text-[#f0b90b] font-semibold' : 'text-[#eaecef]'}`}>
                     {p}
                   </button>
                 ))}
@@ -547,15 +563,16 @@ export default function TradePage() {
             )}
           </div>
 
+        <div className="flex items-center gap-1.5">
           <span className="text-base font-bold font-mono text-[#eaecef]">
-            ${livePrice > 0 ? livePrice.toLocaleString('en-US', { maximumFractionDigits: 2 }) : '—'}
+            ${livePrice > 0? livePrice.toLocaleString('en-US', { maximumFractionDigits: 2 }) : '—'}
           </span>
-          <span className={`text-xs font-semibold px-1.5 py-0.5 rounded-md ${liveChange >= 0 ? 'text-[#0ecb81] bg-[#0ecb81]/10' : 'text-[#f6465d] bg-[#f6465d]/10'}`}>
-            {liveChange >= 0 ? '+' : ''}{liveChange.toFixed(2)}%
+          <span className={`text-xs font-semibold px-1.5 py-0.5 rounded-md ${liveChange >= 0? 'text-[#0ecb81] bg-[#0ecb81]/10' : 'text-[#f6465d] bg-[#f6465d]/10'}`}>
+            {liveChange >= 0? '+' : ''}{liveChange.toFixed(2)}%
           </span>
-          <span className={`text-[10px] flex items-center gap-0.5 ${isLive ? 'text-[#0ecb81]' : 'text-[#848e9c]'}`}>
-            {isLive ? <Wifi size={8} /> : <WifiOff size={8} />}
-            {isLive ? 'live' : 'cached'}
+          <span className={`text-[10px] flex items-center gap-0.5 ${isLive? 'text-[#0ecb81]' : 'text-[#848e9c]'}`}>
+            {isLive? <Wifi size={8} /> : <WifiOff size={8} />}
+            {isLive? 'live' : 'cached'}
           </span>
           <span className="text-[10px] text-[#848e9c] ml-auto hidden sm:inline">
             24h H <span className="text-[#eaecef] font-mono">${high24}</span>
@@ -564,115 +581,13 @@ export default function TradePage() {
           </span>
           {wsConnected && <span className="w-1.5 h-1.5 rounded-full bg-[#0ecb81] animate-pulse flex-shrink-0" />}
         </div>
-
-        {/* 24h H/L for mobile */}
-        <div className="sm:hidden px-3 pb-1 text-[10px] text-[#848e9c]">
-          24h H <span className="text-[#eaecef] font-mono">${high24}</span>
-          <span className="mx-2 text-[#2b3139]">|</span>
-          24h L <span className="text-[#eaecef] font-mono">${low24}</span>
-          <span className="mx-1 text-[#2b3139]">|</span>
-          Realized P&L{' '}
-          <span 
-            className={`font-mono ${realizedPnl >= 0 ? 'text-[#0ecb81]' : 'text-[#f6465d]'}`}
-          >
-            {realizedPnl >= 0 ? '+' : ''}${realizedPnl.toFixed(2)}
-          </span>
+        <div className="flex items-center justify-center gap-1 text-[7px] font-mono mt-1.5">
+          <span className="text-[#f6465d] font-semibold">{orderBook.bids[0]? orderBook.bids[0].price.toLocaleString('en-US', { maximumFractionDigits: 2 }) : '—'}</span>
+          <span className="text-[#4a5568]">bid / ask</span>
+          <span className="text-[#0ecb81] font-semibold">{orderBook.asks[0]? orderBook.asks[0].price.toLocaleString('en-US', { maximumFractionDigits: 2 }) : '—'}</span>
         </div>
-        {showBuySell && (
-          <div className="border-t border-[#2b3139] px-4 py-3 flex flex-col items-center gap-2">
-            <div className="flex items-center justify-center gap-3 w-full">
-              <button type="button" disabled={orderLoading} onClick={() => handleQuickTrade('sell')}
-                className="px-7 py-2.5 rounded-xl text-sm font-bold bg-[#f6465d] hover:bg-[#d93d51] text-white transition active:scale-[0.98] disabled:opacity-50">
-                Sell
-              </button>
-              <div className="flex flex-col items-center gap-0.5">
-                <span className="text-[9px] text-[#4a5568] uppercase tracking-widest">Lot Size</span>
-                <div className="flex items-center bg-[#0b0e11] border border-[#2b3139] rounded-lg overflow-hidden">
-                  <button type="button" onClick={() => { const n = Math.max(0.01, parseFloat(lotSize||'0.01') - 0.01); const s = n.toFixed(2); setLotSize(s); setAmount(s) }}
-                    className="px-2.5 py-1.5 text-[#848e9c] hover:text-[#eaecef] hover:bg-[#2b3139] transition"><Minus size={9} /></button>
-                  <input
-                    value={lotSize}
-                    onChange={e => { setLotSize(e.target.value); setAmount(e.target.value) }}
-                    onBlur={e => { const n = parseFloat(e.target.value); if (!isNaN(n) && n > 0) { const s = Math.min(100, Math.max(0.01, n)).toFixed(2); setLotSize(s); setAmount(s) } }}
-                    className="w-16 text-center text-xs font-mono text-[#f0b90b] font-bold py-1.5 bg-transparent focus:outline-none"
-                    inputMode="decimal"
-                  />
-                  <button type="button" onClick={() => { const n = Math.min(100, parseFloat(lotSize||'1') + 0.01); const s = n.toFixed(2); setLotSize(s); setAmount(s) }}
-                    className="px-2.5 py-1.5 text-[#848e9c] hover:text-[#eaecef] hover:bg-[#2b3139] transition"><Plus size={9} /></button>
-                </div>
-              </div>
-              <button type="button" disabled={orderLoading} onClick={() => handleQuickTrade('buy')}
-                className="px-7 py-2.5 rounded-xl text-sm font-bold bg-[#0ecb81] hover:bg-[#0ab56f] text-black transition active:scale-[0.98] disabled:opacity-50">
-                Buy
-              </button>
-            </div>
-            <div className="flex items-center gap-2 text-[10px] font-mono">
-              <span className="text-[#f6465d] font-semibold">{orderBook.bids[0] ? orderBook.bids[0].price.toLocaleString('en-US', { maximumFractionDigits: 2 }) : '—'}</span>
-              <span className="text-[#4a5568]">bid / ask</span>
-              <span className="text-[#0ecb81] font-semibold">{orderBook.asks[0] ? orderBook.asks[0].price.toLocaleString('en-US', { maximumFractionDigits: 2 }) : '—'}</span>
-            </div>
-          </div>
-        )}
       </div>
-
-      {/* Open Positions - Compact Style */}
-      {openPositions.length > 0 && (
-        <div className="bg-[#161a1e] border border-[#f0b90b]/15 rounded-2xl px-3 py-2">
-          <div className="flex items-center justify-between">
-            {/* Left Side */}
-            <div className="flex items-center gap-3">
-              <div className="w-6 h-6 rounded-xl bg-[#f0b90b]/10 flex items-center justify-center">
-                <BarChart2 size={13} className="text-[#f0b90b]" />
-              </div>
-
-              <div>
-                <p className="text-sm font-semibold text-white">
-                  {openPositions.length} Open Position{openPositions.length !== 1 ? 's' : ''}
-                </p>
-
-                {/* Position Value with label - very small */}
-                <div className="flex items-center gap-1 text-[10px] text-[#848e9c]">
-                  <span>Position Value</span>
-                  <span className="font-mono text-[#eaecef]">
-                    ${totalPositionValue.toLocaleString('en-US', { maximumFractionDigits: 0 })}
-                  </span>
-                </div>
-              </div>
-            </div>
-
-            {/* Right Side */}
-            <div className="text-right">
-              {/* Unrealized PnL */}
-              <p
-                className={`text-base font-bold font-mono ${
-                  unrealizedPnl >= 0 ? 'text-[#0ecb81]' : 'text-[#f6465d]'
-                }`}
-              >
-                {unrealizedPnl >= 0 ? '+' : ''}${Math.abs(unrealizedPnl).toLocaleString('en-US', { 
-                  minimumFractionDigits: 1, 
-                  maximumFractionDigits: 1 
-                })}
-              </p>
-
-              {/* Live Indicator + View Button */}
-              <div className="flex items-center justify-end gap-2 mt-1">
-                <div className="flex items-center gap-1">
-                  <span className={`w-1.5 h-1.5 rounded-full ${wsConnected ? 'bg-[#0ecb81] animate-pulse' : 'bg-[#848e9c]'}`} />
-                  <span className="text-[9px] text-[#848e9c]">live</span>
-                </div>
-
-                <button
-                  onClick={() => navigate('/app/positions')}
-                  className="text-[#f0b90b] hover:text-[#eaecef] text-xs font-medium flex items-center gap-0.5 transition"
-                >
-                  View →
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
+      </div> 
       {/* ── Chart content + FinChat grid ─────────────────────────────── */}
       <div className={`grid grid-cols-1 gap-3 ${chatCollapsed ? 'lg:grid-cols-1' : 'lg:grid-cols-3'}`}>
 
@@ -802,116 +717,9 @@ export default function TradePage() {
           </div>
         </div>
 
-        {/* FinChat side panel */}
-        {!chatCollapsed ? (
-          <FinChatPanel
-            pair={pair} livePrice={livePrice} liveChange={liveChange}
-            collapsed={false} onToggle={() => setChatCollapsed(true)}
-          />
-        ) : (
-          <button
-            onClick={() => setChatCollapsed(false)}
-            className="hidden lg:flex flex-col items-center justify-center gap-2 bg-[#161a1e] border border-[#2b3139] hover:border-[#f0b90b]/40 rounded-xl px-3 py-6 transition group"
-          >
-            <MessageSquare size={14} className="text-[#f0b90b]" />
-            <span className="text-[9px] font-semibold text-[#848e9c] group-hover:text-[#eaecef] tracking-widest transition" style={{ writingMode: 'vertical-rl' }}>FinChat</span>
-            <ChevronDown size={11} className="text-[#848e9c] group-hover:text-[#eaecef] transition" />
-          </button>
-        )}
-      </div>
+    
 
-      {/* ── Icon tab nav — below chart/chat ──────────────────────────── */}
-      <div className="flex items-center gap-0.5 bg-[#161a1e] border border-[#2b3139] rounded-xl px-1.5 py-1" ref={prefsRef}>
-        {([
-          { id: 'chart',     Icon: Tv,         title: 'Chart'      },
-          { id: 'orderbook', Icon: ArrowUpDown, title: 'Order Book' },
-          { id: 'trades',    Icon: Clock,       title: 'Trades'     },
-          { id: 'info',      Icon: BarChart2,   title: 'Info'       },
-        ] as const).map(tab => (
-          <button key={tab.id} onClick={() => setChartTab(tab.id)} title={tab.title}
-            className={`p-2 rounded-lg transition ${chartTab === tab.id ? 'bg-[#f0b90b]/15 text-[#f0b90b]' : 'text-[#848e9c] hover:text-[#eaecef] hover:bg-[#2b3139]'}`}>
-            <tab.Icon size={12} />
-          </button>
-        ))}
-        <div className="flex-1" />
-        <button onClick={() => { const v = !chatCollapsed; setChatCollapsed(v); localStorage.setItem('finai-chat', String(v)) }} title={chatCollapsed ? 'Show FinChat' : 'Hide FinChat'}
-          className={`p-2 rounded-lg transition ${!chatCollapsed ? 'text-[#f0b90b] bg-[#f0b90b]/10' : 'text-[#848e9c] hover:text-[#eaecef] hover:bg-[#2b3139]'}`}>
-          <MessageSquare size={12} />
-        </button>
-        <button onClick={() => { const v = !showOrderForm; setShowOrderForm(v); localStorage.setItem('finai-order-form', String(v)) }} title={showOrderForm ? 'Hide Order Form' : 'Show Order Form'}
-          className={`p-2 rounded-lg transition ${showOrderForm ? 'text-[#f0b90b] bg-[#f0b90b]/10' : 'text-[#848e9c] hover:text-[#eaecef] hover:bg-[#2b3139]'}`}>
-          <TrendingUp size={12} />
-        </button>
-        <button onClick={() => { const v = !chartCollapsed; setChartCollapsed(v); localStorage.setItem('finai-chart-collapsed', String(v)) }}
-          title={chartCollapsed ? 'Expand chart' : 'Collapse chart'}
-          className={`p-2 rounded-lg transition ${chartCollapsed ? 'text-[#f0b90b] bg-[#f0b90b]/10' : 'text-[#848e9c] hover:text-[#eaecef] hover:bg-[#2b3139]'}`}>
-          {chartCollapsed ? <ChevronDown size={12} /> : <ChevronUp size={12} />}
-        </button>
-        <button onClick={() => setChartExpanded(v => !v)} title={chartExpanded ? 'Exit fullscreen' : 'Fullscreen'}
-          className={`p-2 rounded-lg transition ${chartExpanded ? 'text-[#f0b90b] bg-[#f0b90b]/10' : 'text-[#848e9c] hover:text-[#eaecef] hover:bg-[#2b3139]'}`}>
-          <Maximize2 size={12} />
-        </button>
-        <div className="relative">
-          <button onClick={() => setShowPrefs(v => !v)} title="Settings"
-            className={`p-2 rounded-lg transition ${showPrefs ? 'text-[#eaecef] bg-[#2b3139]' : 'text-[#848e9c] hover:text-[#eaecef] hover:bg-[#2b3139]'}`}>
-            <Settings size={12} />
-          </button>
-          {showPrefs && (
-            <div className="absolute right-0 bottom-full mb-1 p-3 bg-[#1e2329] border border-[#2b3139] rounded-xl shadow-2xl z-50 w-[270px] max-h-[400px] overflow-y-auto">
-              <p className="text-[10px] text-[#848e9c] uppercase tracking-widest mb-2">Show / Hide</p>
-              <div className="space-y-0.5 mb-3">
-                <button onClick={() => { const v = !showBuySell; setShowBuySell(v); localStorage.setItem('finai-buy-sell', String(v)) }}
-                  className="w-full text-left px-3 py-2 rounded-lg text-xs text-[#848e9c] hover:bg-[#2b3139] hover:text-[#eaecef] transition flex items-center justify-between">
-                  Buy / Sell Bar <span className={showBuySell ? 'text-[#0ecb81] text-[10px] font-bold' : 'text-[#f6465d] text-[10px] font-bold'}>{showBuySell ? 'ON' : 'OFF'}</span>
-                </button>
-                <button onClick={() => { const v = !chatCollapsed; setChatCollapsed(v); localStorage.setItem('finai-chat', String(v)) }}
-                  className="w-full text-left px-3 py-2 rounded-lg text-xs text-[#848e9c] hover:bg-[#2b3139] hover:text-[#eaecef] transition flex items-center justify-between">
-                  FinChat Panel <span className={!chatCollapsed ? 'text-[#0ecb81] text-[10px] font-bold' : 'text-[#f6465d] text-[10px] font-bold'}>{!chatCollapsed ? 'ON' : 'OFF'}</span>
-                </button>
-                <button onClick={() => { const v = !showOrderForm; setShowOrderForm(v); localStorage.setItem('finai-order-form', String(v)) }}
-                  className="w-full text-left px-3 py-2 rounded-lg text-xs text-[#848e9c] hover:bg-[#2b3139] hover:text-[#eaecef] transition flex items-center justify-between">
-                  Order Form <span className={showOrderForm ? 'text-[#0ecb81] text-[10px] font-bold' : 'text-[#f6465d] text-[10px] font-bold'}>{showOrderForm ? 'ON' : 'OFF'}</span>
-                </button>
-                <button onClick={() => { const v = !chartCollapsed; setChartCollapsed(v); localStorage.setItem('finai-chart-collapsed', String(v)) }}
-                  className="w-full text-left px-3 py-2 rounded-lg text-xs text-[#848e9c] hover:bg-[#2b3139] hover:text-[#eaecef] transition flex items-center justify-between">
-                  Chart <span className={!chartCollapsed ? 'text-[#0ecb81] text-[10px] font-bold' : 'text-[#f6465d] text-[10px] font-bold'}>{!chartCollapsed ? 'ON' : 'OFF'}</span>
-                </button>
-                <button onClick={() => { const v = !showEntryLines; setShowEntryLines(v); localStorage.setItem('finai-entry-lines', String(v)) }}
-                  className="w-full text-left px-3 py-2 rounded-lg text-xs text-[#848e9c] hover:bg-[#2b3139] hover:text-[#eaecef] transition flex items-center justify-between">
-                  Entry Lines <span className={showEntryLines ? 'text-[#0ecb81] text-[10px] font-bold' : 'text-[#f6465d] text-[10px] font-bold'}>{showEntryLines ? 'ON' : 'OFF'}</span>
-                </button>
-                <button onClick={() => { const v = !showOrderBook; setShowOrderBook(v); localStorage.setItem('finai-orderbook', String(v)) }}
-                  className="w-full text-left px-3 py-2 rounded-lg text-xs text-[#848e9c] hover:bg-[#2b3139] hover:text-[#eaecef] transition flex items-center justify-between">
-                  Bid &amp; Ask <span className={showOrderBook ? 'text-[#0ecb81] text-[10px] font-bold' : 'text-[#f6465d] text-[10px] font-bold'}>{showOrderBook ? 'ON' : 'OFF'}</span>
-                </button>
-              </div>
-              <div className="pt-2 border-t border-[#2b3139]">
-                <p className="text-[10px] text-[#848e9c] uppercase tracking-widest mb-2">Chart Style</p>
-                <div className="space-y-0.5">
-                  {TV_STYLES.map(s => (
-                    <button key={s.value} onClick={() => { setTvStyle(s.value); setShowPrefs(false) }}
-                      className={`w-full text-left px-3 py-2 rounded-lg text-xs transition ${tvStyle === s.value ? 'bg-[#f0b90b]/15 text-[#f0b90b] font-semibold' : 'text-[#848e9c] hover:bg-[#2b3139] hover:text-[#eaecef]'}`}>
-                      {s.label}{tvStyle === s.value && <span className="float-right text-[#f0b90b]">✓</span>}
-                    </button>
-                  ))}
-                </div>
-              </div>
-              <div className="mt-3 pt-2 border-t border-[#2b3139]">
-                <p className="text-[10px] text-[#848e9c] uppercase tracking-widest mb-2">Default Lot Size</p>
-                <div className="flex items-center bg-[#0b0e11] border border-[#2b3139] rounded-lg overflow-hidden">
-                  <button type="button" onClick={() => { const n = Math.max(0.01, parseFloat(lotSize||'0.01') - 0.01); const s = n.toFixed(2); setLotSize(s); setAmount(s) }}
-                    className="px-2 py-1.5 text-[#848e9c] hover:text-[#eaecef] hover:bg-[#2b3139] transition"><Minus size={9} /></button>
-                  <input value={lotSize} onChange={e => { setLotSize(e.target.value); setAmount(e.target.value) }}
-                    className="flex-1 bg-transparent text-center text-xs font-mono text-[#eaecef] focus:outline-none min-w-0 py-1.5 w-16" />
-                  <button type="button" onClick={() => { const n = Math.min(100, parseFloat(lotSize||'1') + 1); const s = n.toFixed(2); setLotSize(s); setAmount(s) }}
-                    className="px-2 py-1.5 text-[#848e9c] hover:text-[#eaecef] hover:bg-[#2b3139] transition"><Plus size={9} /></button>
-                </div>
-              </div>
-            </div>
-          )}
-        </div>
-      </div>
-
+    
       {/* ── Order Form — BotsPage config style ──────────────────────── */}
       {!showOrderForm && (
         <button
@@ -1143,123 +951,176 @@ export default function TradePage() {
       </div>
       )}
 
-      {/* ── Order Book (collapsible — controlled from settings) ─────── */}
-      <div className="bg-[#161a1e] border border-[#2b3139] rounded-xl overflow-hidden">
-        <button onClick={() => { const v = !showOrderBook; setShowOrderBook(v); localStorage.setItem('finai-orderbook', String(v)) }}
-          className="w-full flex items-center justify-between px-4 py-3 hover:bg-[#1e2329] transition">
-          <span className="flex items-center gap-2 text-xs font-semibold text-[#848e9c]">
-            <ArrowUpDown size={11} /> Bid &amp; Ask
-          </span>
-          <span className={`text-[10px] font-semibold ${showOrderBook ? 'text-[#0ecb81]' : 'text-[#4a5568]'}`}>{showOrderBook ? 'ON' : 'OFF'}</span>
-        </button>
-        {showOrderBook && (
-          <div className="px-4 pb-4">
-            <div className="flex justify-between text-[10px] text-[#4a5568] mb-2">
-              <span>Price (USDT)</span><span>Size ({asset})</span>
-            </div>
-            <div className="space-y-0.5">
-              {orderBook.asks.slice(0,5).reverse().map((a, i) => (
-                <div key={i} className="relative flex justify-between text-[11px] px-0.5 py-1">
-                  <div className="absolute inset-0 right-0 bg-[#f6465d]/8 rounded" style={{ width:`${Math.min(a.size/2*100,100)}%`, marginLeft:'auto' }} />
-                  <span className="text-[#f6465d] font-mono relative">${a.price.toLocaleString('en-US',{maximumFractionDigits:2})}</span>
-                  <span className="text-[#848e9c] font-mono relative">{a.size.toFixed(4)}</span>
-                </div>
-              ))}
-              <div className="py-1.5 text-center text-sm font-bold font-mono text-[#eaecef] bg-[#0b0e11] rounded-lg my-1">
-                ${livePrice > 0 ? livePrice.toLocaleString('en-US',{maximumFractionDigits:2}) : '—'}
-              </div>
-              {orderBook.bids.slice(0,5).map((b, i) => (
-                <div key={i} className="relative flex justify-between text-[11px] px-0.5 py-1">
-                  <div className="absolute inset-0 bg-[#0ecb81]/8 rounded" style={{ width:`${Math.min(b.size/2*100,100)}%` }} />
-                  <span className="text-[#0ecb81] font-mono relative">${b.price.toLocaleString('en-US',{maximumFractionDigits:2})}</span>
-                  <span className="text-[#848e9c] font-mono relative">{b.size.toFixed(4)}</span>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
-      </div>
-
-      {/* ── Open Positions (only shown when positions are running) ────── */}
-      {openPositions.length > 0 && (
-      <div className="bg-[#161a1e] border border-[#2b3139] rounded-xl overflow-hidden">
-        <div className="flex items-center gap-1 px-5 py-3 border-b border-[#2b3139]">
-          <span className="text-xs font-semibold text-[#eaecef]">
-            Open Positions
-            <span className="ml-1.5 bg-[#f0b90b]/20 text-[#f0b90b] text-[10px] px-1.5 py-0.5 rounded-full">{openPositions.length}</span>
-          </span>
-          <button onClick={fetchHistory} className="ml-auto text-[#848e9c] hover:text-[#eaecef] transition p-1">
-            <RefreshCw size={12} className={histLoading ? 'animate-spin' : ''} />
+        {/* ── Icon tab nav — below chart/chat ──────────────────────────── */}
+        <div className="flex items-center gap-0.5 bg-[#161a1e] border border-[#2b3139] rounded-xl px-1.5 py-1" ref={prefsRef}>
+          {([
+            { id: 'chart',     Icon: Tv,         title: 'Chart'      },
+            { id: 'orderbook', Icon: ArrowUpDown, title: 'Order Book' },
+            { id: 'trades',    Icon: Clock,       title: 'Trades'     },
+            { id: 'info',      Icon: BarChart2,   title: 'Info'       },
+          ] as const).map(tab => (
+            <button key={tab.id} onClick={() => setChartTab(tab.id)} title={tab.title}
+              className={`p-2 rounded-lg transition ${chartTab === tab.id ? 'bg-[#f0b90b]/15 text-[#f0b90b]' : 'text-[#848e9c] hover:text-[#eaecef] hover:bg-[#2b3139]'}`}>
+              <tab.Icon size={12} />
+            </button>
+          ))}
+          <div className="flex-1" />
+          <button onClick={() => { const v = !chatCollapsed; setChatCollapsed(v); localStorage.setItem('finai-chat', String(v)) }} title={chatCollapsed ? 'Show FinChat' : 'Hide FinChat'}
+            className={`p-2 rounded-lg transition ${!chatCollapsed ? 'text-[#f0b90b] bg-[#f0b90b]/10' : 'text-[#848e9c] hover:text-[#eaecef] hover:bg-[#2b3139]'}`}>
+            <MessageSquare size={12} />
           </button>
+          <button onClick={() => { const v = !showOrderForm; setShowOrderForm(v); localStorage.setItem('finai-order-form', String(v)) }} title={showOrderForm ? 'Hide Order Form' : 'Show Order Form'}
+            className={`p-2 rounded-lg transition ${showOrderForm ? 'text-[#f0b90b] bg-[#f0b90b]/10' : 'text-[#848e9c] hover:text-[#eaecef] hover:bg-[#2b3139]'}`}>
+            <TrendingUp size={12} />
+          </button>
+          <button onClick={() => { const v = !chartCollapsed; setChartCollapsed(v); localStorage.setItem('finai-chart-collapsed', String(v)) }}
+            title={chartCollapsed ? 'Expand chart' : 'Collapse chart'}
+            className={`p-2 rounded-lg transition ${chartCollapsed ? 'text-[#f0b90b] bg-[#f0b90b]/10' : 'text-[#848e9c] hover:text-[#eaecef] hover:bg-[#2b3139]'}`}>
+            {chartCollapsed ? <ChevronDown size={12} /> : <ChevronUp size={12} />}
+          </button>
+          <button onClick={() => setChartExpanded(v => !v)} title={chartExpanded ? 'Exit fullscreen' : 'Fullscreen'}
+            className={`p-2 rounded-lg transition ${chartExpanded ? 'text-[#f0b90b] bg-[#f0b90b]/10' : 'text-[#848e9c] hover:text-[#eaecef] hover:bg-[#2b3139]'}`}>
+            <Maximize2 size={12} />
+          </button>
+          <div className="relative">
+            <button onClick={() => setShowPrefs(v => !v)} title="Settings"
+              className={`p-2 rounded-lg transition ${showPrefs ? 'text-[#eaecef] bg-[#2b3139]' : 'text-[#848e9c] hover:text-[#eaecef] hover:bg-[#2b3139]'}`}>
+              <Settings size={12} />
+            </button>
+            {showPrefs && (
+              <div className="absolute right-0 bottom-full mb-1 p-3 bg-[#1e2329] border border-[#2b3139] rounded-xl shadow-2xl z-50 w-[270px] max-h-[400px] overflow-y-auto">
+                <p className="text-[10px] text-[#848e9c] uppercase tracking-widest mb-2">Show / Hide</p>
+                <div className="space-y-0.5 mb-3">
+                  <button onClick={() => { const v = !showBuySell; setShowBuySell(v); localStorage.setItem('finai-buy-sell', String(v)) }}
+                    className="w-full text-left px-3 py-2 rounded-lg text-xs text-[#848e9c] hover:bg-[#2b3139] hover:text-[#eaecef] transition flex items-center justify-between">
+                    Buy / Sell Bar <span className={showBuySell ? 'text-[#0ecb81] text-[10px] font-bold' : 'text-[#f6465d] text-[10px] font-bold'}>{showBuySell ? 'ON' : 'OFF'}</span>
+                  </button>
+                  <button onClick={() => { const v = !chatCollapsed; setChatCollapsed(v); localStorage.setItem('finai-chat', String(v)) }}
+                    className="w-full text-left px-3 py-2 rounded-lg text-xs text-[#848e9c] hover:bg-[#2b3139] hover:text-[#eaecef] transition flex items-center justify-between">
+                    FinChat Panel <span className={!chatCollapsed ? 'text-[#0ecb81] text-[10px] font-bold' : 'text-[#f6465d] text-[10px] font-bold'}>{!chatCollapsed ? 'ON' : 'OFF'}</span>
+                  </button>
+                  <button onClick={() => { const v = !showOrderForm; setShowOrderForm(v); localStorage.setItem('finai-order-form', String(v)) }}
+                    className="w-full text-left px-3 py-2 rounded-lg text-xs text-[#848e9c] hover:bg-[#2b3139] hover:text-[#eaecef] transition flex items-center justify-between">
+                    Order Form <span className={showOrderForm ? 'text-[#0ecb81] text-[10px] font-bold' : 'text-[#f6465d] text-[10px] font-bold'}>{showOrderForm ? 'ON' : 'OFF'}</span>
+                  </button>
+                  <button onClick={() => { const v = !chartCollapsed; setChartCollapsed(v); localStorage.setItem('finai-chart-collapsed', String(v)) }}
+                    className="w-full text-left px-3 py-2 rounded-lg text-xs text-[#848e9c] hover:bg-[#2b3139] hover:text-[#eaecef] transition flex items-center justify-between">
+                    Chart <span className={!chartCollapsed ? 'text-[#0ecb81] text-[10px] font-bold' : 'text-[#f6465d] text-[10px] font-bold'}>{!chartCollapsed ? 'ON' : 'OFF'}</span>
+                  </button>
+                  <button onClick={() => { const v = !showEntryLines; setShowEntryLines(v); localStorage.setItem('finai-entry-lines', String(v)) }}
+                    className="w-full text-left px-3 py-2 rounded-lg text-xs text-[#848e9c] hover:bg-[#2b3139] hover:text-[#eaecef] transition flex items-center justify-between">
+                    Entry Lines <span className={showEntryLines ? 'text-[#0ecb81] text-[10px] font-bold' : 'text-[#f6465d] text-[10px] font-bold'}>{showEntryLines ? 'ON' : 'OFF'}</span>
+                  </button>
+                  <button onClick={() => { const v = !showOrderBook; setShowOrderBook(v); localStorage.setItem('finai-orderbook', String(v)) }}
+                    className="w-full text-left px-3 py-2 rounded-lg text-xs text-[#848e9c] hover:bg-[#2b3139] hover:text-[#eaecef] transition flex items-center justify-between">
+                    Bid &amp; Ask <span className={showOrderBook ? 'text-[#0ecb81] text-[10px] font-bold' : 'text-[#f6465d] text-[10px] font-bold'}>{showOrderBook ? 'ON' : 'OFF'}</span>
+                  </button>
+                </div>
+                <div className="pt-2 border-t border-[#2b3139]">
+                  <p className="text-[10px] text-[#848e9c] uppercase tracking-widest mb-2">Chart Style</p>
+                  <div className="space-y-0.5">
+                    {TV_STYLES.map(s => (
+                      <button key={s.value} onClick={() => { setTvStyle(s.value); setShowPrefs(false) }}
+                        className={`w-full text-left px-3 py-2 rounded-lg text-xs transition ${tvStyle === s.value ? 'bg-[#f0b90b]/15 text-[#f0b90b] font-semibold' : 'text-[#848e9c] hover:bg-[#2b3139] hover:text-[#eaecef]'}`}>
+                        {s.label}{tvStyle === s.value && <span className="float-right text-[#f0b90b]">✓</span>}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                <div className="mt-3 pt-2 border-t border-[#2b3139]">
+                  <p className="text-[10px] text-[#848e9c] uppercase tracking-widest mb-2">Default Lot Size</p>
+                  <div className="flex items-center bg-[#0b0e11] border border-[#2b3139] rounded-lg overflow-hidden">
+                    <button type="button" onClick={() => { const n = Math.max(0.01, parseFloat(lotSize||'0.01') - 0.01); const s = n.toFixed(2); setLotSize(s); setAmount(s) }}
+                      className="px-2 py-1.5 text-[#848e9c] hover:text-[#eaecef] hover:bg-[#2b3139] transition"><Minus size={9} /></button>
+                    <input value={lotSize} onChange={e => { setLotSize(e.target.value); setAmount(e.target.value) }}
+                      className="flex-1 bg-transparent text-center text-xs font-mono text-[#eaecef] focus:outline-none min-w-0 py-1.5 w-16" />
+                    <button type="button" onClick={() => { const n = Math.min(100, parseFloat(lotSize||'1') + 1); const s = n.toFixed(2); setLotSize(s); setAmount(s) }}
+                      className="px-2 py-1.5 text-[#848e9c] hover:text-[#eaecef] hover:bg-[#2b3139] transition"><Plus size={9} /></button>
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
         </div>
 
-        {/* Open positions */}
-        <>
-          <div className="hidden sm:grid grid-cols-8 gap-2 px-5 py-2 text-[10px] text-[#4a5568] uppercase tracking-widest border-b border-[#2b3139]/50">
-                <span>Pair</span><span className="text-right">Entry</span><span className="text-right">Qty</span>
-                <span className="text-right">Current</span><span className="text-right">Lev</span>
-                <span className="text-right col-span-2">Unrealized P&L</span><span className="text-right">Action</span>
+    
+
+        {/* Open Positions - Compact Style */}
+        {openPositions.length > 0 && (
+          <div className="bg-[#161a1e] border border-[#f0b90b]/15 rounded-2xl px-3 py-2">
+            <div className="flex items-center justify-between">
+              {/* Left Side */}
+              <div className="flex items-center gap-3">
+                <div className="w-6 h-6 rounded-xl bg-[#f0b90b]/10 flex items-center justify-center">
+                  <BarChart2 size={13} className="text-[#f0b90b]" />
+                </div>
+
+                <div>
+                  <p className="text-sm font-semibold text-white">
+                    {openPositions.length} Open Position{openPositions.length !== 1 ? 's' : ''}
+                  </p>
+
+                  {/* Position Value with label - very small */}
+                  <div className="flex items-center gap-1 text-[10px] text-[#848e9c]">
+                    <span>Position Value</span>
+                    <span className="font-mono text-[#eaecef]">
+                      ${totalPositionValue.toLocaleString('en-US', { maximumFractionDigits: 0 })}
+                    </span>
+                  </div>
+                </div>
               </div>
-              <div className="divide-y divide-[#2b3139]/50 max-h-64 overflow-y-auto">
-                {openPositions.map(pos => {
-                  const pairFmt  = pos.ticker.replace(/-USD$/, '/USD').replace('-', '/')
-                  const pnlColor = pos.unrealized_pnl >= 0 ? 'text-[#0ecb81]' : 'text-[#f6465d]'
-                  const pnlBg   = pos.unrealized_pnl >= 0 ? 'bg-[#0ecb81]/5 border-[#0ecb81]/20' : 'bg-[#f6465d]/5 border-[#f6465d]/20'
-                  const timeStr = pos.created_at ? new Date(pos.created_at).toLocaleString(undefined, { month:'short', day:'numeric', hour:'2-digit', minute:'2-digit' }) : '—'
-                  const lev     = pos.leverage ?? 1
-                  const pnlPct  = pos.pnl_pct ?? 0
-                  return (
-                    <div key={pos.id}>
-                      <div className={`hidden sm:grid grid-cols-8 gap-2 px-5 py-2.5 text-xs items-center border-l-2 ${pnlBg} border-b border-[#2b3139]/50`}
-                        style={{ borderLeftColor: pos.unrealized_pnl >= 0 ? '#0ecb81' : '#f6465d' }}>
-                        <span className="font-mono font-semibold text-[#eaecef]">{pairFmt}</span>
-                        <span className="font-mono text-right text-[#848e9c]">${(pos.price??0).toLocaleString('en-US',{maximumFractionDigits:2})}</span>
-                        <span className="font-mono text-right text-[#eaecef]">{(pos.qty??0).toFixed(6)}</span>
-                        <span className="font-mono text-right text-[#eaecef]">${(pos.current_price??0).toLocaleString('en-US',{maximumFractionDigits:2})}</span>
-                        <span className="font-mono text-right text-[#f0b90b] text-[11px]">{lev > 1 ? `${lev}x` : '—'}</span>
-                        <span className={`font-mono font-semibold text-right col-span-2 ${pnlColor}`}>
-                          {pos.unrealized_pnl>=0?'+':''}${pos.unrealized_pnl.toFixed(2)}
-                          {lev > 1 && <span className="text-[10px] ml-1 opacity-70">({pnlPct>=0?'+':''}{pnlPct.toFixed(1)}%)</span>}
-                        </span>
-                        <div className="flex justify-end">
-                          <button onClick={() => handleClosePosition(pos.id)} disabled={closingId === pos.id}
-                            className="text-[10px] px-2.5 py-1.5 bg-[#f0b90b]/10 hover:bg-[#f0b90b]/20 border border-[#f0b90b]/30 text-[#f0b90b] rounded-lg font-semibold transition disabled:opacity-60 flex items-center gap-1">
-                            {closingId===pos.id ? <><RefreshCw size={9} className="animate-spin" /> Closing…</> : <><X size={9} /> Close</>}
-                          </button>
-                        </div>
-                      </div>
-                      <div className={`sm:hidden px-4 py-3 border-l-2 ${pnlBg}`} style={{ borderLeftColor: pos.unrealized_pnl>=0?'#0ecb81':'#f6465d' }}>
-                        <div className="flex items-center justify-between mb-2">
-                          <div>
-                            <span className="text-sm font-bold font-mono text-[#eaecef]">{pairFmt}</span>
-                            {lev > 1 && <span className="ml-2 text-[10px] font-bold text-[#f0b90b] bg-[#f0b90b]/10 px-1.5 py-0.5 rounded-md">{lev}x</span>}
-                            <p className="text-[10px] text-[#848e9c]">{timeStr}</p>
-                          </div>
-                          <div className="text-right">
-                            <span className={`text-sm font-bold font-mono ${pnlColor}`}>
-                              {pos.unrealized_pnl>=0?'+':''}${pos.unrealized_pnl.toFixed(2)}
-                            </span>
-                            {lev > 1 && <p className={`text-[10px] font-semibold ${pnlColor}`}>{pnlPct>=0?'+':''}{pnlPct.toFixed(1)}% on margin</p>}
-                          </div>
-                        </div>
-                        <div className="flex items-center justify-between">
-                          <div className="text-xs text-[#848e9c] space-y-0.5">
-                            <p>Entry: <span className="text-[#eaecef] font-mono">${(pos.price??0).toLocaleString('en-US',{maximumFractionDigits:2})}</span></p>
-                            <p>Now: <span className="text-[#eaecef] font-mono">${(pos.current_price??0).toLocaleString('en-US',{maximumFractionDigits:2})}</span></p>
-                          </div>
-                          <button onClick={() => handleClosePosition(pos.id)} disabled={closingId===pos.id}
-                            className="text-xs px-3 py-2 bg-[#f0b90b]/10 hover:bg-[#f0b90b]/20 border border-[#f0b90b]/30 text-[#f0b90b] rounded-lg font-semibold transition disabled:opacity-60">
-                            {closingId===pos.id ? 'Closing…' : 'Close Position'}
-                          </button>
-                        </div>
-                      </div>
-                    </div>
-                  )
-                })}
+
+              {/* Right Side */}
+              <div className="text-right">
+                {/* Unrealized PnL */}
+                <p
+                  className={`text-base font-bold font-mono ${
+                    unrealizedPnl >= 0 ? 'text-[#0ecb81]' : 'text-[#f6465d]'
+                  }`}
+                >
+                  {unrealizedPnl >= 0 ? '+' : ''}${Math.abs(unrealizedPnl).toLocaleString('en-US', { 
+                    minimumFractionDigits: 1, 
+                    maximumFractionDigits: 1 
+                  })}
+                </p>
+
+                {/* Live Indicator + View Button */}
+                <div className="flex items-center justify-end gap-2 mt-1">
+                  <div className="flex items-center gap-1">
+                    <span className={`w-1.5 h-1.5 rounded-full ${wsConnected ? 'bg-[#0ecb81] animate-pulse' : 'bg-[#848e9c]'}`} />
+                    <span className="text-[9px] text-[#848e9c]">live</span>
+                  </div>
+
+                  <button
+                    onClick={() => navigate('/app/positions')}
+                    className="text-[#f0b90b] hover:text-[#eaecef] text-xs font-medium flex items-center gap-0.5 transition"
+                  >
+                    View →
+                  </button>
+                </div>
               </div>
-            </>
-      </div>
+            </div>
+         </div>
       )}
+      {/* FinChat side panel */}
+        {!chatCollapsed ? (
+          <FinChatPanel
+            pair={pair} livePrice={livePrice} liveChange={liveChange}
+            collapsed={false} onToggle={() => setChatCollapsed(true)}
+          />
+        ) : (
+          <button
+            onClick={() => setChatCollapsed(false)}
+            className="hidden lg:flex flex-col items-center justify-center gap-2 bg-[#161a1e] border border-[#2b3139] hover:border-[#f0b90b]/40 rounded-xl px-3 py-6 transition group"
+          >
+            <MessageSquare size={14} className="text-[#f0b90b]" />
+            <span className="text-[9px] font-semibold text-[#848e9c] group-hover:text-[#eaecef] tracking-widest transition" style={{ writingMode: 'vertical-rl' }}>FinChat</span>
+            <ChevronDown size={11} className="text-[#848e9c] group-hover:text-[#eaecef] transition" />
+          </button>
+        )}
+      </div>
     </div>
+      
+    
   )
 }
