@@ -454,6 +454,7 @@ export default function TradePage() {
 
   const handleTrade = async (e: React.FormEvent) => {
     e.preventDefault()
+    if (orderLoading) return
     if (!qty || qty <= 0)           return toast.error('Enter a valid amount')
     if (!numPrice || numPrice <= 0) return toast.error('Price must be greater than 0')
     if (usingBalance && side === 'buy' && orderTotal > liveBalance)
@@ -485,6 +486,7 @@ export default function TradePage() {
   }
 
   const handleQuickTrade = async (quickSide: 'buy' | 'sell') => {
+    if (orderLoading) return
     const ls = parseFloat(lotSize) || 0.01
     if (ls <= 0) return toast.error('Enter a valid lot size')
     if (!livePrice) return toast.error('Price not available')
@@ -618,39 +620,36 @@ export default function TradePage() {
                   style={{ border: 'none', display: 'block', height: chartExpanded ? 'calc(100vh - 46px)' : '420px' }}
                   allowFullScreen title="TradingView Chart"
                 />
-                {showEntryLines && livePrice > 0 && (() => {
-                  const visibleRange = livePrice * 0.10
-                  const topPrice     = livePrice * 1.05
-                  const chartH       = chartExpanded ? (typeof window !== 'undefined' ? window.innerHeight - 46 : 420) : 420
-                  const priceToY = (p: number) => Math.min(Math.max(((topPrice - p) / visibleRange) * chartH, 0), chartH)
-                  const nowY = priceToY(livePrice)
+                {(() => {
                   const pairPositions = openPositions.filter(pos => {
                     const t = pos.ticker?.toUpperCase() ?? ''
                     const base = pair.replace('/', '').toUpperCase()
                     return t === base || t === pair.toUpperCase() || t === pair.replace('/', '-').toUpperCase()
                   })
+                  if (pairPositions.length === 0) return null
                   return (
-                    <div className="absolute inset-0 pointer-events-none overflow-hidden" style={{ zIndex: 10 }}>
-                      <div className="absolute left-0 right-0 flex items-center" style={{ top: nowY - 1 }}>
-                        <div className="flex-1 border-t border-[#848e9c]/40" />
-                        <div className="flex-shrink-0 bg-[#1e2329] border border-[#848e9c]/50 rounded px-1.5 py-0.5 mr-1">
-                          <span className="text-[9px] font-mono font-bold text-[#eaecef]">${livePrice.toLocaleString('en-US', { maximumFractionDigits: 2 })}</span>
-                        </div>
-                      </div>
+                    <div className="absolute bottom-2 left-2 right-2 pointer-events-none flex flex-col gap-1" style={{ zIndex: 10 }}>
                       {pairPositions.map(pos => {
-                        const entryY = priceToY(pos.price ?? livePrice)
-                        if (entryY < 4 || entryY > chartH - 4) return null
                         const pnl = pos.unrealized_pnl ?? 0
                         const isProfit = pnl >= 0
-                        const color = isProfit ? '#0ecb81' : '#f6465d'
+                        const pnlColor = isProfit ? '#0ecb81' : '#f6465d'
+                        const entryPx = (pos.price ?? 0).toLocaleString('en-US', { maximumFractionDigits: 2 })
+                        const curPx   = (pos.current_price ?? livePrice ?? 0).toLocaleString('en-US', { maximumFractionDigits: 2 })
                         return (
-                          <div key={pos.id} className="absolute left-0 right-0 flex items-center" style={{ top: entryY - 1 }}>
-                            <div className="flex-1" style={{ borderTop: `1.5px dashed ${color}`, opacity: 0.7 }} />
-                            <div className="flex-shrink-0 rounded px-1.5 py-0.5 mr-1 flex items-center gap-1" style={{ background: '#1e2329', border: `1px solid ${color}40` }}>
-                              <span className="text-[9px] font-bold" style={{ color: '#f0b90b' }}>Entry</span>
-                              <span className="text-[9px] font-mono font-bold text-[#eaecef]">${(pos.price ?? 0).toLocaleString('en-US', { maximumFractionDigits: 2 })}</span>
-                              <span className="text-[9px] font-semibold" style={{ color }}>{isProfit ? '+' : ''}${pnl.toFixed(2)}</span>
-                            </div>
+                          <div key={pos.id}
+                            className="flex items-center gap-2 rounded-lg px-2.5 py-1.5 text-[10px] font-mono"
+                            style={{ background: 'rgba(14,18,22,0.88)', border: '1px solid #f0b90b55', backdropFilter: 'blur(4px)' }}>
+                            {/* yellow entry marker */}
+                            <span className="font-bold" style={{ color: '#f0b90b' }}>● LONG</span>
+                            <span className="text-[#848e9c]">Entry</span>
+                            <span className="font-bold text-[#eaecef]">${entryPx}</span>
+                            <span className="text-[#848e9c]">Now</span>
+                            <span className="font-bold text-[#eaecef]">${curPx}</span>
+                            <span className="text-[#848e9c]">Qty</span>
+                            <span className="text-[#eaecef]">{(pos.qty ?? 0).toFixed(4)}</span>
+                            <span className="ml-auto font-bold" style={{ color: pnlColor }}>
+                              {isProfit ? '+' : ''}${Math.abs(pnl).toFixed(2)}
+                            </span>
                           </div>
                         )
                       })}

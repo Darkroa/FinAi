@@ -212,6 +212,7 @@ export default function WalletPage() {
 
   // ── Deposit submit ──
   const handleDepositSubmit = async () => {
+    if (submitting) return
     if (!depAmount || parseFloat(depAmount) <= 0) return toast.error('Enter a valid amount')
     if (!depMethod) return toast.error('Select a payment method')
     const method = METHODS.find(m => m.key === depMethod)
@@ -287,6 +288,7 @@ export default function WalletPage() {
 
   // ── Withdrawal submit ──
   const handleWithdraw = async () => {
+    if (submitting) return
     if (!wdAmount || parseFloat(wdAmount) <= 0) return toast.error('Enter a valid amount')
     if (!wdSelectedId) return toast.error('Select a payout method')
     if (!wdPin.trim()) return toast.error('Enter your transfer PIN')
