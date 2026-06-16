@@ -1,30 +1,26 @@
 """
 FinAi Multi-LLM Router
-Intelligently routes across 9 cloud LLM providers with local fallback.
-All providers use the OpenAI-compatible ChatOpenAI interface.
-Priority: Grok → OpenAI → Groq → DeepSeek → Google → GitHub → OpenRouter → NVIDIA → Local
+Routes across cloud LLM providers with local fallback.
+Priority order reflects confirmed-working keys from environment check.
 """
 import os
 from loguru import logger
 
 # ── Provider registry ─────────────────────────────────────────────────────────
 # Each entry: (name, env_var, model_id, base_url | None)
-# base_url=None  → use official OpenAI endpoint (no override needed)
-# base_url="..." → OpenAI-compatible third-party endpoint
+# Env var names must match exactly what is set in Replit Secrets.
+#
+# Confirmed working (from key check):
+#   GROQ_API_KEY     ✅  → Groq Cloud  (llama-3.3-70b-versatile)
+#   GITHUB_API_KEY   ✅  → GitHub Models (gpt-4o-mini via Azure inference)
+#   NVIDIA_API_KEY   ✅  → NVIDIA NIM  (llama-3.1-8b-instruct)
+#   GROK_API_KEY     ✅  → xAI Grok   (grok-3)
+#   GEMINI_API_KEY   ✅  → Google Gemini (gemini-2.0-flash)
+#   OPENROUTER_API_KEY ⚠  → 402 (needs credits) — kept, will skip if 402
+#   OPENAI_API_KEY   ❌  → 401 (invalid/expired) — last resort
+#   DEEPSEEK_API_KEY ❌  → 401 (invalid/expired) — last resort
 
 _PROVIDERS = [
-    (
-        "grok",
-        "GROK_API_KEY",
-        "grok-3-fast",
-        "https://api.x.ai/v1",
-    ),
-    (
-        "openai",
-        "OPENAI_API_KEY",
-        "gpt-4o-mini",
-        None,
-    ),
     (
         "groq",
         "GROQ_API_KEY",
@@ -32,22 +28,28 @@ _PROVIDERS = [
         "https://api.groq.com/openai/v1",
     ),
     (
-        "deepseek",
-        "DEEPSEEK_API_KEY",
-        "deepseek-chat",
-        "https://api.deepseek.com/v1",
+        "github",
+        "GITHUB_API_KEY",           # was GITHUB_TOKEN — corrected to match secret name
+        "gpt-4o-mini",
+        "https://models.inference.ai.azure.com",
+    ),
+    (
+        "nvidia",
+        "NVIDIA_API_KEY",
+        "meta/llama-3.1-8b-instruct",
+        "https://integrate.api.nvidia.com/v1",
+    ),
+    (
+        "grok",
+        "GROK_API_KEY",
+        "grok-3",                    # was grok-3-fast (400 error) — corrected
+        "https://api.x.ai/v1",
     ),
     (
         "google",
-        "GOOGLE_API_KEY",
+        "GEMINI_API_KEY",            # was GOOGLE_API_KEY — corrected to match secret name
         "gemini-2.0-flash",
         "https://generativelanguage.googleapis.com/v1beta/openai/",
-    ),
-    (
-        "github",
-        "GITHUB_TOKEN",
-        "gpt-4o-mini",
-        "https://models.inference.ai.azure.com",
     ),
     (
         "openrouter",
@@ -56,10 +58,16 @@ _PROVIDERS = [
         "https://openrouter.ai/api/v1",
     ),
     (
-        "nvidia",
-        "NVIDIA_API_KEY",
-        "meta/llama-3.1-8b-instruct",
-        "https://integrate.api.nvidia.com/v1",
+        "openai",
+        "OPENAI_API_KEY",
+        "gpt-4o-mini",
+        None,
+    ),
+    (
+        "deepseek",
+        "DEEPSEEK_API_KEY",
+        "deepseek-chat",
+        "https://api.deepseek.com/v1",
     ),
 ]
 
@@ -78,7 +86,7 @@ def get_llm(model: str | None = None, temperature: float = 0.6, **kwargs):
     Return the best available LangChain LLM.
 
     Routing logic:
-    1. If `model` is a provider name (e.g. "grok", "groq", "openai"), use that
+    1. If `model` is a provider name (e.g. "groq", "grok", "github"), use that
        provider if its key exists, otherwise fall through the priority chain.
     2. Walk the priority chain and return the first provider whose key is set.
     3. If no cloud keys are present, return the FinAi Local Intelligence Engine.
@@ -87,7 +95,6 @@ def get_llm(model: str | None = None, temperature: float = 0.6, **kwargs):
 
     available = _available_providers()
 
-    # Log which providers are live on first call
     if available:
         names = ", ".join(n for n, *_ in available)
         logger.info(f"FinAi LLM router — available providers: [{names}]")
@@ -105,7 +112,7 @@ def get_llm(model: str | None = None, temperature: float = 0.6, **kwargs):
                     logger.warning(f"Requested provider '{model}' has no key → falling through chain")
                 break
 
-    # Walk priority chain
+    # Walk priority chain — first available key wins
     for name, env_key, model_id, base_url in _PROVIDERS:
         api_key = os.getenv(env_key)
         if api_key:
