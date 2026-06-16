@@ -734,43 +734,45 @@ export default function TradePage() {
                 Chart collapsed — click <span className="text-[#f0b90b] font-semibold">↑</span> to expand
               </div>
             ) : chartTab === 'chart' ? (
-              <div className="flex-1 relative pt-px">
+              <div className="flex flex-col">
+                {/* ── TradingView iframe ── */}
                 <iframe
                   key={`${pair}-${tvStyle}-${tvInterval}-${tvTopBar}-${tvSideBar}-${tvLegend}-${tvDateRng}-${tvTheme}`}
                   src={`https://s.tradingview.com/widgetembed/?symbol=${TV_SYMBOLS[pair] ?? 'BINANCE:BTCUSDT'}&theme=${tvTheme}&style=${tvStyle}&interval=${tvInterval}&locale=en&toolbar_bg=${tvTheme==='light'?'%23ffffff':'%230b0e11'}&withdateranges=${tvDateRng ? 1 : 0}&hide_side_toolbar=${tvSideBar ? 0 : 1}&hide_top_toolbar=${tvTopBar ? 0 : 1}&hide_legend=${tvLegend ? 0 : 1}&allow_symbol_change=0&save_image=0&show_popup_button=0`}
                   width="100%"
-                  style={{ border: 'none', display: 'block', height: chartExpanded ? 'calc(100vh - 46px)' : '420px' }}
+                  style={{ border: 'none', display: 'block', height: chartExpanded ? 'calc(100vh - 46px)' : '420px', flexShrink: 0 }}
                   allowFullScreen title="TradingView Chart"
                 />
-                {(() => {
+                {/* ── Entry badge bar — sits below iframe, inside card ── */}
+                {showEntryLines && (() => {
+                  const base = pair.replace('/', '').toUpperCase()
                   const pairPositions = openPositions.filter(pos => {
-                    const t = pos.ticker?.toUpperCase() ?? ''
-                    const base = pair.replace('/', '').toUpperCase()
-                    return t === base || t === pair.toUpperCase() || t === pair.replace('/', '-').toUpperCase()
+                    const t = (pos.ticker ?? '').toUpperCase().replace(/[-/]/g, '')
+                    return t === base || t === base.replace('USDT','') || t.includes(base.slice(0,3))
                   })
                   if (pairPositions.length === 0) return null
                   return (
-                    <div className="absolute bottom-2 left-2 right-2 pointer-events-none flex flex-col gap-1" style={{ zIndex: 10 }}>
+                    <div className="flex flex-col gap-px border-t border-[#2b3139]">
                       {pairPositions.map(pos => {
-                        const pnl = pos.unrealized_pnl ?? 0
+                        const pnl      = pos.unrealized_pnl ?? 0
                         const isProfit = pnl >= 0
-                        const pnlColor = isProfit ? '#0ecb81' : '#f6465d'
-                        const entryPx = (pos.price ?? 0).toLocaleString('en-US', { maximumFractionDigits: 2 })
-                        const curPx   = (pos.current_price ?? livePrice ?? 0).toLocaleString('en-US', { maximumFractionDigits: 2 })
+                        const side     = (pos.side ?? pos.action ?? 'long').toUpperCase().startsWith('S') ? 'SHORT' : 'LONG'
+                        const sideColor = side === 'LONG' ? '#0ecb81' : '#f6465d'
+                        const entryPx  = (pos.price ?? 0).toLocaleString('en-US', { maximumFractionDigits: 2 })
+                        const curPx    = (pos.current_price ?? livePrice ?? 0).toLocaleString('en-US', { maximumFractionDigits: 2 })
                         return (
                           <div key={pos.id}
-                            className="flex items-center gap-2 rounded-lg px-2.5 py-1.5 text-[10px] font-mono"
-                            style={{ background: 'rgba(14,18,22,0.88)', border: '1px solid #f0b90b55', backdropFilter: 'blur(4px)' }}>
-                            {/* yellow entry marker */}
-                            <span className="font-bold" style={{ color: '#f0b90b' }}>● LONG</span>
+                            className="flex items-center flex-wrap gap-x-3 gap-y-0.5 px-3 py-1.5 text-[10px] font-mono bg-[#0b0e11]">
+                            <span className="font-bold" style={{ color: '#f0b90b' }}>⬤</span>
+                            <span className="font-bold text-[8px] px-1.5 py-0.5 rounded" style={{ background: `${sideColor}22`, color: sideColor }}>{side}</span>
                             <span className="text-[#848e9c]">Entry</span>
                             <span className="font-bold text-[#eaecef]">${entryPx}</span>
                             <span className="text-[#848e9c]">Now</span>
                             <span className="font-bold text-[#eaecef]">${curPx}</span>
                             <span className="text-[#848e9c]">Qty</span>
                             <span className="text-[#eaecef]">{(pos.qty ?? 0).toFixed(4)}</span>
-                            <span className="ml-auto font-bold" style={{ color: pnlColor }}>
-                              {isProfit ? '+' : ''}${Math.abs(pnl).toFixed(2)}
+                            <span className="ml-auto font-bold" style={{ color: isProfit ? '#0ecb81' : '#f6465d' }}>
+                              {isProfit ? '+' : '−'}${Math.abs(pnl).toFixed(2)}
                             </span>
                           </div>
                         )

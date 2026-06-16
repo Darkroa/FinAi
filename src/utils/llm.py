@@ -22,16 +22,16 @@ from loguru import logger
 
 _PROVIDERS = [
     (
+        "github",
+        "GITHUB_API_KEY",           # first priority — confirmed working
+        "gpt-4o-mini",
+        "https://models.inference.ai.azure.com",
+    ),
+    (
         "groq",
         "GROQ_API_KEY",
         "llama-3.3-70b-versatile",
         "https://api.groq.com/openai/v1",
-    ),
-    (
-        "github",
-        "GITHUB_API_KEY",           # was GITHUB_TOKEN — corrected to match secret name
-        "gpt-4o-mini",
-        "https://models.inference.ai.azure.com",
     ),
     (
         "nvidia",
