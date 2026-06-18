@@ -1,11 +1,14 @@
-"""Live market data fetcher — used by FinAi agent for context injection."""
+"""Live market data fetcher — crypto, FX, stock indexes, metals, datetime context."""
 import time
 import requests
+from datetime import datetime, timezone, timedelta
 from loguru import logger
 
 _CACHE: dict = {}
 _TTL_PRICE   = 60    # seconds for price data
 _TTL_DETAIL  = 120   # seconds for detailed coin data
+_TTL_FX      = 120   # forex rates
+_TTL_INDEX   = 120   # stock index prices
 
 _PAIR_TO_CG: dict[str, str] = {
     "BTC/USDT":  "bitcoin",      "BTC":  "bitcoin",
@@ -34,10 +37,10 @@ _BINANCE_SYMS: dict[str, str] = {
     "uniswap":      "UNIUSDT",  "stellar":     "XLMUSDT",
 }
 
+# ── Cache helpers ─────────────────────────────────────────────────────────────
 
 def _ts() -> float:
     return time.time()
-
 
 def _cached(key: str, ttl: int):
     entry = _CACHE.get(key)
@@ -45,11 +48,194 @@ def _cached(key: str, ttl: int):
         return entry["data"]
     return None
 
-
 def _store(key: str, data):
     _CACHE[key] = {"data": data, "ts": _ts()}
     return data
 
+
+# ── Date/Time context ─────────────────────────────────────────────────────────
+
+def get_datetime_context() -> str:
+    """Returns current UTC datetime + active trading sessions as a formatted string."""
+    now_utc = datetime.now(timezone.utc)
+    now_ny  = now_utc - timedelta(hours=4)   # EDT (UTC-4)
+    now_lon = now_utc + timedelta(hours=1)   # BST (UTC+1)
+    now_tok = now_utc + timedelta(hours=9)   # JST (UTC+9)
+
+    # Market sessions (approximate open hours in UTC)
+    hour = now_utc.hour
+    sessions = []
+    # Tokyo: 00:00–06:00 UTC
+    if 0 <= hour < 6:
+        sessions.append("Tokyo (OPEN)")
+    else:
+        sessions.append("Tokyo (closed)")
+    # London: 07:00–16:00 UTC
+    if 7 <= hour < 16:
+        sessions.append("London (OPEN)")
+    else:
+        sessions.append("London (closed)")
+    # New York: 12:00–21:00 UTC
+    if 12 <= hour < 21:
+        sessions.append("New York (OPEN)")
+    else:
+        sessions.append("New York (closed)")
+
+    day_name = now_utc.strftime("%A")
+    is_weekend = now_utc.weekday() >= 5
+
+    lines = [
+        "━━━ DATE & TIME ━━━",
+        f"UTC:       {now_utc.strftime('%Y-%m-%d %H:%M')} UTC",
+        f"New York:  {now_ny.strftime('%Y-%m-%d %H:%M')} EDT",
+        f"London:    {now_lon.strftime('%Y-%m-%d %H:%M')} BST",
+        f"Tokyo:     {now_tok.strftime('%Y-%m-%d %H:%M')} JST",
+        f"Day:       {day_name}" + (" (Weekend — stock markets closed)" if is_weekend else ""),
+        f"Sessions:  {' | '.join(sessions)}",
+        "━━━━━━━━━━━━━━━━━━━",
+    ]
+    return "\n".join(lines)
+
+
+# ── FX / Forex rates ──────────────────────────────────────────────────────────
+
+_FX_PAIRS = {
+    "EUR": "Euro",
+    "GBP": "British Pound",
+    "JPY": "Japanese Yen",
+    "AUD": "Australian Dollar",
+    "CHF": "Swiss Franc",
+    "CAD": "Canadian Dollar",
+    "CNY": "Chinese Yuan",
+    "SGD": "Singapore Dollar",
+    "HKD": "Hong Kong Dollar",
+    "MXN": "Mexican Peso",
+}
+
+def get_fx_rates() -> dict:
+    """Returns FX rates vs USD via frankfurter.app (free, no key). Cached 2 min."""
+    hit = _cached("fx", _TTL_FX)
+    if hit:
+        return hit
+    try:
+        pairs = ",".join(_FX_PAIRS.keys())
+        r = requests.get(
+            f"https://api.frankfurter.app/latest?from=USD&to={pairs}",
+            timeout=6,
+        )
+        if r.status_code == 200:
+            data = r.json()
+            rates = data.get("rates", {})
+            result = {
+                "date": data.get("date", ""),
+                "base": "USD",
+                "rates": {k: {"rate": v, "name": _FX_PAIRS.get(k, k)} for k, v in rates.items()},
+            }
+            return _store("fx", result)
+    except Exception as e:
+        logger.warning(f"FX rates fetch failed: {e}")
+    return _cached("fx", 9999) or {}
+
+
+def get_fx_context() -> str:
+    """Formatted FX block for AI system prompt."""
+    data = get_fx_rates()
+    if not data or not data.get("rates"):
+        return ""
+    lines = [f"━━━ FX RATES (USD base, {data.get('date', 'live')}) ━━━"]
+    for code, info in data["rates"].items():
+        r = info["rate"]
+        if code == "JPY":
+            lines.append(f"  USD/{code}: {r:.2f}  ({info['name']})")
+        else:
+            # Invert so we show how many USD 1 unit costs
+            inv = round(1 / r, 5) if r else 0
+            lines.append(f"  {code}/USD: {inv:.5f}  ({info['name']})")
+    lines.append("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+    return "\n".join(lines)
+
+
+# ── Stock indexes ─────────────────────────────────────────────────────────────
+
+_INDEX_TICKERS = {
+    "^GSPC":  "S&P 500",
+    "^DJI":   "Dow Jones",
+    "^IXIC":  "NASDAQ",
+    "^FTSE":  "FTSE 100",
+    "^N225":  "Nikkei 225",
+    "^HSI":   "Hang Seng",
+    "^GDAXI": "DAX",
+    "^FCHI":  "CAC 40",
+}
+
+def get_stock_indexes() -> dict:
+    """Fetch major stock index prices via yfinance. Cached 2 min."""
+    hit = _cached("indexes", _TTL_INDEX)
+    if hit:
+        return hit
+    try:
+        import yfinance as yf
+        result = {}
+        tickers_str = " ".join(_INDEX_TICKERS.keys())
+        data = yf.download(
+            tickers_str,
+            period="2d",
+            interval="1d",
+            progress=False,
+            auto_adjust=True,
+        )
+        closes = data.get("Close", {})
+        for ticker, name in _INDEX_TICKERS.items():
+            try:
+                col = closes.get(ticker) if isinstance(closes, dict) else (
+                    closes[ticker] if hasattr(closes, '__getitem__') else None
+                )
+                if col is not None:
+                    vals = col.dropna()
+                    if len(vals) >= 2:
+                        prev  = float(vals.iloc[-2])
+                        curr  = float(vals.iloc[-1])
+                        chg_p = ((curr - prev) / prev * 100) if prev else 0
+                        result[ticker] = {
+                            "name":    name,
+                            "price":   round(curr, 2),
+                            "change":  round(chg_p, 2),
+                            "prev":    round(prev, 2),
+                        }
+                    elif len(vals) == 1:
+                        result[ticker] = {
+                            "name":  name,
+                            "price": round(float(vals.iloc[-1]), 2),
+                            "change": 0,
+                            "prev":   0,
+                        }
+            except Exception:
+                pass
+        if result:
+            return _store("indexes", result)
+    except Exception as e:
+        logger.warning(f"Stock index fetch failed: {e}")
+    return _cached("indexes", 9999) or {}
+
+
+def get_indexes_context() -> str:
+    """Formatted stock index block for AI system prompt."""
+    data = get_stock_indexes()
+    if not data:
+        return ""
+    lines = ["━━━ STOCK INDEXES ━━━"]
+    for ticker, info in data.items():
+        chg  = info.get("change", 0)
+        sign = "+" if chg >= 0 else ""
+        arrow = "▲" if chg >= 0 else "▼"
+        lines.append(
+            f"  {info['name']:14s}  ${info['price']:>10,.2f}  {sign}{chg:.2f}% {arrow}"
+        )
+    lines.append("━━━━━━━━━━━━━━━━━━━━━")
+    return "\n".join(lines)
+
+
+# ── Crypto snapshot ───────────────────────────────────────────────────────────
 
 def get_top_snapshot() -> dict:
     """
@@ -163,6 +349,8 @@ def get_pair_detail(pair: str) -> dict:
     return _cached(key, 9999) or {}
 
 
+# ── Full context builder ──────────────────────────────────────────────────────
+
 def build_market_context(
     pair: str,
     price: float = 0,
@@ -174,11 +362,19 @@ def build_market_context(
     """
     Builds the live-market-data block injected into Fin's system prompt.
     Merges caller-supplied values (from frontend) with fetched detail data.
+    Always includes: datetime, FX rates, stock indexes, crypto snapshot.
     """
+    sections = []
+
+    # ── Date/time ──
+    try:
+        sections.append(get_datetime_context())
+    except Exception:
+        pass
+
+    # ── Specific pair ──
     lines = ["━━━ LIVE MARKET DATA ━━━"]
     lines.append(f"Asset: {pair}")
-
-    # Enrich with fetched detail if available
     try:
         detail = get_pair_detail(pair)
     except Exception:
@@ -203,7 +399,6 @@ def build_market_context(
         vol_b = vol / 1_000_000_000
         vol_m = vol / 1_000_000
         lines.append(f"24h Volume:   ${vol_b:.2f}B" if vol_b >= 1 else f"24h Volume:   ${vol_m:.1f}M")
-
     if detail:
         mc = detail.get("market_cap", 0)
         if mc > 0:
@@ -217,18 +412,17 @@ def build_market_context(
         ath = detail.get("ath", 0)
         if ath > 0:
             lines.append(f"ATH:          ${ath:,.2f}  ({detail.get('ath_change_pct', 0):.1f}% from ATH)")
+    lines.append("━━━━━━━━━━━━━━━━━━━━━━━━")
+    sections.append("\n".join(lines))
 
-    # Top 5 market snapshot
+    # ── Crypto snapshot ──
     try:
         snap = get_top_snapshot()
         if snap:
-            lines.append("\nTop market snapshot:")
+            snap_lines = ["Top Crypto Snapshot:"]
             labels = [
-                ("bitcoin",     "BTC"),
-                ("ethereum",    "ETH"),
-                ("solana",      "SOL"),
-                ("binancecoin", "BNB"),
-                ("ripple",      "XRP"),
+                ("bitcoin","BTC"),("ethereum","ETH"),("solana","SOL"),
+                ("binancecoin","BNB"),("ripple","XRP"),("dogecoin","DOGE"),
             ]
             for cg_id, sym in labels:
                 d = snap.get(cg_id, {})
@@ -236,9 +430,75 @@ def build_market_context(
                 sc = d.get("usd_24h_change", 0)
                 if sp > 0:
                     sign = "+" if sc >= 0 else ""
-                    lines.append(f"  {sym}: ${sp:,.2f}  {sign}{sc:.2f}%")
+                    snap_lines.append(f"  {sym:6s} ${sp:>12,.2f}  {sign}{sc:.2f}%")
+            sections.append("\n".join(snap_lines))
     except Exception:
         pass
 
-    lines.append("━━━━━━━━━━━━━━━━━━━━━━━━")
-    return "\n".join(lines)
+    # ── FX rates ──
+    try:
+        fx = get_fx_context()
+        if fx:
+            sections.append(fx)
+    except Exception:
+        pass
+
+    # ── Stock indexes ──
+    try:
+        idx = get_indexes_context()
+        if idx:
+            sections.append(idx)
+    except Exception:
+        pass
+
+    return "\n\n".join(sections)
+
+
+def build_full_context() -> str:
+    """
+    Build a complete market context block without a specific pair.
+    Used when user asks general market questions.
+    """
+    sections = []
+
+    try:
+        sections.append(get_datetime_context())
+    except Exception:
+        pass
+
+    try:
+        snap = get_top_snapshot()
+        if snap:
+            lines = ["━━━ LIVE CRYPTO SNAPSHOT ━━━"]
+            labels = [
+                ("bitcoin","BTC"),("ethereum","ETH"),("solana","SOL"),
+                ("binancecoin","BNB"),("ripple","XRP"),("cardano","ADA"),
+                ("dogecoin","DOGE"),("avalanche-2","AVAX"),
+            ]
+            for cg_id, sym in labels:
+                d = snap.get(cg_id, {})
+                sp = d.get("usd", 0)
+                sc = d.get("usd_24h_change", 0)
+                if sp > 0:
+                    sign = "+" if sc >= 0 else ""
+                    lines.append(f"  {sym:6s} ${sp:>12,.2f}  {sign}{sc:.2f}%")
+            lines.append("━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+            sections.append("\n".join(lines))
+    except Exception:
+        pass
+
+    try:
+        fx = get_fx_context()
+        if fx:
+            sections.append(fx)
+    except Exception:
+        pass
+
+    try:
+        idx = get_indexes_context()
+        if idx:
+            sections.append(idx)
+    except Exception:
+        pass
+
+    return "\n\n".join(sections)

@@ -3986,6 +3986,40 @@ async def get_live_prices():
     }
 
 
+@router.get("/public/market-extended")
+async def get_market_extended():
+    """Public endpoint — FX rates, stock indexes, and current datetime context. No auth required."""
+    from concurrent.futures import ThreadPoolExecutor
+    import asyncio
+    from src.utils.market_data import get_fx_rates, get_stock_indexes, get_datetime_context
+
+    loop = asyncio.get_event_loop()
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        fx_fut  = loop.run_in_executor(pool, get_fx_rates)
+        idx_fut = loop.run_in_executor(pool, get_stock_indexes)
+        fx_data  = await fx_fut
+        idx_data = await idx_fut
+
+    from datetime import datetime, timezone, timedelta
+    now_utc = datetime.now(timezone.utc)
+    hour    = now_utc.hour
+    sessions = {
+        "tokyo":   0 <= hour < 6,
+        "london":  7 <= hour < 16,
+        "new_york": 12 <= hour < 21,
+    }
+    return {
+        "datetime": {
+            "utc":       now_utc.strftime("%Y-%m-%d %H:%M"),
+            "day":       now_utc.strftime("%A"),
+            "is_weekend": now_utc.weekday() >= 5,
+            "sessions":  sessions,
+        },
+        "fx":      fx_data,
+        "indexes": idx_data,
+    }
+
+
 @router.get("/celery/task/{task_id}")
 async def get_celery_task_status(task_id: str):
     from celery.result import AsyncResult
@@ -4161,11 +4195,10 @@ class AIChatRequest(BaseModel):
 
 @router.post("/ai/chat")
 async def ai_chat(body: AIChatRequest, current_user=Depends(get_current_user)):
-    """Chat with the FinAi AI assistant — injects live market context, uses best available LLM."""
-    # Build live market context block
+    """Chat with the FinAi AI assistant — injects live market context (crypto, FX, indexes, datetime)."""
     market_context = ""
     try:
-        from src.utils.market_data import build_market_context
+        from src.utils.market_data import build_market_context, build_full_context
         if body.pair:
             market_context = build_market_context(
                 pair       = body.pair,
@@ -4176,25 +4209,8 @@ async def ai_chat(body: AIChatRequest, current_user=Depends(get_current_user)):
                 volume_24h = body.volume_24h or 0,
             )
         else:
-            # No specific pair — inject top snapshot anyway
-            from src.utils.market_data import get_top_snapshot
-            snap = get_top_snapshot()
-            if snap:
-                lines = ["━━━ LIVE MARKET SNAPSHOT ━━━"]
-                labels = [
-                    ("bitcoin",     "BTC"),  ("ethereum",    "ETH"),
-                    ("solana",      "SOL"),  ("binancecoin", "BNB"),
-                    ("ripple",      "XRP"),  ("dogecoin",    "DOGE"),
-                ]
-                for cg_id, sym in labels:
-                    d = snap.get(cg_id, {})
-                    sp = d.get("usd", 0)
-                    sc = d.get("usd_24h_change", 0)
-                    if sp > 0:
-                        sign = "+" if sc >= 0 else ""
-                        lines.append(f"  {sym}: ${sp:,.2f}  {sign}{sc:.2f}%")
-                lines.append("━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
-                market_context = "\n".join(lines)
+            # No specific pair — inject full context: datetime + crypto + FX + indexes
+            market_context = build_full_context()
     except Exception as _e:
         logger.warning(f"Market context build failed: {_e}")
 

@@ -2,7 +2,13 @@ from langchain_community.tools import Tool
 from loguru import logger
 
 from src.utils.llm import get_llm, get_active_provider
-from src.utils.market_data import build_market_context, get_top_snapshot, get_pair_detail
+from src.utils.market_data import (
+    build_market_context, build_full_context,
+    get_top_snapshot, get_pair_detail,
+    get_fx_rates, get_fx_context,
+    get_stock_indexes, get_indexes_context,
+    get_datetime_context,
+)
 from src.analysis.full_analyzer import FullAnalyzer
 from src.rag.vector_store import FinancialRAG
 from src.ingestion.news_fetcher import NewsFetcher
@@ -14,6 +20,8 @@ news_fetcher = NewsFetcher()
 
 chat_history = []
 
+
+# ── Tool functions ────────────────────────────────────────────────────────────
 
 def fetch_live_market_data(symbol: str) -> str:
     """Fetch live price, 24h change, volume, market cap for a crypto symbol or pair."""
@@ -58,6 +66,56 @@ def fetch_live_market_data(symbol: str) -> str:
     except Exception as e:
         logger.error(f"fetch_live_market_data error: {e}")
         return f"Could not fetch live data for {symbol}."
+
+
+def fetch_fx_rates_tool(query: str = "") -> str:
+    """Return live forex rates for major currency pairs vs USD."""
+    try:
+        data = get_fx_rates()
+        if not data or not data.get("rates"):
+            return "FX data temporarily unavailable."
+        lines = [f"Live FX Rates (USD base, as of {data.get('date', 'today')}):"]
+        for code, info in data["rates"].items():
+            r = info["rate"]
+            if code == "JPY":
+                lines.append(f"  USD/{code}: {r:.2f}  ({info['name']})")
+            else:
+                inv = round(1 / r, 5) if r else 0
+                lines.append(f"  {code}/USD: {inv:.5f}  ({info['name']})")
+        return "\n".join(lines)
+    except Exception as e:
+        logger.error(f"fetch_fx_rates_tool error: {e}")
+        return "Could not fetch FX rates right now."
+
+
+def fetch_stock_indexes_tool(query: str = "") -> str:
+    """Return live prices for major global stock market indexes."""
+    try:
+        data = get_stock_indexes()
+        if not data:
+            return "Stock index data temporarily unavailable."
+        lines = ["Live Stock Index Prices:"]
+        for ticker, info in data.items():
+            chg  = info.get("change", 0)
+            sign = "+" if chg >= 0 else ""
+            arrow = "▲" if chg >= 0 else "▼"
+            lines.append(
+                f"  {info['name']:14s}  ${info['price']:>10,.2f}  {sign}{chg:.2f}% {arrow}"
+            )
+        return "\n".join(lines)
+    except Exception as e:
+        logger.error(f"fetch_stock_indexes_tool error: {e}")
+        return "Could not fetch stock index data right now."
+
+
+def get_current_datetime_tool(query: str = "") -> str:
+    """Return the current UTC date, time, day of week, and active trading sessions."""
+    try:
+        return get_datetime_context()
+    except Exception as e:
+        logger.error(f"get_current_datetime_tool error: {e}")
+        from datetime import datetime, timezone
+        return f"Current UTC time: {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M UTC')}"
 
 
 def get_latest_financial_news(query: str = "latest") -> str:
@@ -111,19 +169,48 @@ def retrieve_relevant_context(query: str) -> str:
         return "Could not retrieve historical context."
 
 
+# ── Tool registry ─────────────────────────────────────────────────────────────
+
 tools = [
     Tool(
         name="fetch_live_market_data",
         func=fetch_live_market_data,
         description=(
             "Fetch live price, 24h change, 7d change, volume, market cap, ATH for any crypto symbol or pair "
-            "(e.g. 'BTC', 'ETH/USDT', 'SOL'). Always call this when the user asks about a price."
+            "(e.g. 'BTC', 'ETH/USDT', 'SOL'). Always call this when the user asks about a crypto price."
+        ),
+    ),
+    Tool(
+        name="fetch_fx_rates",
+        func=fetch_fx_rates_tool,
+        description=(
+            "Get live forex (FX) exchange rates for major currency pairs vs USD: "
+            "EUR/USD, GBP/USD, USD/JPY, AUD/USD, CHF/USD, CAD/USD, CNY/USD, SGD/USD. "
+            "Call this for any forex, currency, or exchange rate question."
+        ),
+    ),
+    Tool(
+        name="fetch_stock_indexes",
+        func=fetch_stock_indexes_tool,
+        description=(
+            "Get live prices for major global stock market indexes: "
+            "S&P 500, Dow Jones, NASDAQ, FTSE 100, Nikkei 225, Hang Seng, DAX, CAC 40. "
+            "Call this for any stock market, equity index, or macro market overview question."
+        ),
+    ),
+    Tool(
+        name="get_current_datetime",
+        func=get_current_datetime_tool,
+        description=(
+            "Get the current UTC date, time, day of week, and which trading sessions "
+            "(Tokyo, London, New York) are currently open. "
+            "Call this when the user asks about the current time, date, or market hours."
         ),
     ),
     Tool(
         name="get_latest_financial_news",
         func=get_latest_financial_news,
-        description="Get the most recent financial news across markets.",
+        description="Get the most recent financial news across crypto, stocks, forex, and macro markets.",
     ),
     Tool(
         name="full_market_analysis",
@@ -140,13 +227,19 @@ tools = [
     ),
 ]
 
+
+# ── System prompt ─────────────────────────────────────────────────────────────
+
 FIN_SYSTEM_PROMPT = """You are Fin — FinAi's intelligent trading assistant and the AI brain of the FinAi platform.
 
 You possess expert-level knowledge in:
 • Technical Analysis (price action, indicators, chart patterns, volume profile, order flow)
 • Fundamental Analysis (macro data, earnings, on-chain metrics, sector trends)
 • Risk Management (position sizing, leverage control, portfolio risk, drawdown management)
-• All major markets: Stocks, Forex, Cryptocurrencies, Futures, and Options
+• Crypto Markets (BTC, ETH, SOL, BNB, XRP, ADA, DOGE, AVAX, LINK, DOT, and all major altcoins)
+• Forex / FX (EUR/USD, GBP/USD, USD/JPY, AUD/USD, CHF/USD, CAD/USD, and all major pairs)
+• Stock Indexes (S&P 500, Dow Jones, NASDAQ, FTSE 100, Nikkei 225, Hang Seng, DAX, CAC 40)
+• Commodities & Metals (Gold, Silver, Platinum, Oil WTI, Natural Gas)
 • Algorithmic & AI-powered bot trading strategies
 
 Your Identity — Fin:
@@ -155,11 +248,18 @@ Your Identity — Fin:
 • Personality: calm, confident, decisive, authoritative — like a seasoned senior trader.
 • Adjust technical depth to the user's level.
 
+Date & Time Awareness:
+• You ALWAYS know the current date, time (UTC), and day of week from the context below.
+• You know which trading sessions are currently open: Tokyo (00:00–06:00 UTC), London (07:00–16:00 UTC), New York (12:00–21:00 UTC).
+• Factor session timing into your analysis — liquidity, volatility, and opportunity differ by session.
+• On weekends, stock markets are closed; crypto markets trade 24/7.
+
 Live Market Access:
-• You have REAL-TIME access to live market prices via the fetch_live_market_data tool.
-• When LIVE MARKET DATA is provided in the context below, treat those prices as current and authoritative.
-• For any price question, ALWAYS use the fetch_live_market_data tool to get the latest data.
-• Never say "I don't have access to current prices" — you do.
+• Live CRYPTO prices → fetch_live_market_data tool (or use the context block below).
+• Live FX RATES → fetch_fx_rates tool (or use the context block below).
+• Live STOCK INDEXES → fetch_stock_indexes tool (or use the context block below).
+• When LIVE MARKET DATA is provided in the context block, treat those prices as current and authoritative.
+• Never say "I don't have access to current prices" — you always do.
 
 Core Rules:
 • Always respond concisely, clearly, and professionally.
@@ -169,14 +269,19 @@ Core Rules:
 • Always include a risk warning with any trade suggestion.
 
 Tool Use Rules:
-• price question → fetch_live_market_data first
-• specific ticker deep-dive → full_market_analysis
+• crypto price / analysis → fetch_live_market_data
+• forex / currency rate → fetch_fx_rates
+• stock index / equity market → fetch_stock_indexes
+• current time / date / session → get_current_datetime
 • market news/events → get_latest_financial_news
+• deep ticker analysis → full_market_analysis
 • historical background → retrieve_relevant_context
 
 Sign-off: Always close trade suggestions with: "This is financial analysis from Fin. Trade at your own risk."
 """
 
+
+# ── LLM helper ────────────────────────────────────────────────────────────────
 
 def _get_llm_for_request():
     """Get best available LLM for each request (re-evaluates keys each time)."""
@@ -188,13 +293,15 @@ def _get_llm_for_request():
         return LocalAI()
 
 
+# ── Main chat entry point ─────────────────────────────────────────────────────
+
 def chat_with_agent(
     message: str,
     user_email: str = None,
     market_context: str = "",
 ) -> str:
     """Chat with Fin agent. Dynamically selects best available LLM provider.
-    
+
     Args:
         message:        User's chat message.
         user_email:     Authenticated user's email (for personalisation).
@@ -217,7 +324,15 @@ def chat_with_agent(
         f"- {t.name}: {t.description}" for t in tools
     ])
 
-    market_block = f"\n\n{market_context}\n" if market_context else ""
+    # Always inject datetime + full market context
+    auto_context = ""
+    try:
+        auto_context = get_datetime_context()
+    except Exception:
+        pass
+
+    combined_context = "\n\n".join(filter(None, [auto_context, market_context]))
+    market_block = f"\n\n{combined_context}\n" if combined_context else ""
 
     system_content = (
         f"{FIN_SYSTEM_PROMPT}"
@@ -265,7 +380,7 @@ def chat_with_agent(
             return "⚠️ Fin is temporarily unavailable. Please try again in a moment."
 
 
-logger.success("🤖 Fin (FinAi Agent) is ready!")
+logger.success("🤖 Fin (FinAi Agent) is ready — crypto · FX · indexes · datetime · metals")
 
 agent_executor = type("AgentExecutor", (), {
     "invoke": staticmethod(lambda inp: {"output": chat_with_agent(inp.get("input", ""))})

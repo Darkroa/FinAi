@@ -1,84 +1,91 @@
 import { useState, useRef, useEffect, useCallback } from 'react'
-import { Send, Bot, Plus, MessageSquare, Trash2, Lock, ChevronLeft, Zap, TrendingUp, TrendingDown, RefreshCw } from 'lucide-react'
+import {
+  Send, Bot, Plus, MessageSquare, Trash2, Lock, ChevronLeft, Zap,
+  TrendingUp, TrendingDown, RefreshCw, Clock,
+} from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import { useAuthStore } from '../store/authStore'
 import { useLanguage } from '../contexts/LanguageContext'
 
-interface Message {
-  role: 'user' | 'ai'
-  text: string
-  time: string
-}
+// ── Types ────────────────────────────────────────────────────────────────────
+interface Message { role: 'user' | 'ai'; text: string; time: string }
+interface Conversation { id: string; title: string; messages: Message[]; createdAt: string }
 
-interface Conversation {
-  id: string
-  title: string
-  messages: Message[]
-  createdAt: string
-}
+interface CoinData { symbol: string; name: string; cgId: string; price: number; change: number; high: number; low: number; volume: number }
+interface FxRate   { code: string; name: string; rate: number; usdRate: number }
+interface IndexData { ticker: string; name: string; price: number; change: number }
+interface SessionInfo { tokyo: boolean; london: boolean; new_york: boolean }
+interface DateInfo { utc: string; day: string; is_weekend: boolean; sessions: SessionInfo }
 
-interface CoinData {
-  symbol: string
-  name: string
-  cgId: string
-  price: number
-  change: number
-  high: number
-  low: number
-  volume: number
-}
+type MarketTab = 'crypto' | 'fx' | 'indexes'
 
 const COINS: { symbol: string; name: string; cgId: string }[] = [
-  { symbol: 'BTC', name: 'Bitcoin',  cgId: 'bitcoin'     },
-  { symbol: 'ETH', name: 'Ethereum', cgId: 'ethereum'    },
-  { symbol: 'SOL', name: 'Solana',   cgId: 'solana'      },
-  { symbol: 'BNB', name: 'BNB',      cgId: 'binancecoin' },
-  { symbol: 'XRP', name: 'XRP',      cgId: 'ripple'      },
-  { symbol: 'ADA', name: 'Cardano',  cgId: 'cardano'     },
-  { symbol: 'DOGE', name: 'Doge',    cgId: 'dogecoin'    },
+  { symbol: 'BTC',  name: 'Bitcoin',  cgId: 'bitcoin'      },
+  { symbol: 'ETH',  name: 'Ethereum', cgId: 'ethereum'     },
+  { symbol: 'SOL',  name: 'Solana',   cgId: 'solana'       },
+  { symbol: 'BNB',  name: 'BNB',      cgId: 'binancecoin'  },
+  { symbol: 'XRP',  name: 'XRP',      cgId: 'ripple'       },
+  { symbol: 'ADA',  name: 'Cardano',  cgId: 'cardano'      },
+  { symbol: 'DOGE', name: 'Doge',     cgId: 'dogecoin'     },
 ]
 
 const QUICK_CHIPS = [
   'BTC analysis right now',
-  'Best crypto to buy today',
-  'Market sentiment today',
-  'ETH vs BTC — which to hold?',
-  'Is now a good time to trade?',
-  'Explain trailing stop-loss',
+  'What time is it and what session is open?',
+  'EUR/USD outlook today',
+  'S&P 500 — buy or sell?',
+  'Gold price and trend',
+  'Best crypto to trade this session',
 ]
 
-function makeId() { return Math.random().toString(36).slice(2) }
-function makeTitle(firstMsg: string) { return firstMsg.slice(0, 40) + (firstMsg.length > 40 ? '…' : '') }
+// ── Helpers ──────────────────────────────────────────────────────────────────
+function makeId()  { return Math.random().toString(36).slice(2) }
+function makeTitle(msg: string) { return msg.slice(0, 40) + (msg.length > 40 ? '…' : '') }
+function fmtPrice(p: number, decimals = 2) {
+  if (p === 0) return '—'
+  if (p < 0.01) return p.toFixed(6)
+  if (p < 1)    return p.toFixed(4)
+  return p.toLocaleString('en-US', { maximumFractionDigits: decimals })
+}
 
 const WELCOME: Message = {
   role: 'ai',
-  text: "Hello! I'm Chat Fin — your AI financial assistant powered by live market data. Ask me about signals, strategies, portfolio analysis, or any coin — I'll give you real-time context.",
+  text: "Hello! I'm Chat Fin — your AI financial assistant with live market data. I know today's date, time, open trading sessions, live crypto prices, FX rates, and stock indexes. Ask me anything!",
   time: new Date().toLocaleTimeString(),
 }
 
 function loadConversations(): Conversation[] {
   try { return JSON.parse(localStorage.getItem('chatfin-convos') || '[]') } catch { return [] }
 }
-function saveConversations(convos: Conversation[]) {
-  localStorage.setItem('chatfin-convos', JSON.stringify(convos))
+function saveConversations(c: Conversation[]) {
+  localStorage.setItem('chatfin-convos', JSON.stringify(c))
 }
 
+// ── Component ────────────────────────────────────────────────────────────────
 export default function ChatFinPage() {
-  const navigate  = useNavigate()
+  const navigate = useNavigate()
   const { token, user } = useAuthStore()
-  const { t }    = useLanguage()
+  const { t }   = useLanguage()
   const isSubscriber = (user?.account_tier ?? 0) >= 1
 
   const [conversations, setConversations] = useState<Conversation[]>(loadConversations)
   const [activeId, setActiveId] = useState<string | null>(() => {
-    const saved = loadConversations()
-    return saved.length > 0 ? saved[0].id : null
+    const s = loadConversations(); return s.length > 0 ? s[0].id : null
   })
   const [input,  setInput]  = useState('')
   const [typing, setTyping] = useState(false)
-  const [coins,  setCoins]  = useState<CoinData[]>([])
-  const [pricesLoading, setPricesLoading] = useState(true)
-  const [selectedCoin, setSelectedCoin] = useState<CoinData | null>(null)
+
+  // Market data state
+  const [marketTab,   setMarketTab]   = useState<MarketTab>('crypto')
+  const [coins,       setCoins]       = useState<CoinData[]>([])
+  const [fxRates,     setFxRates]     = useState<FxRate[]>([])
+  const [indexes,     setIndexes]     = useState<IndexData[]>([])
+  const [dateInfo,    setDateInfo]    = useState<DateInfo | null>(null)
+  const [mktLoading,  setMktLoading]  = useState(true)
+  const [selectedCoin,  setSelectedCoin]  = useState<CoinData | null>(null)
+  const [selectedFx,    setSelectedFx]    = useState<FxRate | null>(null)
+  const [selectedIndex, setSelectedIndex] = useState<IndexData | null>(null)
+
   const endRef   = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLInputElement>(null)
 
@@ -87,46 +94,63 @@ export default function ChatFinPage() {
 
   useEffect(() => { endRef.current?.scrollIntoView({ behavior: 'smooth' }) }, [messages, typing])
 
-  const fetchPrices = useCallback(async () => {
-    setPricesLoading(true)
+  // ── Fetch all market data ──
+  const fetchMarketData = useCallback(async () => {
+    setMktLoading(true)
     try {
-      const res  = await fetch('/api/public/prices')
-      const data = await res.json()
+      const [pricesRes, extRes] = await Promise.all([
+        fetch('/api/public/prices'),
+        fetch('/api/public/market-extended'),
+      ])
+      const pricesData = await pricesRes.json()
+      const extData    = await extRes.json()
+
+      // Crypto
       const built: CoinData[] = COINS.map(c => {
-        const d = data[c.cgId] ?? {}
-        return {
-          ...c,
-          price:  d.usd          ?? 0,
-          change: d.usd_24h_change ?? 0,
-          high:   d.usd_24h_high  ?? 0,
-          low:    d.usd_24h_low   ?? 0,
-          volume: d.usd_24h_vol   ?? 0,
-        }
+        const d = pricesData[c.cgId] ?? {}
+        return { ...c, price: d.usd ?? 0, change: d.usd_24h_change ?? 0, high: d.usd_24h_high ?? 0, low: d.usd_24h_low ?? 0, volume: d.usd_24h_vol ?? 0 }
       }).filter(c => c.price > 0)
       setCoins(built)
       if (built.length > 0 && !selectedCoin) setSelectedCoin(built[0])
-    } catch { /* keep stale */ } finally { setPricesLoading(false) }
-  }, [selectedCoin])
+
+      // FX
+      const fxRaw: Record<string, { rate: number; name: string }> = extData?.fx?.rates ?? {}
+      const fxBuilt: FxRate[] = Object.entries(fxRaw).map(([code, info]) => ({
+        code,
+        name: info.name,
+        rate: info.rate,
+        usdRate: code === 'JPY' ? info.rate : (info.rate > 0 ? 1 / info.rate : 0),
+      }))
+      setFxRates(fxBuilt)
+
+      // Indexes
+      const idxRaw: Record<string, { name: string; price: number; change: number }> = extData?.indexes ?? {}
+      const idxBuilt: IndexData[] = Object.entries(idxRaw).map(([ticker, info]) => ({
+        ticker, name: info.name, price: info.price, change: info.change,
+      })).filter(i => i.price > 0)
+      setIndexes(idxBuilt)
+
+      // DateTime
+      if (extData?.datetime) setDateInfo(extData.datetime)
+    } catch {
+      /* keep stale data */
+    } finally {
+      setMktLoading(false)
+    }
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
-    fetchPrices()
-    const id = setInterval(fetchPrices, 60_000)
+    fetchMarketData()
+    const id = setInterval(fetchMarketData, 60_000)
     return () => clearInterval(id)
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
-  const persistConvos = useCallback((convos: Conversation[]) => {
-    setConversations(convos)
-    saveConversations(convos)
-  }, [])
+  // ── Conversation helpers ──
+  const persistConvos = useCallback((c: Conversation[]) => { setConversations(c); saveConversations(c) }, [])
 
   const newConversation = useCallback(() => {
     const id = makeId()
-    const convo: Conversation = {
-      id, title: 'New conversation',
-      messages: [{ ...WELCOME, time: new Date().toLocaleTimeString() }],
-      createdAt: new Date().toISOString(),
-    }
-    persistConvos([convo, ...conversations])
+    persistConvos([{ id, title: 'New conversation', messages: [{ ...WELCOME, time: new Date().toLocaleTimeString() }], createdAt: new Date().toISOString() }, ...conversations])
     setActiveId(id)
     setTimeout(() => inputRef.current?.focus(), 100)
   }, [conversations, persistConvos])
@@ -137,23 +161,19 @@ export default function ChatFinPage() {
     if (activeId === id) setActiveId(updated[0]?.id ?? null)
   }, [conversations, activeId, persistConvos])
 
+  // ── Send message ──
   const sendMessage = async (text: string) => {
     const q = text.trim()
     if (!q) return
     setInput('')
 
     const userMsg: Message = { role: 'user', text: q, time: new Date().toLocaleTimeString() }
-    let targetId       = activeId
-    let updatedConvos  = [...conversations]
+    let targetId      = activeId
+    let updatedConvos = [...conversations]
 
     if (!targetId) {
       const id = makeId()
-      const convo: Conversation = {
-        id, title: makeTitle(q),
-        messages: [{ ...WELCOME, time: new Date().toLocaleTimeString() }, userMsg],
-        createdAt: new Date().toISOString(),
-      }
-      updatedConvos = [convo, ...updatedConvos]
+      updatedConvos = [{ id, title: makeTitle(q), messages: [{ ...WELCOME, time: new Date().toLocaleTimeString() }, userMsg], createdAt: new Date().toISOString() }, ...updatedConvos]
       persistConvos(updatedConvos)
       setActiveId(id)
       targetId = id
@@ -168,48 +188,37 @@ export default function ChatFinPage() {
 
     setTyping(true)
     try {
-      const sc = selectedCoin
       const body: Record<string, unknown> = { message: q }
-      if (sc && sc.price > 0) {
-        body.pair       = `${sc.symbol}/USDT`
-        body.price      = sc.price
-        body.change_24h = sc.change
-        body.high_24h   = sc.high
-        body.low_24h    = sc.low
-        body.volume_24h = sc.volume
+      // Inject selected asset context
+      if (marketTab === 'crypto' && selectedCoin && selectedCoin.price > 0) {
+        body.pair = `${selectedCoin.symbol}/USDT`; body.price = selectedCoin.price
+        body.change_24h = selectedCoin.change; body.high_24h = selectedCoin.high
+        body.low_24h = selectedCoin.low; body.volume_24h = selectedCoin.volume
+      } else if (marketTab === 'fx' && selectedFx) {
+        body.pair = `${selectedFx.code}/USD`
+      } else if (marketTab === 'indexes' && selectedIndex) {
+        body.pair = selectedIndex.name
       }
-      const res = await fetch('/api/ai/chat', {
+
+      const res  = await fetch('/api/ai/chat', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(token ? { Authorization: `Bearer ${token}` } : {}),
-        },
+        headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
         body: JSON.stringify(body),
       })
       const data = await res.json()
-      const aiMsg: Message = {
-        role: 'ai',
-        text: data.reply || 'Sorry, I could not process that.',
-        time: new Date().toLocaleTimeString(),
-      }
-      updatedConvos = updatedConvos.map(c =>
-        c.id === targetId ? { ...c, messages: [...c.messages, aiMsg] } : c
-      )
+      const aiMsg: Message = { role: 'ai', text: data.reply || 'Sorry, I could not process that.', time: new Date().toLocaleTimeString() }
+      updatedConvos = updatedConvos.map(c => c.id === targetId ? { ...c, messages: [...c.messages, aiMsg] } : c)
       persistConvos(updatedConvos)
     } catch {
-      const errMsg: Message = {
-        role: 'ai', text: 'Connection error — please try again.',
-        time: new Date().toLocaleTimeString(),
-      }
-      updatedConvos = updatedConvos.map(c =>
-        c.id === targetId ? { ...c, messages: [...c.messages, errMsg] } : c
-      )
+      const errMsg: Message = { role: 'ai', text: 'Connection error — please try again.', time: new Date().toLocaleTimeString() }
+      updatedConvos = updatedConvos.map(c => c.id === targetId ? { ...c, messages: [...c.messages, errMsg] } : c)
       persistConvos(updatedConvos)
     } finally { setTyping(false) }
   }
 
   const handleSubmit = (e: React.FormEvent) => { e.preventDefault(); sendMessage(input) }
 
+  // ── Paywall ──
   if (!isSubscriber) {
     return (
       <div className="flex items-center justify-center min-h-[60vh]">
@@ -223,11 +232,11 @@ export default function ChatFinPage() {
           </p>
           <div className="flex flex-col sm:flex-row gap-2 justify-center">
             <button onClick={() => navigate('/app/pricing')}
-              className="inline-flex items-center justify-center gap-2 bg-[#f0b90b] hover:bg-[#d4a30a] text-black font-bold px-6 py-2.5 rounded-xl text-sm transition shadow-lg shadow-[#f0b90b]/20">
+              className="inline-flex items-center justify-center gap-2 bg-[#f0b90b] hover:bg-[#d4a30a] text-black font-bold px-6 py-2.5 rounded-xl text-sm transition">
               <Zap size={14} /> See Pricing &amp; Upgrade
             </button>
             <button onClick={() => navigate('/app/support')}
-              className="inline-flex items-center justify-center text-xs text-[#848e9c] hover:text-[#eaecef] border border-[#2b3139] hover:border-[#3c4451] px-4 py-2.5 rounded-xl transition">
+              className="inline-flex items-center justify-center text-xs text-[#848e9c] hover:text-[#eaecef] border border-[#2b3139] px-4 py-2.5 rounded-xl transition">
               Contact support
             </button>
           </div>
@@ -235,6 +244,13 @@ export default function ChatFinPage() {
       </div>
     )
   }
+
+  // ── Session badge helper ──
+  const sessionBadges = dateInfo ? [
+    { label: 'Tokyo',    open: dateInfo.sessions.tokyo    },
+    { label: 'London',   open: dateInfo.sessions.london   },
+    { label: 'New York', open: dateInfo.sessions.new_york },
+  ] : []
 
   return (
     <div className="fixed inset-x-0 flex flex-col bg-[#0b0e11] z-20" style={{ top: '56px', bottom: '56px' }}>
@@ -250,10 +266,7 @@ export default function ChatFinPage() {
             <Bot size={12} className="text-black" />
           </div>
           <p className="text-sm font-bold text-[#eaecef]">Chat Fin</p>
-          <div className="flex items-center gap-1">
-            <span className="w-1.5 h-1.5 bg-[#0ecb81] rounded-full animate-pulse" />
-            <span className="text-[10px] text-[#0ecb81]">{t('chat.online')}</span>
-          </div>
+          <span className="w-1.5 h-1.5 bg-[#0ecb81] rounded-full animate-pulse" />
         </div>
         <button onClick={newConversation}
           className="flex items-center gap-1 text-xs text-[#f0b90b] border border-[#f0b90b]/30 bg-[#f0b90b]/10 px-3 py-1.5 rounded-xl hover:bg-[#f0b90b]/20 transition">
@@ -261,29 +274,60 @@ export default function ChatFinPage() {
         </button>
       </div>
 
-      {/* ── Live Market Strip ── */}
+      {/* ── Market strip ── */}
       <div className="flex-shrink-0 bg-[#161a1e] border-b border-[#2b3139]">
+
+        {/* Date + sessions row */}
+        {dateInfo && (
+          <div className="flex items-center gap-3 px-3 pt-1.5 pb-0.5 overflow-x-auto scrollbar-none">
+            <div className="flex items-center gap-1 flex-shrink-0">
+              <Clock size={9} className="text-[#848e9c]" />
+              <span className="text-[10px] text-[#848e9c]">{dateInfo.utc} UTC · {dateInfo.day}</span>
+            </div>
+            {sessionBadges.map(s => (
+              <span key={s.label}
+                className={`flex-shrink-0 text-[9px] font-bold px-1.5 py-0.5 rounded-full ${s.open ? 'bg-[#0ecb81]/15 text-[#0ecb81]' : 'bg-[#2b3139] text-[#4a5568]'}`}>
+                {s.label} {s.open ? '●' : '○'}
+              </span>
+            ))}
+          </div>
+        )}
+
+        {/* Tab row */}
+        <div className="flex items-center gap-0 px-3 pt-1">
+          {(['crypto', 'fx', 'indexes'] as MarketTab[]).map(tab => (
+            <button key={tab}
+              onClick={() => setMarketTab(tab)}
+              className={`px-3 py-1 text-[11px] font-semibold rounded-t-lg border-b-2 transition capitalize ${
+                marketTab === tab
+                  ? 'border-[#f0b90b] text-[#f0b90b]'
+                  : 'border-transparent text-[#848e9c] hover:text-[#eaecef]'
+              }`}>
+              {tab === 'fx' ? 'FX / Forex' : tab === 'indexes' ? 'Indexes' : 'Crypto'}
+            </button>
+          ))}
+          <button onClick={fetchMarketData} className="ml-auto text-[#848e9c] hover:text-[#f0b90b] transition p-1.5">
+            <RefreshCw size={10} className={mktLoading ? 'animate-spin' : ''} />
+          </button>
+        </div>
+
+        {/* Asset scroll row */}
         <div className="flex items-center gap-1 px-3 py-1.5 overflow-x-auto scrollbar-none">
-          {pricesLoading ? (
+          {mktLoading ? (
             Array.from({ length: 5 }).map((_, i) => (
-              <div key={i} className="flex-shrink-0 h-8 w-20 bg-[#2b3139] rounded-lg animate-pulse" />
+              <div key={i} className="flex-shrink-0 h-7 w-24 bg-[#2b3139] rounded-lg animate-pulse" />
             ))
-          ) : (
+          ) : marketTab === 'crypto' ? (
             coins.map(coin => {
               const isUp = coin.change >= 0
               const active = selectedCoin?.symbol === coin.symbol
               return (
-                <button key={coin.symbol}
-                  onClick={() => setSelectedCoin(coin)}
-                  className={`flex-shrink-0 flex items-center gap-1.5 px-2.5 py-1 rounded-lg border transition text-left ${
-                    active
-                      ? 'bg-[#f0b90b]/10 border-[#f0b90b]/40'
-                      : 'border-transparent hover:border-[#2b3139] hover:bg-[#1e2329]'
+                <button key={coin.symbol} onClick={() => setSelectedCoin(coin)}
+                  className={`flex-shrink-0 flex items-center gap-1.5 px-2.5 py-1 rounded-lg border transition ${
+                    active ? 'bg-[#f0b90b]/10 border-[#f0b90b]/40' : 'border-transparent hover:border-[#2b3139] hover:bg-[#1e2329]'
                   }`}>
                   <span className="text-[11px] font-bold text-[#eaecef]">{coin.symbol}</span>
-                  <span className="text-[10px] font-mono text-[#848e9c]">
-                    ${coin.price < 1 ? coin.price.toFixed(4) : coin.price.toLocaleString('en-US', { maximumFractionDigits: 2 })}
-                  </span>
+                  <span className="text-[10px] font-mono text-[#848e9c]">${fmtPrice(coin.price)}</span>
                   <span className={`text-[10px] font-semibold flex items-center gap-0.5 ${isUp ? 'text-[#0ecb81]' : 'text-[#f6465d]'}`}>
                     {isUp ? <TrendingUp size={8} /> : <TrendingDown size={8} />}
                     {isUp ? '+' : ''}{coin.change.toFixed(2)}%
@@ -291,31 +335,61 @@ export default function ChatFinPage() {
                 </button>
               )
             })
+          ) : marketTab === 'fx' ? (
+            fxRates.map(fx => {
+              const active = selectedFx?.code === fx.code
+              return (
+                <button key={fx.code} onClick={() => setSelectedFx(fx)}
+                  className={`flex-shrink-0 flex items-center gap-1.5 px-2.5 py-1 rounded-lg border transition ${
+                    active ? 'bg-[#f0b90b]/10 border-[#f0b90b]/40' : 'border-transparent hover:border-[#2b3139] hover:bg-[#1e2329]'
+                  }`}>
+                  <span className="text-[11px] font-bold text-[#eaecef]">{fx.code === 'JPY' ? `USD/${fx.code}` : `${fx.code}/USD`}</span>
+                  <span className="text-[10px] font-mono text-[#848e9c]">
+                    {fx.code === 'JPY' ? fx.rate.toFixed(2) : fmtPrice(fx.usdRate, 5)}
+                  </span>
+                </button>
+              )
+            })
+          ) : (
+            indexes.map(idx => {
+              const isUp = idx.change >= 0
+              const active = selectedIndex?.ticker === idx.ticker
+              return (
+                <button key={idx.ticker} onClick={() => setSelectedIndex(idx)}
+                  className={`flex-shrink-0 flex items-center gap-1.5 px-2.5 py-1 rounded-lg border transition ${
+                    active ? 'bg-[#f0b90b]/10 border-[#f0b90b]/40' : 'border-transparent hover:border-[#2b3139] hover:bg-[#1e2329]'
+                  }`}>
+                  <span className="text-[11px] font-bold text-[#eaecef]">{idx.name}</span>
+                  <span className="text-[10px] font-mono text-[#848e9c]">{fmtPrice(idx.price)}</span>
+                  <span className={`text-[10px] font-semibold flex items-center gap-0.5 ${isUp ? 'text-[#0ecb81]' : 'text-[#f6465d]'}`}>
+                    {isUp ? <TrendingUp size={8} /> : <TrendingDown size={8} />}
+                    {isUp ? '+' : ''}{idx.change.toFixed(2)}%
+                  </span>
+                </button>
+              )
+            })
           )}
-          <button onClick={fetchPrices} className="flex-shrink-0 ml-1 text-[#848e9c] hover:text-[#f0b90b] transition p-1">
-            <RefreshCw size={11} />
-          </button>
         </div>
 
-        {/* Selected coin detail row */}
-        {selectedCoin && !pricesLoading && (
-          <div className="flex items-center gap-3 px-3 pb-1.5 overflow-x-auto scrollbar-none">
-            <span className="text-[10px] text-[#848e9c] flex-shrink-0">
-              {selectedCoin.name} context active —
-            </span>
-            {selectedCoin.high > 0 && (
-              <span className="text-[10px] text-[#848e9c] flex-shrink-0">
-                24h H: <span className="text-[#0ecb81] font-mono">${selectedCoin.high.toLocaleString('en-US', { maximumFractionDigits: 2 })}</span>
-              </span>
-            )}
-            {selectedCoin.low > 0 && (
-              <span className="text-[10px] text-[#848e9c] flex-shrink-0">
-                L: <span className="text-[#f6465d] font-mono">${selectedCoin.low.toLocaleString('en-US', { maximumFractionDigits: 2 })}</span>
-              </span>
-            )}
-            <span className="text-[10px] text-[#4a5568] flex-shrink-0">AI will use live {selectedCoin.symbol} data</span>
-          </div>
-        )}
+        {/* Context info row */}
+        <div className="px-3 pb-1.5 flex items-center gap-2 text-[10px] text-[#4a5568]">
+          {marketTab === 'crypto' && selectedCoin && (
+            <>
+              <span className="text-[#848e9c]">{selectedCoin.name} context active</span>
+              {selectedCoin.high > 0 && <span>H: <span className="text-[#0ecb81]">${fmtPrice(selectedCoin.high)}</span></span>}
+              {selectedCoin.low  > 0 && <span>L: <span className="text-[#f6465d]">${fmtPrice(selectedCoin.low)}</span></span>}
+            </>
+          )}
+          {marketTab === 'fx' && selectedFx && (
+            <span className="text-[#848e9c]">{selectedFx.name} — AI will use live FX context</span>
+          )}
+          {marketTab === 'indexes' && selectedIndex && (
+            <span className="text-[#848e9c]">{selectedIndex.name} — AI will use live index context</span>
+          )}
+          {!selectedCoin && !selectedFx && !selectedIndex && (
+            <span>Select an asset above to focus AI context</span>
+          )}
+        </div>
       </div>
 
       {/* ── Body: sidebar + chat ── */}
@@ -333,13 +407,10 @@ export default function ChatFinPage() {
             {conversations.map(convo => (
               <div key={convo.id}
                 className={`group flex items-center gap-2 px-3 py-2.5 mx-2 rounded-xl cursor-pointer transition mb-0.5 ${
-                  activeId === convo.id
-                    ? 'bg-[#f0b90b]/10 border border-[#f0b90b]/20'
-                    : 'hover:bg-[#2b3139]/60'
+                  activeId === convo.id ? 'bg-[#f0b90b]/10 border border-[#f0b90b]/20' : 'hover:bg-[#2b3139]/60'
                 }`}
                 onClick={() => setActiveId(convo.id)}>
-                <MessageSquare size={13}
-                  className={activeId === convo.id ? 'text-[#f0b90b] flex-shrink-0' : 'text-[#848e9c] flex-shrink-0'} />
+                <MessageSquare size={13} className={activeId === convo.id ? 'text-[#f0b90b] flex-shrink-0' : 'text-[#848e9c] flex-shrink-0'} />
                 <p className={`text-xs flex-1 truncate ${activeId === convo.id ? 'text-[#eaecef] font-medium' : 'text-[#848e9c]'}`}>
                   {convo.title}
                 </p>
@@ -358,14 +429,13 @@ export default function ChatFinPage() {
           {/* Messages */}
           <div className="flex-1 overflow-y-auto px-4 py-4 space-y-3">
 
-            {/* Quick chips — only show when conversation is empty / just welcome */}
+            {/* Quick chips — only on fresh conversation */}
             {messages.filter(m => m.role === 'user').length === 0 && (
               <div className="pb-2">
                 <p className="text-[10px] text-[#4a5568] mb-2 text-center">Suggested questions</p>
                 <div className="flex flex-wrap gap-1.5 justify-center">
                   {QUICK_CHIPS.map(chip => (
-                    <button key={chip}
-                      onClick={() => sendMessage(chip)}
+                    <button key={chip} onClick={() => sendMessage(chip)}
                       className="text-[11px] px-3 py-1.5 rounded-full border border-[#2b3139] text-[#848e9c] hover:border-[#f0b90b]/40 hover:text-[#eaecef] hover:bg-[#f0b90b]/5 transition">
                       {chip}
                     </button>
@@ -382,9 +452,7 @@ export default function ChatFinPage() {
                   </div>
                 )}
                 <div className={`max-w-[78%] rounded-2xl px-4 py-2.5 ${
-                  msg.role === 'user'
-                    ? 'bg-[#f0b90b]/10 border border-[#f0b90b]/20'
-                    : 'bg-[#1e2329] border border-[#2b3139]'
+                  msg.role === 'user' ? 'bg-[#f0b90b]/10 border border-[#f0b90b]/20' : 'bg-[#1e2329] border border-[#2b3139]'
                 }`}>
                   <p className="text-sm text-[#eaecef] leading-relaxed whitespace-pre-wrap">{msg.text}</p>
                   <p className="text-[9px] text-[#4a5568] mt-1">{msg.time}</p>
@@ -414,7 +482,12 @@ export default function ChatFinPage() {
           <div className="border-t border-[#2b3139] px-4 pt-3 pb-3 bg-[#161a1e] flex-shrink-0">
             <form onSubmit={handleSubmit} className="flex gap-2">
               <input ref={inputRef} value={input} onChange={e => setInput(e.target.value)}
-                placeholder={selectedCoin ? `Ask about ${selectedCoin.symbol} or any market…` : t('chat.placeholder')}
+                placeholder={
+                  marketTab === 'crypto' && selectedCoin ? `Ask about ${selectedCoin.symbol} or any market…`
+                  : marketTab === 'fx' && selectedFx     ? `Ask about ${selectedFx.code}/USD or any forex pair…`
+                  : marketTab === 'indexes' && selectedIndex ? `Ask about ${selectedIndex.name}…`
+                  : t('chat.placeholder')
+                }
                 className="flex-1 bg-[#0b0e11] border border-[#2b3139] rounded-xl px-4 py-3 text-sm text-[#eaecef] placeholder-[#4a5568] focus:outline-none focus:border-[#f0b90b] transition" />
               <button type="submit" disabled={typing || !input.trim()}
                 className="w-12 h-12 flex items-center justify-center bg-[#f0b90b] hover:bg-[#d9a60b] disabled:opacity-50 text-black rounded-xl transition flex-shrink-0">
