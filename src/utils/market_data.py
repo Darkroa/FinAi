@@ -235,6 +235,72 @@ def get_indexes_context() -> str:
     return "\n".join(lines)
 
 
+# ── Commodities: Gold, Silver, Oil ────────────────────────────────────────────
+
+_COMMODITY_TICKERS = {
+    "GC=F": {"name": "Gold",       "symbol": "XAU/USD", "unit": "oz"},
+    "SI=F": {"name": "Silver",     "symbol": "XAG/USD", "unit": "oz"},
+    "CL=F": {"name": "WTI Crude",  "symbol": "WTI/USD", "unit": "bbl"},
+    "BZ=F": {"name": "Brent Crude","symbol": "BRENT",   "unit": "bbl"},
+}
+
+def get_commodities() -> dict:
+    """Fetch live Gold, Silver, WTI Oil, Brent Oil prices via yfinance futures. Cached 2 min."""
+    hit = _cached("commodities", 120)
+    if hit:
+        return hit
+    try:
+        import yfinance as yf
+        tickers_str = " ".join(_COMMODITY_TICKERS.keys())
+        data = yf.download(
+            tickers_str,
+            period="2d",
+            interval="1d",
+            progress=False,
+            auto_adjust=True,
+        )
+        closes = data.get("Close", {})
+        result = {}
+        for ticker, meta in _COMMODITY_TICKERS.items():
+            try:
+                col = closes.get(ticker) if isinstance(closes, dict) else (
+                    closes[ticker] if hasattr(closes, '__getitem__') else None
+                )
+                if col is not None:
+                    vals = col.dropna()
+                    if len(vals) >= 2:
+                        prev = float(vals.iloc[-2])
+                        curr = float(vals.iloc[-1])
+                        chg  = ((curr - prev) / prev * 100) if prev else 0
+                        result[ticker] = {**meta, "price": round(curr, 2), "change": round(chg, 2), "prev": round(prev, 2)}
+                    elif len(vals) == 1:
+                        result[ticker] = {**meta, "price": round(float(vals.iloc[-1]), 2), "change": 0, "prev": 0}
+            except Exception:
+                pass
+        if result:
+            return _store("commodities", result)
+    except Exception as e:
+        logger.warning(f"Commodities fetch failed: {e}")
+    return _cached("commodities", 9999) or {}
+
+
+def get_commodities_context() -> str:
+    """Formatted commodities block for AI system prompt."""
+    data = get_commodities()
+    if not data:
+        return ""
+    lines = ["━━━ COMMODITIES ━━━"]
+    for ticker, info in data.items():
+        chg   = info.get("change", 0)
+        sign  = "+" if chg >= 0 else ""
+        arrow = "▲" if chg >= 0 else "▼"
+        lines.append(
+            f"  {info['symbol']:9s}  ${info['price']:>10,.2f}/{info['unit']}  {sign}{chg:.2f}% {arrow}"
+        )
+    lines.append("━━━━━━━━━━━━━━━━━━━━")
+    return "\n".join(lines)
+
+
 # ── Crypto snapshot ───────────────────────────────────────────────────────────
 
 def get_top_snapshot() -> dict:
@@ -451,6 +517,14 @@ def build_market_context(
     except Exception:
         pass
 
+    # ── Commodities (Gold, Silver, Oil) ──
+    try:
+        com = get_commodities_context()
+        if com:
+            sections.append(com)
+    except Exception:
+        pass
+
     return "\n\n".join(sections)
 
 
@@ -498,6 +572,14 @@ def build_full_context() -> str:
         idx = get_indexes_context()
         if idx:
             sections.append(idx)
+    except Exception:
+        pass
+
+    # ── Commodities (Gold, Silver, Oil) ──
+    try:
+        com = get_commodities_context()
+        if com:
+            sections.append(com)
     except Exception:
         pass
 

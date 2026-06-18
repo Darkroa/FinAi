@@ -11,13 +11,14 @@ import { useLanguage } from '../contexts/LanguageContext'
 interface Message { role: 'user' | 'ai'; text: string; time: string }
 interface Conversation { id: string; title: string; messages: Message[]; createdAt: string }
 
-interface CoinData { symbol: string; name: string; cgId: string; price: number; change: number; high: number; low: number; volume: number }
-interface FxRate   { code: string; name: string; rate: number; usdRate: number }
-interface IndexData { ticker: string; name: string; price: number; change: number }
-interface SessionInfo { tokyo: boolean; london: boolean; new_york: boolean }
-interface DateInfo { utc: string; day: string; is_weekend: boolean; sessions: SessionInfo }
+interface CoinData      { symbol: string; name: string; cgId: string; price: number; change: number; high: number; low: number; volume: number }
+interface FxRate        { code: string; name: string; rate: number; usdRate: number }
+interface IndexData     { ticker: string; name: string; price: number; change: number }
+interface CommodityData { ticker: string; name: string; symbol: string; unit: string; price: number; change: number }
+interface SessionInfo   { tokyo: boolean; london: boolean; new_york: boolean }
+interface DateInfo      { utc: string; day: string; is_weekend: boolean; sessions: SessionInfo }
 
-type MarketTab = 'crypto' | 'fx' | 'indexes'
+type MarketTab = 'crypto' | 'fx' | 'indexes' | 'metals'
 
 const COINS: { symbol: string; name: string; cgId: string }[] = [
   { symbol: 'BTC',  name: 'Bitcoin',  cgId: 'bitcoin'      },
@@ -34,7 +35,8 @@ const QUICK_CHIPS = [
   'What time is it and what session is open?',
   'EUR/USD outlook today',
   'S&P 500 — buy or sell?',
-  'Gold price and trend',
+  'Gold XAU/USD analysis',
+  'WTI Oil price and trend',
   'Best crypto to trade this session',
 ]
 
@@ -82,9 +84,11 @@ export default function ChatFinPage() {
   const [indexes,     setIndexes]     = useState<IndexData[]>([])
   const [dateInfo,    setDateInfo]    = useState<DateInfo | null>(null)
   const [mktLoading,  setMktLoading]  = useState(true)
-  const [selectedCoin,  setSelectedCoin]  = useState<CoinData | null>(null)
-  const [selectedFx,    setSelectedFx]    = useState<FxRate | null>(null)
-  const [selectedIndex, setSelectedIndex] = useState<IndexData | null>(null)
+  const [commodities,    setCommodities]    = useState<CommodityData[]>([])
+  const [selectedCoin,   setSelectedCoin]   = useState<CoinData | null>(null)
+  const [selectedFx,     setSelectedFx]     = useState<FxRate | null>(null)
+  const [selectedIndex,  setSelectedIndex]  = useState<IndexData | null>(null)
+  const [selectedCommod, setSelectedCommod] = useState<CommodityData | null>(null)
 
   const endRef   = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLInputElement>(null)
@@ -129,6 +133,15 @@ export default function ChatFinPage() {
         ticker, name: info.name, price: info.price, change: info.change,
       })).filter(i => i.price > 0)
       setIndexes(idxBuilt)
+
+      // Commodities (Gold, Silver, Oil)
+      const comRaw: Record<string, { name: string; symbol: string; unit: string; price: number; change: number }> = extData?.commodities ?? {}
+      const comBuilt: CommodityData[] = Object.entries(comRaw).map(([ticker, info]) => ({
+        ticker, name: info.name, symbol: info.symbol, unit: info.unit,
+        price: info.price, change: info.change,
+      })).filter(c => c.price > 0)
+      setCommodities(comBuilt)
+      if (comBuilt.length > 0 && !selectedCommod) setSelectedCommod(comBuilt[0])
 
       // DateTime
       if (extData?.datetime) setDateInfo(extData.datetime)
@@ -198,6 +211,8 @@ export default function ChatFinPage() {
         body.pair = `${selectedFx.code}/USD`
       } else if (marketTab === 'indexes' && selectedIndex) {
         body.pair = selectedIndex.name
+      } else if (marketTab === 'metals' && selectedCommod) {
+        body.pair = selectedCommod.symbol
       }
 
       const res  = await fetch('/api/ai/chat', {
@@ -295,15 +310,15 @@ export default function ChatFinPage() {
 
         {/* Tab row */}
         <div className="flex items-center gap-0 px-3 pt-1">
-          {(['crypto', 'fx', 'indexes'] as MarketTab[]).map(tab => (
+          {(['crypto', 'fx', 'indexes', 'metals'] as MarketTab[]).map(tab => (
             <button key={tab}
               onClick={() => setMarketTab(tab)}
-              className={`px-3 py-1 text-[11px] font-semibold rounded-t-lg border-b-2 transition capitalize ${
+              className={`px-2.5 py-1 text-[11px] font-semibold rounded-t-lg border-b-2 transition ${
                 marketTab === tab
                   ? 'border-[#f0b90b] text-[#f0b90b]'
                   : 'border-transparent text-[#848e9c] hover:text-[#eaecef]'
               }`}>
-              {tab === 'fx' ? 'FX / Forex' : tab === 'indexes' ? 'Indexes' : 'Crypto'}
+              {tab === 'fx' ? 'FX / Forex' : tab === 'indexes' ? 'Indexes' : tab === 'metals' ? 'Metals & Oil' : 'Crypto'}
             </button>
           ))}
           <button onClick={fetchMarketData} className="ml-auto text-[#848e9c] hover:text-[#f0b90b] transition p-1.5">
@@ -350,7 +365,7 @@ export default function ChatFinPage() {
                 </button>
               )
             })
-          ) : (
+          ) : marketTab === 'indexes' ? (
             indexes.map(idx => {
               const isUp = idx.change >= 0
               const active = selectedIndex?.ticker === idx.ticker
@@ -364,6 +379,25 @@ export default function ChatFinPage() {
                   <span className={`text-[10px] font-semibold flex items-center gap-0.5 ${isUp ? 'text-[#0ecb81]' : 'text-[#f6465d]'}`}>
                     {isUp ? <TrendingUp size={8} /> : <TrendingDown size={8} />}
                     {isUp ? '+' : ''}{idx.change.toFixed(2)}%
+                  </span>
+                </button>
+              )
+            })
+          ) : (
+            /* Metals & Oil */
+            commodities.map(com => {
+              const isUp = com.change >= 0
+              const active = selectedCommod?.ticker === com.ticker
+              return (
+                <button key={com.ticker} onClick={() => setSelectedCommod(com)}
+                  className={`flex-shrink-0 flex items-center gap-1.5 px-2.5 py-1 rounded-lg border transition ${
+                    active ? 'bg-[#f0b90b]/10 border-[#f0b90b]/40' : 'border-transparent hover:border-[#2b3139] hover:bg-[#1e2329]'
+                  }`}>
+                  <span className="text-[11px] font-bold text-[#eaecef]">{com.symbol}</span>
+                  <span className="text-[10px] font-mono text-[#848e9c]">${fmtPrice(com.price)}<span className="text-[9px] text-[#4a5568]">/{com.unit}</span></span>
+                  <span className={`text-[10px] font-semibold flex items-center gap-0.5 ${isUp ? 'text-[#0ecb81]' : 'text-[#f6465d]'}`}>
+                    {isUp ? <TrendingUp size={8} /> : <TrendingDown size={8} />}
+                    {isUp ? '+' : ''}{com.change.toFixed(2)}%
                   </span>
                 </button>
               )
@@ -386,7 +420,13 @@ export default function ChatFinPage() {
           {marketTab === 'indexes' && selectedIndex && (
             <span className="text-[#848e9c]">{selectedIndex.name} — AI will use live index context</span>
           )}
-          {!selectedCoin && !selectedFx && !selectedIndex && (
+          {marketTab === 'metals' && selectedCommod && (
+            <>
+              <span className="text-[#848e9c]">{selectedCommod.name} ({selectedCommod.symbol}) context active</span>
+              <span className="text-[#eaecef]">${fmtPrice(selectedCommod.price)}<span className="text-[#4a5568]">/{selectedCommod.unit}</span></span>
+            </>
+          )}
+          {!selectedCoin && !selectedFx && !selectedIndex && !selectedCommod && (
             <span>Select an asset above to focus AI context</span>
           )}
         </div>
@@ -483,9 +523,10 @@ export default function ChatFinPage() {
             <form onSubmit={handleSubmit} className="flex gap-2">
               <input ref={inputRef} value={input} onChange={e => setInput(e.target.value)}
                 placeholder={
-                  marketTab === 'crypto' && selectedCoin ? `Ask about ${selectedCoin.symbol} or any market…`
-                  : marketTab === 'fx' && selectedFx     ? `Ask about ${selectedFx.code}/USD or any forex pair…`
+                  marketTab === 'crypto'  && selectedCoin   ? `Ask about ${selectedCoin.symbol} or any market…`
+                  : marketTab === 'fx'   && selectedFx      ? `Ask about ${selectedFx.code}/USD or any forex pair…`
                   : marketTab === 'indexes' && selectedIndex ? `Ask about ${selectedIndex.name}…`
+                  : marketTab === 'metals' && selectedCommod ? `Ask about ${selectedCommod.name} (${selectedCommod.symbol})…`
                   : t('chat.placeholder')
                 }
                 className="flex-1 bg-[#0b0e11] border border-[#2b3139] rounded-xl px-4 py-3 text-sm text-[#eaecef] placeholder-[#4a5568] focus:outline-none focus:border-[#f0b90b] transition" />

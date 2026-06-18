@@ -3988,35 +3988,38 @@ async def get_live_prices():
 
 @router.get("/public/market-extended")
 async def get_market_extended():
-    """Public endpoint — FX rates, stock indexes, and current datetime context. No auth required."""
+    """Public endpoint — FX rates, stock indexes, commodities (Gold/Oil) and datetime. No auth required."""
     from concurrent.futures import ThreadPoolExecutor
     import asyncio
-    from src.utils.market_data import get_fx_rates, get_stock_indexes, get_datetime_context
+    from src.utils.market_data import get_fx_rates, get_stock_indexes, get_commodities
 
     loop = asyncio.get_event_loop()
-    with ThreadPoolExecutor(max_workers=2) as pool:
+    with ThreadPoolExecutor(max_workers=3) as pool:
         fx_fut  = loop.run_in_executor(pool, get_fx_rates)
         idx_fut = loop.run_in_executor(pool, get_stock_indexes)
+        com_fut = loop.run_in_executor(pool, get_commodities)
         fx_data  = await fx_fut
         idx_data = await idx_fut
+        com_data = await com_fut
 
-    from datetime import datetime, timezone, timedelta
+    from datetime import datetime, timezone
     now_utc = datetime.now(timezone.utc)
     hour    = now_utc.hour
     sessions = {
-        "tokyo":   0 <= hour < 6,
-        "london":  7 <= hour < 16,
+        "tokyo":    0 <= hour < 6,
+        "london":   7 <= hour < 16,
         "new_york": 12 <= hour < 21,
     }
     return {
         "datetime": {
-            "utc":       now_utc.strftime("%Y-%m-%d %H:%M"),
-            "day":       now_utc.strftime("%A"),
+            "utc":        now_utc.strftime("%Y-%m-%d %H:%M"),
+            "day":        now_utc.strftime("%A"),
             "is_weekend": now_utc.weekday() >= 5,
-            "sessions":  sessions,
+            "sessions":   sessions,
         },
-        "fx":      fx_data,
-        "indexes": idx_data,
+        "fx":          fx_data,
+        "indexes":     idx_data,
+        "commodities": com_data,
     }
 
 

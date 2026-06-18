@@ -7,6 +7,7 @@ from src.utils.market_data import (
     get_top_snapshot, get_pair_detail,
     get_fx_rates, get_fx_context,
     get_stock_indexes, get_indexes_context,
+    get_commodities, get_commodities_context,
     get_datetime_context,
 )
 from src.analysis.full_analyzer import FullAnalyzer
@@ -108,6 +109,26 @@ def fetch_stock_indexes_tool(query: str = "") -> str:
         return "Could not fetch stock index data right now."
 
 
+def fetch_commodities_tool(query: str = "") -> str:
+    """Return live Gold (XAU/USD), Silver (XAG/USD), WTI Crude Oil, and Brent Crude prices."""
+    try:
+        data = get_commodities()
+        if not data:
+            return "Commodities data temporarily unavailable."
+        lines = ["Live Commodities Prices:"]
+        for ticker, info in data.items():
+            chg   = info.get("change", 0)
+            sign  = "+" if chg >= 0 else ""
+            arrow = "▲" if chg >= 0 else "▼"
+            lines.append(
+                f"  {info['symbol']:9s}  ${info['price']:>10,.2f}/{info['unit']}  {sign}{chg:.2f}% {arrow}"
+            )
+        return "\n".join(lines)
+    except Exception as e:
+        logger.error(f"fetch_commodities_tool error: {e}")
+        return "Could not fetch commodities data right now."
+
+
 def get_current_datetime_tool(query: str = "") -> str:
     """Return the current UTC date, time, day of week, and active trading sessions."""
     try:
@@ -199,6 +220,14 @@ tools = [
         ),
     ),
     Tool(
+        name="fetch_commodities",
+        func=fetch_commodities_tool,
+        description=(
+            "Get live prices for Gold (XAU/USD), Silver (XAG/USD), WTI Crude Oil, and Brent Crude Oil. "
+            "Call this for any question about gold, silver, oil, metals, or energy commodities."
+        ),
+    ),
+    Tool(
         name="get_current_datetime",
         func=get_current_datetime_tool,
         description=(
@@ -239,7 +268,7 @@ You possess expert-level knowledge in:
 • Crypto Markets (BTC, ETH, SOL, BNB, XRP, ADA, DOGE, AVAX, LINK, DOT, and all major altcoins)
 • Forex / FX (EUR/USD, GBP/USD, USD/JPY, AUD/USD, CHF/USD, CAD/USD, and all major pairs)
 • Stock Indexes (S&P 500, Dow Jones, NASDAQ, FTSE 100, Nikkei 225, Hang Seng, DAX, CAC 40)
-• Commodities & Metals (Gold, Silver, Platinum, Oil WTI, Natural Gas)
+• Commodities & Metals (Gold XAU/USD, Silver XAG/USD, WTI Crude Oil, Brent Crude Oil, Natural Gas)
 • Algorithmic & AI-powered bot trading strategies
 
 Your Identity — Fin:
@@ -258,6 +287,7 @@ Live Market Access:
 • Live CRYPTO prices → fetch_live_market_data tool (or use the context block below).
 • Live FX RATES → fetch_fx_rates tool (or use the context block below).
 • Live STOCK INDEXES → fetch_stock_indexes tool (or use the context block below).
+• Live COMMODITIES (Gold/Silver/Oil) → fetch_commodities tool (or use the context block below).
 • When LIVE MARKET DATA is provided in the context block, treat those prices as current and authoritative.
 • Never say "I don't have access to current prices" — you always do.
 
@@ -272,6 +302,7 @@ Tool Use Rules:
 • crypto price / analysis → fetch_live_market_data
 • forex / currency rate → fetch_fx_rates
 • stock index / equity market → fetch_stock_indexes
+• gold / silver / oil / metals / energy → fetch_commodities
 • current time / date / session → get_current_datetime
 • market news/events → get_latest_financial_news
 • deep ticker analysis → full_market_analysis
