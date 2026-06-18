@@ -441,16 +441,48 @@ def build_market_context(
     # ── Specific pair ──
     lines = ["━━━ LIVE MARKET DATA ━━━"]
     lines.append(f"Asset: {pair}")
+
+    # Map frontend pair names → commodity futures keys
+    _COMMODITY_MAP = {
+        "XAU/USD": "GC=F",
+        "XAG/USD": "SI=F",
+        "OIL/WTI": "CL=F",
+        "WTI/USD": "CL=F",
+        "BRENT":   "BZ=F",
+        "XBR/USD": "BZ=F",
+    }
+    commodity_key = _COMMODITY_MAP.get(pair.upper())
+
     try:
         detail = get_pair_detail(pair)
     except Exception:
         detail = {}
 
-    p      = price      or detail.get("price_usd",  0)
-    chg24  = change_24h or detail.get("change_24h", 0)
-    hi     = high_24h   or detail.get("high_24h",   0)
-    lo     = low_24h    or detail.get("low_24h",    0)
-    vol    = volume_24h or detail.get("volume_24h", 0)
+    # If this is a commodity pair, enrich with live futures data
+    commodity_live: dict = {}
+    if commodity_key:
+        try:
+            comms = get_commodities()
+            commodity_live = comms.get(commodity_key, {})
+        except Exception:
+            pass
+
+    p     = price      or commodity_live.get("price",  0) or detail.get("price_usd",  0)
+    chg24 = change_24h or commodity_live.get("change", 0) or detail.get("change_24h", 0)
+    hi    = high_24h   or detail.get("high_24h",   0)
+    lo    = low_24h    or detail.get("low_24h",    0)
+    vol   = volume_24h or detail.get("volume_24h", 0)
+
+    if commodity_live:
+        unit = commodity_live.get("unit", "")
+        name = commodity_live.get("name", "")
+        prev = commodity_live.get("prev", 0)
+        if name:
+            lines.append(f"Name:         {name}")
+        if unit:
+            lines.append(f"Unit:         per {unit}")
+        if prev > 0:
+            lines.append(f"Prev Close:   ${prev:,.2f}")
 
     if p > 0:
         lines.append(f"Price (USD):  ${p:,.4f}" if p < 1 else f"Price (USD):  ${p:,.2f}")
