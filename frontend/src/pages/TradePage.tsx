@@ -6,7 +6,7 @@ import {
   Wifi, WifiOff, Link2, Clock, CheckCircle2, 
   Target, AlertTriangle, ArrowRight, Zap, Minus, Plus,
   MessageSquare, Tv, Bot, Settings, BarChart2, Maximize2, X,
-  SlidersHorizontal,
+  SlidersHorizontal, Loader2, Sparkles,
 } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { useAuthStore } from '../store/authStore'
@@ -170,180 +170,346 @@ interface TradeRecord  { id: number; ticker: string; action: string; price: numb
 interface OpenPosition { id: number; ticker: string; price: number; qty: number; exchange: string; created_at: string; current_price: number; unrealized_pnl: number; leverage?: number; pnl_pct?: number; side?: string; action?: string }
 
 // ── FinChat panel ─────────────────────────────────────────────────────────────
-function FinChatPanel({ pair, livePrice, liveChange, collapsed, onToggle }: {
-  pair: string; livePrice: number; liveChange: number; collapsed: boolean; onToggle: () => void
-}) {
-  const asset = pair.split('/')[0]
-  const isUp  = liveChange >= 0
-  const [chatInput, setChatInput] = useState('')
-  const [userMessages, setUserMessages] = useState<{ id: number; text: string; reply: string }[]>([])
-  const chatEndRef = useRef<HTMLDivElement>(null)
-  // Track rendered height for smooth collapse animation
-  const [bodyHeight, setBodyHeight] = useState<number>(0)
-  const bodyRef = useRef<HTMLDivElement>(null)
+// ── FinChatPanel types ────────────────────────────────────────────────────────
+interface TradeSugg {
+  side: 'buy' | 'sell'
+  entry: number
+  sl?: number
+  tp?: number
+  conf: number
+}
+interface FinMsg {
+  id: string
+  role: 'user' | 'ai'
+  text: string
+  suggestion?: TradeSugg
+}
 
-  useEffect(() => { chatEndRef.current?.scrollIntoView({ behavior: 'smooth' }) }, [userMessages])
+function extractPrice(text: string, patterns: RegExp[]): number | undefined {
+  for (const re of patterns) {
+    const m = re.exec(text)
+    if (m) return parseFloat(m[1].replace(/,/g, ''))
+  }
+  return undefined
+}
+
+function parseTradeSuggestion(text: string, livePrice: number): TradeSugg | null {
+  const hasBuy  = /\b(buy|long|bullish|go long)\b/i.test(text)
+  const hasSell = /\b(sell|short|bearish|go short)\b/i.test(text)
+  const hasEntry = /entry|enter|stop.loss|take.profit|\bsl\b|\btp\b|target/i.test(text)
+  if ((!hasBuy && !hasSell) || !hasEntry) return null
+  const side: 'buy' | 'sell' = hasBuy ? 'buy' : 'sell'
+  const entry = extractPrice(text, [
+    /entry\s*(?:zone|price|point)?[:\s]+\$?([\d,]+\.?\d*)/i,
+    /enter\s*(?:at|around|near)?[:\s]+\$?([\d,]+\.?\d*)/i,
+    /(?:buy|sell)\s+(?:at|@|around|near)\s+\$?([\d,]+\.?\d*)/i,
+  ]) ?? livePrice
+  const sl = extractPrice(text, [
+    /stop[- ]loss[:\s]+\$?([\d,]+\.?\d*)/i,
+    /\bsl[:\s]+\$?([\d,]+\.?\d*)/i,
+    /stop[:\s]+\$?([\d,]+\.?\d*)/i,
+  ])
+  const tp = extractPrice(text, [
+    /take[- ]profit\s*(?:\d)?[:\s]+\$?([\d,]+\.?\d*)/i,
+    /\btp\s*(?:\d)?[:\s]+\$?([\d,]+\.?\d*)/i,
+    /target\s*(?:\d)?[:\s]+\$?([\d,]+\.?\d*)/i,
+  ])
+  const confMatch = /(\d{2,3})\s*%\s*conf/i.exec(text)
+  const conf = confMatch ? parseInt(confMatch[1]) : 72
+  return { side, entry, sl, tp, conf }
+}
+
+function FinChatPanel({ pair, livePrice, liveChange, collapsed, onToggle, usingBalance, selExchange }: {
+  pair: string; livePrice: number; liveChange: number; collapsed: boolean
+  onToggle: () => void; usingBalance: boolean; selExchange: string
+}) {
+  const isUp = liveChange >= 0
+  const [input, setInput] = useState('')
+  const [messages, setMessages] = useState<FinMsg[]>([])
+  const [aiLoading, setAiLoading] = useState(false)
+  const [execId, setExecId] = useState<string | null>(null)
+  const chatEndRef = useRef<HTMLDivElement>(null)
+  const bodyRef    = useRef<HTMLDivElement>(null)
+  const [bodyHeight, setBodyHeight] = useState(0)
+  const { token } = useAuthStore()
+
+  useEffect(() => { chatEndRef.current?.scrollIntoView({ behavior: 'smooth' }) }, [messages, aiLoading])
   useEffect(() => {
-    if (!collapsed && bodyRef.current) {
-      setBodyHeight(bodyRef.current.scrollHeight)
-    }
+    if (!collapsed && bodyRef.current) setBodyHeight(bodyRef.current.scrollHeight)
   })
 
-  const baseMessages = useMemo(() => {
-    if (livePrice <= 0) return []
-    const p   = livePrice
-    const sup = (p * (isUp ? 0.985 : 0.992)).toFixed(2)
-    const res = (p * (isUp ? 1.018 : 1.008)).toFixed(2)
-    const t1  = (p * (isUp ? 1.035 : 0.965)).toFixed(2)
-    const rsi = (isUp ? 52 + Math.round(Math.random()*12) : 38 + Math.round(Math.random()*10)).toString()
-    return [
-      { id:'a1', role:'signal' as const, time:'2m',  signal: isUp ? 'BUY' : 'SELL', conf: 68+Math.round(Math.random()*14), price: p },
-      { id:'a2', role:'ai'     as const, time:'4m',  text: `${pair} RSI(14) at ${rsi} — ${isUp ? 'bullish momentum building above EMA-20' : 'bearish pressure below EMA-50'}. Watch for candle close confirmation.` },
-      { id:'a3', role:'ai'     as const, time:'9m',  text: `Key levels: Support $${sup} · Resistance $${res}. ${isUp ? 'Bulls defending the 4H demand zone.' : 'Bears pushing through 4H supply zone.'}` },
-      { id:'a4', role:'signal' as const, time:'15m', signal:'NEUTRAL', conf:51, price: p*0.998 },
-      { id:'a5', role:'ai'     as const, time:'22m', text: `Volume profile: ${isUp ? 'rising buy volume confirms trend strength' : 'declining volume with falling price — distribution pattern'}. Target: $${t1}.` },
-      { id:'a6', role:'ai'     as const, time:'38m', text: `${asset} correlation with broader market is ${isUp ? 'positive' : 'diverging'}. Trend bias: ${isUp ? 'Long' : 'Short'}. Next confluence: $${t1}.` },
-      { id:'a7', role:'signal' as const, time:'1h',  signal: isUp ? 'BUY' : 'SELL', conf:74, price: p*0.994 },
-    ]
-  }, [pair, livePrice, isUp, asset])
+  // Reset messages when pair changes
+  useEffect(() => { setMessages([]) }, [pair])
 
-  const handleSend = () => {
-    const text = chatInput.trim()
-    if (!text) return
-    const replies = [
-      `Analyzing ${pair} — current trend is ${isUp ? 'bullish' : 'bearish'} with ${Math.abs(liveChange).toFixed(2)}% move in 24h.`,
-      `Based on technicals, ${asset} shows ${isUp ? 'strong buy' : 'strong sell'} signal at $${livePrice.toLocaleString('en-US',{maximumFractionDigits:2})}.`,
-      `Risk tip: set stop-loss at ${isUp ? '1.5–2%' : '1–1.5%'} below entry for this trade.`,
-      `${pair} volume is ${isUp ? 'above' : 'below'} the 20-period average — ${isUp ? 'confirming' : 'not confirming'} the price action.`,
-    ]
-    setUserMessages(prev => [...prev, { id: Date.now(), text, reply: replies[Math.floor(Math.random()*replies.length)] }])
-    setChatInput('')
+  const callAI = async (userText: string) => {
+    if (aiLoading) return
+    const userMsg: FinMsg = { id: `u-${Date.now()}`, role: 'user', text: userText }
+    setMessages(prev => [...prev, userMsg])
+    setInput('')
+    setAiLoading(true)
+    try {
+      const res = await fetch('/api/ai/chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({
+          message:    userText,
+          pair:       pair,
+          price:      livePrice || undefined,
+          change_24h: liveChange || undefined,
+        }),
+      })
+      const data = await res.json()
+      const replyText: string = data.reply ?? 'Fin is unavailable right now.'
+      const suggestion = livePrice > 0 ? parseTradeSuggestion(replyText, livePrice) : null
+      const aiMsg: FinMsg = { id: `a-${Date.now()}`, role: 'ai', text: replyText, suggestion: suggestion ?? undefined }
+      setMessages(prev => [...prev, aiMsg])
+    } catch {
+      setMessages(prev => [...prev, { id: `a-${Date.now()}`, role: 'ai', text: 'Connection error — please try again.' }])
+    } finally {
+      setAiLoading(false)
+    }
+  }
+
+  const handleSend = () => { const t = input.trim(); if (t) callAI(t) }
+
+  const handleSuggestTrade = () => {
+    const prompt = `Suggest a trade for ${pair} right now at $${livePrice.toLocaleString('en-US', { maximumFractionDigits: 4 })}. Give me a clear BUY or SELL direction with entry price, stop-loss, and take-profit levels.`
+    callAI(prompt)
+  }
+
+  const handleExecute = async (sugg: TradeSugg, msgId: string) => {
+    setExecId(msgId)
+    try {
+      const res = await executeTrade({
+        pair,
+        side:           sugg.side,
+        order_type:     'market',
+        price:          livePrice || sugg.entry,
+        amount:         0.01,
+        paper:          false,
+        exchange_label: usingBalance ? undefined : selExchange,
+        stop_loss:      sugg.sl,
+        take_profit:    sugg.tp,
+      })
+      const d = res.data
+      toast.success(
+        `${sugg.side === 'buy' ? '📈 Buy' : '📉 Sell'} order placed for ${pair}!`,
+        { duration: 4000 }
+      )
+      if (d?.trade?.new_balance !== undefined) {
+        useAuthStore.getState().setUser({
+          ...useAuthStore.getState().user!,
+          balance_usdt: d.trade.new_balance,
+        })
+      }
+    } catch (err: unknown) {
+      toast.error(
+        (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail || 'Order failed'
+      )
+    } finally {
+      setExecId(null)
+    }
   }
 
   return (
     <div className="bg-[#161a1e] border-y border-[#2b3139] sm:border sm:rounded-xl flex flex-col overflow-hidden">
-      {/* Header — always visible */}
+      {/* Header */}
       <div className="flex items-center gap-2 px-4 py-3 border-b border-[#2b3139] flex-shrink-0">
         <div className="w-6 h-6 rounded-lg bg-[#f0b90b]/15 flex items-center justify-center">
-          <MessageSquare size={12} className="text-[#f0b90b]" />
+          <Bot size={12} className="text-[#f0b90b]" />
         </div>
         <div>
-          <p className="text-xs font-bold text-[#eaecef] leading-none">FinChat</p>
-          <p className="text-[9px] text-[#848e9c] leading-none mt-0.5">powered by FinAi</p>
+          <p className="text-xs font-bold text-[#eaecef] leading-none">Fin AI</p>
+          <p className="text-[9px] text-[#848e9c] leading-none mt-0.5">Trade assistant · powered by FinAi</p>
         </div>
         <div className="flex items-center gap-1.5 ml-2">
           <span className="w-1.5 h-1.5 rounded-full bg-[#0ecb81] animate-pulse" />
           <span className="text-[10px] text-[#0ecb81]">Live</span>
         </div>
-        {/* Close button — X icon, distinct from chart collapse chevron */}
         <button
           onClick={onToggle}
           className="ml-auto flex items-center gap-1 px-2 py-1 rounded-lg hover:bg-[#f6465d]/10 text-[#848e9c] hover:text-[#f6465d] transition group"
-          title="Close FinChat"
+          title="Close Fin AI"
         >
-          <X size={11} className="transition" />
+          <X size={11} />
           <span className="text-[9px] font-semibold hidden group-hover:inline">close</span>
         </button>
       </div>
 
-      {/* Collapsible body — smooth slide via max-height transition */}
+      {/* Collapsible body */}
       <div
         ref={bodyRef}
         style={{
-          maxHeight: collapsed ? 0 : (bodyHeight > 0 ? bodyHeight : 600),
-          opacity: collapsed ? 0 : 1,
-          overflow: 'hidden',
+          maxHeight: collapsed ? 0 : (bodyHeight > 0 ? bodyHeight : 640),
+          opacity:   collapsed ? 0 : 1,
+          overflow:  'hidden',
           transition: 'max-height 0.32s cubic-bezier(0.4,0,0.2,1), opacity 0.22s ease',
         }}
       >
-        <>
-          {/* Pair context */}
-          <div className="px-4 py-2 bg-[#0b0e11]/50 border-b border-[#2b3139]/60 flex items-center gap-2 flex-shrink-0">
-            <span className="text-xs font-semibold text-[#f0b90b]">{pair}</span>
-            <span className="text-[10px] text-[#848e9c]">·</span>
-            <span className={`text-[10px] font-semibold ${isUp ? 'text-[#0ecb81]' : 'text-[#f6465d]'}`}>
-              {isUp ? '+' : ''}{liveChange.toFixed(2)}%
-            </span>
-            <span className="text-[10px] text-[#848e9c] ml-auto">AI Analysis</span>
-          </div>
+        {/* Pair context bar */}
+        <div className="px-4 py-2 bg-[#0b0e11]/50 border-b border-[#2b3139]/60 flex items-center gap-2 flex-shrink-0">
+          <span className="text-xs font-semibold text-[#f0b90b]">{pair}</span>
+          <span className="text-[10px] text-[#848e9c]">·</span>
+          <span className="text-[10px] text-[#eaecef] font-medium">
+            ${livePrice.toLocaleString('en-US', { maximumFractionDigits: 4 })}
+          </span>
+          <span className={`text-[10px] font-semibold ${isUp ? 'text-[#0ecb81]' : 'text-[#f6465d]'}`}>
+            {isUp ? '+' : ''}{liveChange.toFixed(2)}%
+          </span>
+          {/* Suggest trade quick button */}
+          <button
+            onClick={handleSuggestTrade}
+            disabled={aiLoading || livePrice <= 0}
+            className="ml-auto flex items-center gap-1 px-2.5 py-1 rounded-lg bg-[#f0b90b]/10 border border-[#f0b90b]/25 text-[#f0b90b] hover:bg-[#f0b90b]/20 transition text-[10px] font-semibold disabled:opacity-40 disabled:cursor-not-allowed"
+          >
+            <Sparkles size={10} />
+            Suggest trade
+          </button>
+        </div>
 
-          {/* Chat messages */}
-          <div className="flex-1 overflow-y-auto p-3 space-y-2.5" style={{ maxHeight: 320 }}>
-            {baseMessages.map(msg =>
-              msg.role === 'signal' ? (
-                <div key={msg.id} className="flex items-start gap-2">
-                  <div className={`w-1.5 h-1.5 rounded-full mt-1.5 flex-shrink-0 ${msg.signal==='BUY' ? 'bg-[#0ecb81]' : msg.signal==='SELL' ? 'bg-[#f6465d]' : 'bg-[#848e9c]'}`} />
-                  <div className={`flex-1 rounded-lg px-3 py-2 border ${msg.signal==='BUY' ? 'bg-[#0ecb81]/5 border-[#0ecb81]/20' : msg.signal==='SELL' ? 'bg-[#f6465d]/5 border-[#f6465d]/20' : 'bg-[#2b3139]/30 border-[#2b3139]'}`}>
-                    <div className="flex items-center justify-between mb-1">
-                      <span className={`text-[10px] font-bold tracking-wide ${msg.signal==='BUY' ? 'text-[#0ecb81]' : msg.signal==='SELL' ? 'text-[#f6465d]' : 'text-[#848e9c]'}`}>
-                        {msg.signal} SIGNAL
-                      </span>
-                      <span className="text-[9px] text-[#4a5568]">{msg.time} ago</span>
-                    </div>
-                    <div className="flex items-center gap-3">
-                      <span className="text-[10px] text-[#848e9c]">@ ${msg.price.toLocaleString('en-US',{maximumFractionDigits:2})}</span>
-                      <div className="flex items-center gap-1 ml-auto">
-                        <span className="text-[9px] text-[#848e9c]">Conf.</span>
-                        <div className="w-16 h-1.5 bg-[#2b3139] rounded-full overflow-hidden">
-                          <div className={`h-full rounded-full ${msg.signal==='BUY' ? 'bg-[#0ecb81]' : msg.signal==='SELL' ? 'bg-[#f6465d]' : 'bg-[#848e9c]'}`} style={{ width:`${msg.conf}%` }} />
-                        </div>
-                        <span className={`text-[9px] font-bold ${msg.signal==='BUY' ? 'text-[#0ecb81]' : msg.signal==='SELL' ? 'text-[#f6465d]' : 'text-[#848e9c]'}`}>{msg.conf}%</span>
-                      </div>
-                    </div>
+        {/* Messages */}
+        <div className="overflow-y-auto p-3 space-y-3" style={{ maxHeight: 360 }}>
+          {messages.length === 0 && !aiLoading && (
+            <div className="flex flex-col items-center justify-center py-8 gap-2 text-center">
+              <div className="w-10 h-10 rounded-full bg-[#f0b90b]/10 flex items-center justify-center">
+                <Bot size={20} className="text-[#f0b90b]" />
+              </div>
+              <p className="text-xs font-semibold text-[#eaecef]">Ask Fin about {pair}</p>
+              <p className="text-[10px] text-[#848e9c] max-w-[220px]">
+                Click <span className="text-[#f0b90b] font-semibold">Suggest trade</span> for an AI trade idea, or type any question below.
+              </p>
+            </div>
+          )}
+
+          {messages.map(msg => (
+            <div key={msg.id}>
+              {msg.role === 'user' ? (
+                /* User bubble */
+                <div className="flex justify-end">
+                  <div className="bg-[#f0b90b]/10 border border-[#f0b90b]/20 rounded-xl rounded-tr-sm px-3 py-2 max-w-[85%]">
+                    <p className="text-[11px] text-[#eaecef] leading-relaxed">{msg.text}</p>
                   </div>
                 </div>
               ) : (
-                <div key={msg.id} className="flex items-start gap-2">
-                  <div className="w-5 h-5 rounded-full bg-[#f0b90b]/10 flex items-center justify-center flex-shrink-0 mt-0.5">
-                    <Bot size={10} className="text-[#f0b90b]" />
-                  </div>
-                  <div className="flex-1">
-                    <div className="flex items-center gap-1.5 mb-0.5">
-                      <span className="text-[10px] font-semibold text-[#f0b90b]">FinAi</span>
-                      <span className="text-[9px] text-[#4a5568]">{msg.time} ago</span>
-                    </div>
-                    <p className="text-[11px] text-[#848e9c] leading-relaxed">{msg.text}</p>
-                  </div>
-                </div>
-              )
-            )}
-            {userMessages.map(um => (
-              <div key={um.id}>
-                <div className="flex justify-end mb-1.5">
-                  <div className="bg-[#f0b90b]/10 border border-[#f0b90b]/20 rounded-lg px-3 py-2 max-w-[85%]">
-                    <p className="text-[11px] text-[#eaecef]">{um.text}</p>
-                  </div>
-                </div>
+                /* AI bubble */
                 <div className="flex items-start gap-2">
                   <div className="w-5 h-5 rounded-full bg-[#f0b90b]/10 flex items-center justify-center flex-shrink-0 mt-0.5">
                     <Bot size={10} className="text-[#f0b90b]" />
                   </div>
-                  <div className="flex-1">
-                    <span className="text-[10px] font-semibold text-[#f0b90b]">FinAi</span>
-                    <p className="text-[11px] text-[#848e9c] leading-relaxed mt-0.5">{um.reply}</p>
+                  <div className="flex-1 min-w-0">
+                    <span className="text-[10px] font-semibold text-[#f0b90b]">Fin</span>
+                    <p className="text-[11px] text-[#848e9c] leading-relaxed mt-0.5 whitespace-pre-wrap">{msg.text}</p>
+
+                    {/* Trade suggestion card */}
+                    {msg.suggestion && (
+                      <div className={`mt-2 rounded-xl border px-3 py-2.5 ${
+                        msg.suggestion.side === 'buy'
+                          ? 'bg-[#0ecb81]/5 border-[#0ecb81]/25'
+                          : 'bg-[#f6465d]/5 border-[#f6465d]/25'
+                      }`}>
+                        <div className="flex items-center justify-between mb-2">
+                          <span className={`text-[10px] font-bold tracking-wide ${
+                            msg.suggestion.side === 'buy' ? 'text-[#0ecb81]' : 'text-[#f6465d]'
+                          }`}>
+                            {msg.suggestion.side === 'buy' ? '📈 BUY' : '📉 SELL'} SIGNAL · {pair}
+                          </span>
+                          <div className="flex items-center gap-1">
+                            <div className="w-12 h-1 bg-[#2b3139] rounded-full overflow-hidden">
+                              <div
+                                className={`h-full rounded-full ${msg.suggestion.side === 'buy' ? 'bg-[#0ecb81]' : 'bg-[#f6465d]'}`}
+                                style={{ width: `${msg.suggestion.conf}%` }}
+                              />
+                            </div>
+                            <span className={`text-[9px] font-bold ${msg.suggestion.side === 'buy' ? 'text-[#0ecb81]' : 'text-[#f6465d]'}`}>
+                              {msg.suggestion.conf}%
+                            </span>
+                          </div>
+                        </div>
+                        <div className="grid grid-cols-3 gap-2 mb-2.5">
+                          <div>
+                            <p className="text-[9px] text-[#848e9c] mb-0.5">Entry</p>
+                            <p className="text-[10px] font-semibold text-[#eaecef]">
+                              ${msg.suggestion.entry.toLocaleString('en-US', { maximumFractionDigits: 4 })}
+                            </p>
+                          </div>
+                          {msg.suggestion.sl && (
+                            <div>
+                              <p className="text-[9px] text-[#848e9c] mb-0.5">Stop-Loss</p>
+                              <p className="text-[10px] font-semibold text-[#f6465d]">
+                                ${msg.suggestion.sl.toLocaleString('en-US', { maximumFractionDigits: 4 })}
+                              </p>
+                            </div>
+                          )}
+                          {msg.suggestion.tp && (
+                            <div>
+                              <p className="text-[9px] text-[#848e9c] mb-0.5">Take-Profit</p>
+                              <p className="text-[10px] font-semibold text-[#0ecb81]">
+                                ${msg.suggestion.tp.toLocaleString('en-US', { maximumFractionDigits: 4 })}
+                              </p>
+                            </div>
+                          )}
+                        </div>
+                        <button
+                          onClick={() => handleExecute(msg.suggestion!, msg.id)}
+                          disabled={execId === msg.id}
+                          className={`w-full flex items-center justify-center gap-1.5 py-1.5 rounded-lg text-[11px] font-bold transition ${
+                            msg.suggestion.side === 'buy'
+                              ? 'bg-[#0ecb81] hover:bg-[#0ecb81]/90 text-[#0b0e11]'
+                              : 'bg-[#f6465d] hover:bg-[#f6465d]/90 text-white'
+                          } disabled:opacity-60 disabled:cursor-not-allowed`}
+                        >
+                          {execId === msg.id
+                            ? <><Loader2 size={11} className="animate-spin" /> Placing order…</>
+                            : <>{msg.suggestion.side === 'buy' ? '📈 Execute Buy' : '📉 Execute Sell'} · {pair}</>
+                          }
+                        </button>
+                        <p className="text-[9px] text-[#848e9c] text-center mt-1.5">
+                          0.01 lot · {usingBalance ? 'Platform Balance' : selExchange} · market order
+                        </p>
+                      </div>
+                    )}
                   </div>
                 </div>
-              </div>
-            ))}
-            <div ref={chatEndRef} />
-          </div>
-
-          {/* Chat input */}
-          <div className="px-3 py-3 border-t border-[#2b3139] flex-shrink-0">
-            <div className="flex gap-2">
-              <input
-                value={chatInput}
-                onChange={e => setChatInput(e.target.value)}
-                onKeyDown={e => e.key === 'Enter' && handleSend()}
-                placeholder={`Ask about ${pair}…`}
-                className="flex-1 bg-[#0b0e11] border border-[#2b3139] focus:border-[#f0b90b]/40 rounded-lg px-3 py-2 text-xs text-[#eaecef] placeholder-[#4a5568] focus:outline-none transition"
-              />
-              <button onClick={handleSend} className="px-3 py-2 rounded-lg bg-[#f0b90b]/10 border border-[#f0b90b]/20 text-[#f0b90b] hover:bg-[#f0b90b]/20 transition">
-                <ArrowRight size={12} />
-              </button>
+              )}
             </div>
+          ))}
+
+          {/* AI typing indicator */}
+          {aiLoading && (
+            <div className="flex items-start gap-2">
+              <div className="w-5 h-5 rounded-full bg-[#f0b90b]/10 flex items-center justify-center flex-shrink-0 mt-0.5">
+                <Bot size={10} className="text-[#f0b90b]" />
+              </div>
+              <div className="flex items-center gap-1.5 px-3 py-2 bg-[#1e2329] border border-[#2b3139] rounded-xl rounded-tl-sm">
+                <span className="w-1.5 h-1.5 rounded-full bg-[#f0b90b] animate-bounce" style={{ animationDelay: '0ms' }} />
+                <span className="w-1.5 h-1.5 rounded-full bg-[#f0b90b] animate-bounce" style={{ animationDelay: '120ms' }} />
+                <span className="w-1.5 h-1.5 rounded-full bg-[#f0b90b] animate-bounce" style={{ animationDelay: '240ms' }} />
+              </div>
+            </div>
+          )}
+          <div ref={chatEndRef} />
+        </div>
+
+        {/* Input bar */}
+        <div className="px-3 py-3 border-t border-[#2b3139] flex-shrink-0">
+          <div className="flex gap-2">
+            <input
+              value={input}
+              onChange={e => setInput(e.target.value)}
+              onKeyDown={e => e.key === 'Enter' && !e.shiftKey && handleSend()}
+              placeholder={`Ask Fin about ${pair}…`}
+              disabled={aiLoading}
+              className="flex-1 bg-[#0b0e11] border border-[#2b3139] focus:border-[#f0b90b]/40 rounded-lg px-3 py-2 text-xs text-[#eaecef] placeholder-[#4a5568] focus:outline-none transition disabled:opacity-50"
+            />
+            <button
+              onClick={handleSend}
+              disabled={aiLoading || !input.trim()}
+              className="px-3 py-2 rounded-lg bg-[#f0b90b]/10 border border-[#f0b90b]/20 text-[#f0b90b] hover:bg-[#f0b90b]/20 transition disabled:opacity-40 disabled:cursor-not-allowed"
+            >
+              {aiLoading ? <Loader2 size={12} className="animate-spin" /> : <ArrowRight size={12} />}
+            </button>
           </div>
-        </>
+        </div>
       </div>
     </div>
   )
@@ -1218,6 +1384,7 @@ export default function TradePage() {
         <FinChatPanel
           pair={pair} livePrice={livePrice} liveChange={liveChange}
           collapsed={chatCollapsed} onToggle={() => { const v = !chatCollapsed; setChatCollapsed(v); localStorage.setItem('finai-chat', String(v)) }}
+          usingBalance={usingBalance} selExchange={selExchange}
         />
       </div>
       </div>
