@@ -318,7 +318,7 @@ function FinChatPanel({ pair, livePrice, liveChange, collapsed, onToggle, usingB
   }
 
   return (
-    <div className="bg-[#161a1e] border-y border-[#2b3139] sm:border sm:rounded-xl flex flex-col overflow-hidden">
+    <div className="bg-[#161a1e] sm:rounded-xl flex flex-col overflow-hidden">
       {/* Header */}
       <div className="flex items-center gap-2 px-4 py-3 border-b border-[#2b3139] flex-shrink-0">
         <div className="w-6 h-6 rounded-lg bg-[#f0b90b]/15 flex items-center justify-center">
@@ -778,7 +778,7 @@ export default function TradePage() {
       {/* ── 1. Buy/Sell Card - sticky top ───────────────────────────────── */}
       {showBuySell && (
         <div className="sticky top-0 z-40 -mx-4 sm:mx-0">
-        <div className="bg-[#161a1e] border-y border-[#2b3139] sm:border sm:rounded-xl px-4 py-3">
+        <div className="bg-[#161a1e] sm:rounded-xl px-4 py-3">
           <div className="flex items-center justify-center gap-3 w-full">
             <button type="button" disabled={orderLoading} onClick={() => handleQuickTrade('sell')}
               className="flex-1 px-7 py-2.5 rounded-xl text-sm font-bold bg-[#f6465d] hover:bg-[#d93d51] text-white transition active:scale-[0.98] disabled:opacity-50">
@@ -1345,7 +1345,7 @@ export default function TradePage() {
 
         {/* ── Icon tab nav — full-bleed, below Open Positions ─────────── */}
         <div className="-mx-4 sm:mx-0">
-        <div className="flex items-center gap-0.5 bg-[#161a1e] border-y border-[#2b3139] sm:border sm:rounded-xl px-1.5 py-1" ref={prefsRef}>
+        <div className="flex items-center gap-0.5 bg-[#161a1e] sm:rounded-xl px-1.5 py-1" ref={prefsRef}>
           {([
             { id: 'chart',     Icon: Tv,         title: 'Chart'      },
             { id: 'orderbook', Icon: ArrowUpDown, title: 'Order Book' },
