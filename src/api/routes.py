@@ -2077,13 +2077,43 @@ async def llm_status(current_user=Depends(get_current_user)):
 async def admin_health_check(db: Session = Depends(get_db)):
     import time
     checks = {}
-    # DB
+
+    # ── Database (with Supabase awareness) ───────────────────────────────────
     try:
+        from src.database.session import SUPABASE_DB_URL, supabase_client
+        t0 = time.time()
         db.execute(__import__("sqlalchemy").text("SELECT 1"))
-        checks["database"] = {"status": "healthy", "latency_ms": 0}
+        latency = round((time.time() - t0) * 1000)
+
+        using_supabase = bool(SUPABASE_DB_URL)
+        checks["database"] = {
+            "status": "healthy",
+            "latency_ms": latency,
+            "provider": "supabase" if using_supabase else "postgresql",
+            "supabase_client": "connected" if supabase_client else "not_configured",
+        }
     except Exception as e:
         checks["database"] = {"status": "error", "error": str(e)}
-    # Celery
+
+    # ── Supabase env check (separate card — only if vars are present) ─────────
+    try:
+        supabase_url = os.getenv("SUPABASE_URL", "").strip()
+        supabase_key = os.getenv("SUPABASE_KEY", "").strip()
+        url_set = bool(supabase_url and not supabase_url.startswith("https://your-project"))
+        key_set = bool(supabase_key and not supabase_key.startswith("your-service"))
+        db_url_set = bool(os.getenv("SUPABASE_DB_URL", "").strip())
+
+        if url_set or key_set or db_url_set:
+            checks["supabase_env"] = {
+                "status": "healthy" if (url_set and key_set and db_url_set) else "degraded",
+                "SUPABASE_URL": "set" if url_set else "missing",
+                "SUPABASE_KEY": "set" if key_set else "missing",
+                "SUPABASE_DB_URL": "set" if db_url_set else "missing",
+            }
+    except Exception as e:
+        checks["supabase_env"] = {"status": "error", "error": str(e)}
+
+    # ── Celery ────────────────────────────────────────────────────────────────
     try:
         from src.celery_app import celery_app as ca
         i = ca.control.inspect(timeout=1)
@@ -2091,7 +2121,8 @@ async def admin_health_check(db: Session = Depends(get_db)):
         checks["celery"] = {"status": "healthy" if stats else "degraded", "workers": len(stats)}
     except Exception as e:
         checks["celery"] = {"status": "error", "error": str(e)}
-    # External services
+
+    # ── External services ────────────────────────────────────────────────────
     import httpx
     for name, url in [("coingecko", "https://api.coingecko.com/api/v3/ping"),
                       ("binance", "https://api.binance.com/api/v3/ping")]:
@@ -2103,6 +2134,7 @@ async def admin_health_check(db: Session = Depends(get_db)):
                             "latency_ms": round((time.time() - t0) * 1000)}
         except Exception as e:
             checks[name] = {"status": "error", "error": str(e)[:100]}
+
     overall = "healthy" if all(c["status"] == "healthy" for c in checks.values()) else "degraded"
     return {"overall": overall, "checks": checks, "timestamp": datetime.utcnow().isoformat()}
 

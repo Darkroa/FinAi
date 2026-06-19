@@ -21,6 +21,13 @@ KEYS = {
     "Telegram Bot":               os.getenv("TELEGRAM_BOT_TOKEN"),
 }
 
+# ==================== Supabase Env ====================
+SUPABASE_VARS = {
+    "SUPABASE_URL":    os.getenv("SUPABASE_URL", "").strip(),
+    "SUPABASE_KEY":    os.getenv("SUPABASE_KEY", "").strip(),
+    "SUPABASE_DB_URL": os.getenv("SUPABASE_DB_URL", "").strip(),
+}
+
 
 # ==================== Test Function ====================
 
@@ -183,6 +190,53 @@ def test_telegram():
         return False
 
 
+# ==================== Supabase Env Check ====================
+
+def test_supabase_env():
+    """Check Supabase environment variables are present (does NOT test connectivity)."""
+    url = SUPABASE_VARS["SUPABASE_URL"]
+    key = SUPABASE_VARS["SUPABASE_KEY"]
+    db_url = SUPABASE_VARS["SUPABASE_DB_URL"]
+
+    url_ok  = bool(url  and not url.startswith("https://your-project"))
+    key_ok  = bool(key  and not key.startswith("your-service"))
+    db_ok   = bool(db_url and not db_url.startswith("postgresql://postgres.your"))
+
+    print(f"   {'✅ set' if url_ok  else '❌ missing'}  SUPABASE_URL")
+    print(f"   {'✅ set' if key_ok  else '❌ missing'}  SUPABASE_KEY")
+    print(f"   {'✅ set' if db_ok   else '❌ missing'}  SUPABASE_DB_URL")
+
+    if url_ok and key_ok:
+        print("✅ Supabase: env vars present")
+    else:
+        print("⏭️  Supabase: not configured (app will use fallback DATABASE_URL)")
+    return url_ok and key_ok
+
+
+# ==================== DB Connection Check ====================
+
+def test_db_connection():
+    """
+    Verify the active database (Supabase or fallback) is reachable via SQLAlchemy.
+    Run AFTER AI checks — as the last connectivity check.
+    """
+    try:
+        from src.database.session import engine, DATABASE_URL, SUPABASE_DB_URL
+        from sqlalchemy import text
+        import time
+
+        source = "Supabase PostgreSQL" if SUPABASE_DB_URL else "Fallback DATABASE_URL"
+        t0 = time.time()
+        with engine.connect() as conn:
+            conn.execute(text("SELECT 1"))
+        latency = round((time.time() - t0) * 1000)
+        print(f"✅ Database ({source}): connected  [{latency} ms]")
+        return True
+    except Exception as e:
+        print(f"❌ Database: connection failed — {e}")
+        return False
+
+
 # ==================== Run All Tests ====================
 # Guarded so this only runs when executed directly:
 #   python src/utils/trykey.py
@@ -193,13 +247,17 @@ if __name__ == "__main__":
     print(" API Key Checker — reading from Replit Secrets / .env")
     print("=" * 50)
 
-    # Show which keys are present (without printing values)
-    print("\n📋 Keys found in environment:")
+    # ── Supabase env vars ─────────────────────────────────
+    print("\n🔐 Supabase environment:")
+    test_supabase_env()
+
+    # ── AI / service keys present? ────────────────────────
+    print("\n📋 AI & service keys found in environment:")
     for name, val in KEYS.items():
         status = "✅ set" if val and val.strip() else "❌ missing"
         print(f"   {status}  {name}")
-    print()
 
+    # ── Live connectivity tests ───────────────────────────
     testers = {
         "Google AI Studio (Gemini)": test_google_ai_studio,
         "Groq Cloud":                test_groq,
@@ -214,9 +272,13 @@ if __name__ == "__main__":
         "Telegram Bot":              test_telegram,
     }
 
-    print("🔍 Testing API connectivity:\n")
+    print("\n🔍 Testing API connectivity:\n")
     for provider, test_func in testers.items():
         test_func()
+
+    # ── DB connection (runs last) ─────────────────────────
+    print("\n🗄️  Testing database connection:\n")
+    test_db_connection()
 
     print("\n" + "=" * 50)
     print(" All checks completed")
