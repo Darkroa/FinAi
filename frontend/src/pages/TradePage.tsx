@@ -228,6 +228,9 @@ function FinChatPanel({ pair, livePrice, liveChange, collapsed, onToggle, usingB
   const [messages, setMessages] = useState<FinMsg[]>([])
   const [aiLoading, setAiLoading] = useState(false)
   const [execId, setExecId] = useState<string | null>(null)
+  const [chatLot, setChatLot]       = useState('0.01')
+  const [chatLevIdx, setChatLevIdx] = useState(0)
+  const chatLeverage = LEVERAGE_STEPS[chatLevIdx]
   const chatEndRef = useRef<HTMLDivElement>(null)
   const bodyRef    = useRef<HTMLDivElement>(null)
   const [bodyHeight, setBodyHeight] = useState(0)
@@ -278,6 +281,7 @@ function FinChatPanel({ pair, livePrice, liveChange, collapsed, onToggle, usingB
   }
 
   const handleExecute = async (sugg: TradeSugg, msgId: string) => {
+    const lotQty = parseFloat(chatLot) || 0.01
     setExecId(msgId)
     try {
       const res = await executeTrade({
@@ -285,11 +289,13 @@ function FinChatPanel({ pair, livePrice, liveChange, collapsed, onToggle, usingB
         side:           sugg.side,
         order_type:     'market',
         price:          livePrice || sugg.entry,
-        amount:         0.01,
+        amount:         lotQty,
         paper:          false,
         exchange_label: usingBalance ? undefined : selExchange,
         stop_loss:      sugg.sl,
         take_profit:    sugg.tp,
+        leverage:       chatLeverage > 1 ? chatLeverage : undefined,
+        lot_size:       lotQty,
       })
       const d = res.data
       toast.success(
@@ -356,7 +362,6 @@ function FinChatPanel({ pair, livePrice, liveChange, collapsed, onToggle, usingB
           <span className={`text-[10px] font-semibold ${isUp ? 'text-[#0ecb81]' : 'text-[#f6465d]'}`}>
             {isUp ? '+' : ''}{liveChange.toFixed(2)}%
           </span>
-          {/* Suggest trade quick button */}
           <button
             onClick={handleSuggestTrade}
             disabled={aiLoading || livePrice <= 0}
@@ -365,6 +370,55 @@ function FinChatPanel({ pair, livePrice, liveChange, collapsed, onToggle, usingB
             <Sparkles size={10} />
             Suggest trade
           </button>
+        </div>
+
+        {/* Lot size + Leverage controls */}
+        <div className="px-3 py-2 bg-[#0b0e11]/30 border-b border-[#2b3139]/50 flex items-center gap-3 flex-shrink-0">
+          {/* Lot size */}
+          <div className="flex items-center gap-1.5">
+            <span className="text-[9px] text-[#848e9c] font-medium">Lot</span>
+            <button
+              type="button"
+              onClick={() => { const n = Math.max(0.01, parseFloat(chatLot || '0.01') - 0.01); setChatLot(n.toFixed(2)) }}
+              className="w-5 h-5 rounded bg-[#2b3139] flex items-center justify-center text-[#848e9c] hover:text-[#eaecef] hover:bg-[#3a424e] transition"
+            ><Minus size={8} /></button>
+            <input
+              type="number"
+              value={chatLot}
+              onChange={e => setChatLot(e.target.value)}
+              onBlur={e => { const n = parseFloat(e.target.value); if (!isNaN(n) && n > 0) setChatLot(Math.min(100, Math.max(0.01, n)).toFixed(2)) }}
+              className="w-14 bg-[#1e2329] border border-[#2b3139] focus:border-[#f0b90b]/40 rounded px-1.5 py-0.5 text-[10px] font-mono text-[#f0b90b] text-center focus:outline-none"
+            />
+            <button
+              type="button"
+              onClick={() => { const n = Math.min(100, parseFloat(chatLot || '0.01') + 0.01); setChatLot(n.toFixed(2)) }}
+              className="w-5 h-5 rounded bg-[#2b3139] flex items-center justify-center text-[#848e9c] hover:text-[#eaecef] hover:bg-[#3a424e] transition"
+            ><Plus size={8} /></button>
+          </div>
+
+          {/* Divider */}
+          <span className="text-[#2b3139]">|</span>
+
+          {/* Leverage */}
+          <div className="flex items-center gap-1.5">
+            <span className="text-[9px] text-[#848e9c] font-medium">Lev</span>
+            <button
+              type="button"
+              onClick={() => setChatLevIdx(i => Math.max(0, i - 1))}
+              className="w-5 h-5 rounded bg-[#2b3139] flex items-center justify-center text-[#848e9c] hover:text-[#eaecef] hover:bg-[#3a424e] transition"
+            ><Minus size={8} /></button>
+            <span className="w-10 text-center text-[10px] font-bold font-mono text-[#f0b90b]">{chatLeverage}x</span>
+            <button
+              type="button"
+              onClick={() => setChatLevIdx(i => Math.min(LEVERAGE_STEPS.length - 1, i + 1))}
+              className="w-5 h-5 rounded bg-[#2b3139] flex items-center justify-center text-[#848e9c] hover:text-[#eaecef] hover:bg-[#3a424e] transition"
+            ><Plus size={8} /></button>
+          </div>
+
+          {/* Exchange badge */}
+          <span className="ml-auto text-[9px] text-[#848e9c] truncate max-w-[80px]">
+            {usingBalance ? 'Platform Bal.' : selExchange}
+          </span>
         </div>
 
         {/* Messages */}
@@ -464,7 +518,7 @@ function FinChatPanel({ pair, livePrice, liveChange, collapsed, onToggle, usingB
                           }
                         </button>
                         <p className="text-[9px] text-[#848e9c] text-center mt-1.5">
-                          0.01 lot · {usingBalance ? 'Platform Balance' : selExchange} · market order
+                          {chatLot} lot{chatLeverage > 1 ? ` · ${chatLeverage}x` : ''} · {usingBalance ? 'Platform Balance' : selExchange} · market
                         </p>
                       </div>
                     )}

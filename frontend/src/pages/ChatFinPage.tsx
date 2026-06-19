@@ -213,6 +213,8 @@ export default function ChatFinPage() {
         body.pair = selectedIndex.name
       } else if (marketTab === 'metals' && selectedCommod) {
         body.pair = selectedCommod.symbol
+        if (selectedCommod.price > 0) body.price = selectedCommod.price
+        if (selectedCommod.change !== 0) body.change_24h = selectedCommod.change
       }
 
       const res  = await fetch('/api/ai/chat', {
