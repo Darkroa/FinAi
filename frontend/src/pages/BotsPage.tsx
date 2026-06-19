@@ -1150,11 +1150,21 @@ export default function BotsPage() {
                         {bot.running ? 'Running' : 'Stopped'}
                       </span>
                     </div>
-                    <div className="flex items-center gap-4 text-xs text-[#848e9c]">
+                    <div className="flex flex-wrap items-center gap-3 text-xs text-[#848e9c]">
                       <span>Trades: <span className="text-[#eaecef] font-mono">{bot.trades_today ?? 0}/{bot.max_trades_per_day ?? 10}</span></span>
+                      <span>Events: <span className="text-[#f0b90b] font-mono">{bot.events_generated ?? 0} generated</span></span>
                       <span>Impact: <span className="text-[#eaecef] font-mono">≥{bot.min_impact_score ?? 7}</span></span>
                       <span>Capital: <span className="text-[#eaecef] font-mono">${(bot.capital_per_trade ?? 500).toFixed(0)}</span></span>
                     </div>
+                    {(bot.recent_trades ?? []).length > 0 && (
+                      <div className="w-full mt-1 flex flex-wrap gap-1.5">
+                        {(bot.recent_trades as any[]).slice(0, 3).map((t: any, i: number) => (
+                          <span key={i} className={`text-[10px] font-mono px-2 py-0.5 rounded-full border ${t.action === 'BUY' ? 'bg-[#0ecb81]/10 border-[#0ecb81]/30 text-[#0ecb81]' : 'bg-[#f6465d]/10 border-[#f6465d]/30 text-[#f6465d]'}`}>
+                            {t.action} {t.ticker} @${(t.price ?? 0).toLocaleString(undefined, { maximumFractionDigits: 2 })} · {t.time}
+                          </span>
+                        ))}
+                      </div>
+                    )}
                     {bot.running && (
                       <div className="flex items-center gap-1.5">
                         <button onClick={() => {

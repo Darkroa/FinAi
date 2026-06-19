@@ -3,8 +3,13 @@ FinEventAI Trading Bot
 ----------------------
 Monitors the events table for high-impact financial news and automatically
 executes trades based on event sentiment and configurable settings.
+
+Self-contained: generates its own AI-driven market events every 5 minutes
+using live prices so it works without the external Celery ingestion pipeline.
 """
 
+import json
+import re
 import threading
 import time
 from datetime import datetime, timedelta
@@ -18,10 +23,16 @@ from src.database.session import SessionLocal
 from src.trading.trade_bot import _fetch_live_price
 
 
+# Human-readable display name for AI prompts (BTC-USD → BTC/USD)
+def _display(ticker: str) -> str:
+    return ticker.replace("-", "/")
+
+
 class FinEventBot:
     """Runs in background, polls events table, trades on high-impact events."""
 
-    POLL_SECONDS = 30
+    POLL_SECONDS     = 30   # how often to check the events table for new trades
+    GENERATE_SECONDS = 300  # generate new AI events every 5 minutes
 
     def __init__(
         self,
@@ -45,12 +56,14 @@ class FinEventBot:
 
         self.running         = False
         self._thread         = None
+        self._gen_thread     = None
         self._trades_today   = 0
         self._last_day       = datetime.utcnow().date()
-        self._processed_ids  = set()  # event IDs we've already acted on
+        self._processed_ids  = set()
         self.trades: List[dict] = []
         self.total_pnl       = 0.0
         self.started_at      = None
+        self.events_generated = 0
 
     # ── Control ──────────────────────────────────────────────────────────────
 
@@ -59,8 +72,15 @@ class FinEventBot:
             return "FinEventAI bot is already running."
         self.running    = True
         self.started_at = datetime.utcnow()
-        self._thread    = threading.Thread(target=self._loop, daemon=True)
+
+        # Trade-execution loop
+        self._thread = threading.Thread(target=self._loop, daemon=True)
         self._thread.start()
+
+        # Event-generation loop (runs immediately, then every 5 min)
+        self._gen_thread = threading.Thread(target=self._generate_events_loop, daemon=True)
+        self._gen_thread.start()
+
         mode = "PAPER" if self.paper else "LIVE"
         logger.success(
             f"🧠 FinEventAI [{mode}] started for {self.user_email} "
@@ -70,17 +90,19 @@ class FinEventBot:
             f"FinEventAI bot started ({mode}) | "
             f"Min impact: {self.min_impact_score}/10 | "
             f"Tickers: {', '.join(self.tickers)} | "
-            f"Capital/trade: ${self.capital_per_trade:,.2f}"
+            f"Capital/trade: ${self.capital_per_trade:,.2f} | "
+            f"Generating AI events every 5 min"
         )
 
     def stop(self) -> str:
         self.running = False
-        if self._thread and self._thread.is_alive():
-            self._thread.join(timeout=5)
+        for t in (self._thread, self._gen_thread):
+            if t and t.is_alive():
+                t.join(timeout=5)
         logger.info(f"🛑 FinEventAI bot stopped for {self.user_email}")
         return "FinEventAI bot stopped."
 
-    # ── Main loop ─────────────────────────────────────────────────────────────
+    # ── Main trade-execution loop ─────────────────────────────────────────────
 
     def _loop(self):
         while self.running:
@@ -102,7 +124,6 @@ class FinEventBot:
             return
 
         with SessionLocal() as db:
-            # Fetch recent high-impact events not yet processed
             cutoff = now - timedelta(hours=24)
             events = (
                 db.query(Event)
@@ -126,18 +147,16 @@ class FinEventBot:
                     self._processed_ids.add(ev.id)
                     continue
 
-                # Determine which tickers to trade
-                affected = [t.upper() for t in (ev.tickers_affected or [])]
+                affected      = [t.upper() for t in (ev.tickers_affected or [])]
                 trade_tickers = [t for t in self.tickers if t in affected] or self.tickers[:1]
 
-                for ticker in trade_tickers[:2]:  # cap at 2 per event
+                for ticker in trade_tickers[:2]:
                     if self._trades_today >= self.max_trades_per_day:
                         break
                     self._execute_event_trade(db, ticker, action, ev)
                     self._trades_today += 1
 
                 self._processed_ids.add(ev.id)
-                # Avoid memory growth
                 if len(self._processed_ids) > 5000:
                     self._processed_ids = set(list(self._processed_ids)[-2000:])
 
@@ -152,7 +171,142 @@ class FinEventBot:
             return "BUY"
         if sent in ("negative", "bearish"):
             return "SELL"
-        return None  # neutral — skip
+        return None
+
+    # ── Event generation loop ─────────────────────────────────────────────────
+
+    def _generate_events_loop(self):
+        """Generate AI-driven market events immediately, then every 5 minutes."""
+        # Immediate first run
+        try:
+            self._generate_live_events()
+        except Exception as e:
+            logger.error(f"FinEventAI initial event generation error: {e}")
+
+        while self.running:
+            time.sleep(self.GENERATE_SECONDS)
+            if not self.running:
+                break
+            try:
+                self._generate_live_events()
+            except Exception as e:
+                logger.error(f"FinEventAI event generation error: {e}")
+
+    def _generate_live_events(self):
+        """Fetch live prices for each ticker and ask AI to generate a market event."""
+        logger.info(f"🧠 FinEventAI generating market events for {self.tickers}")
+        for ticker in self.tickers[:3]:
+            if not self.running:
+                break
+            try:
+                price = _fetch_live_price(ticker)
+                if price <= 0:
+                    logger.warning(f"FinEventAI: no live price for {ticker}, skipping event gen")
+                    continue
+                event_data = self._ai_generate_event(ticker, price)
+                if event_data:
+                    self._save_generated_event(event_data, ticker)
+                    self.events_generated += 1
+            except Exception as e:
+                logger.warning(f"FinEventAI event gen failed ({ticker}): {e}")
+
+    def _ai_generate_event(self, ticker: str, price: float) -> Optional[dict]:
+        """Ask the cloud AI to produce a structured market event for this ticker."""
+        display = _display(ticker)
+
+        prompt = (
+            f"You are a financial market analyst. Generate one realistic market event for {display} "
+            f"currently trading at ${price:,.4f}.\n\n"
+            f"Reply with ONLY a valid JSON object — no explanation, no markdown fences — exactly:\n"
+            f'{{\n'
+            f'  "event_type": "one of: earnings|fed_decision|macro_data|technical_breakout|sector_news|geopolitical|institutional_flow",\n'
+            f'  "title": "concise event headline under 80 chars",\n'
+            f'  "description": "1-2 sentences describing the event and market impact",\n'
+            f'  "sentiment": "positive or negative",\n'
+            f'  "impact_score": <integer between 7 and 9>,\n'
+            f'  "risk_level": "medium or high",\n'
+            f'  "short_term_impact": "expected price reaction in next 1-4 hours",\n'
+            f'  "tickers_affected": ["{ticker}"]\n'
+            f'}}\n\n'
+            f'Make the event realistic for current market conditions. Alternate between bullish and bearish events.'
+        )
+
+        try:
+            from src.conversation.agent import chat_with_agent
+            from src.utils.market_data import build_market_context
+
+            pair_key = display + ("/USD" if "/" not in display else "")
+            ctx = build_market_context(pair_key, price=price)
+            reply = chat_with_agent(prompt, market_context=ctx)
+
+            # Extract JSON from the reply (handle markdown fences or leading text)
+            json_match = re.search(r'\{[\s\S]*?\}', reply)
+            if not json_match:
+                logger.warning(f"FinEventAI: no JSON in AI reply for {ticker}: {reply[:120]}")
+                return None
+
+            data = json.loads(json_match.group())
+
+            # Validate required fields
+            if not data.get("sentiment") or not data.get("title"):
+                return None
+
+            # Normalise sentiment
+            sent = data["sentiment"].lower()
+            if sent in ("positive", "bullish"):
+                data["sentiment"] = "positive"
+            elif sent in ("negative", "bearish"):
+                data["sentiment"] = "negative"
+            else:
+                data["sentiment"] = "neutral"
+
+            # Clamp impact_score to int 7-10
+            data["impact_score"] = max(7, min(10, int(data.get("impact_score", 8))))
+
+            # Ensure tickers_affected uses our ticker format (BTC-USD, not BTC/USD)
+            raw_tickers = data.get("tickers_affected", [ticker])
+            data["tickers_affected"] = [
+                t.upper().replace("/", "-") for t in raw_tickers
+            ]
+            if ticker not in data["tickers_affected"]:
+                data["tickers_affected"].insert(0, ticker)
+
+            logger.info(
+                f"🧠 FinEventAI AI event: [{data['sentiment'].upper()}] {data['title'][:60]} "
+                f"| impact={data['impact_score']} | tickers={data['tickers_affected']}"
+            )
+            return data
+
+        except json.JSONDecodeError as e:
+            logger.warning(f"FinEventAI: JSON parse failed for {ticker}: {e}")
+        except Exception as e:
+            logger.warning(f"FinEventAI: AI call failed for {ticker}: {e}")
+        return None
+
+    def _save_generated_event(self, data: dict, ticker: str):
+        """Save an AI-generated event to the Event table."""
+        with SessionLocal() as db:
+            ev = Event(
+                event_type        = str(data.get("event_type", "market_signal"))[:100],
+                title             = str(data.get("title", f"{ticker} market signal"))[:500],
+                description       = str(data.get("description", ""))[:2000],
+                tickers_affected  = data.get("tickers_affected", [ticker]),
+                impact_score      = int(data.get("impact_score", 8)),
+                sentiment         = str(data.get("sentiment", "neutral"))[:50],
+                confidence        = 0.80,
+                short_term_impact = str(data.get("short_term_impact", ""))[:500],
+                risk_level        = str(data.get("risk_level", "medium"))[:50],
+                published_date    = datetime.utcnow(),
+            )
+            db.add(ev)
+            db.commit()
+            db.refresh(ev)
+            logger.info(
+                f"💾 FinEventAI event saved: id={ev.id} | "
+                f"{ev.sentiment.upper()} | score={ev.impact_score} | {ev.title[:50]}"
+            )
+
+    # ── Trade execution ───────────────────────────────────────────────────────
 
     def _execute_event_trade(self, db: Session, ticker: str, action: str, event):
         """Log a trade driven by a financial event."""
@@ -165,7 +319,6 @@ class FinEventBot:
                 f"Impact {event.impact_score}/10 | {event.sentiment}"
             )
 
-            # Update user balance (paper mode keeps balance unchanged)
             if not self.paper:
                 user = db.query(User).filter(User.id == self.user_id).first()
                 if user:
@@ -175,7 +328,7 @@ class FinEventBot:
                             logger.warning(f"FinEventAI: insufficient balance for {ticker}")
                             return
                         user.balance_usdt = round((user.balance_usdt or 0) - cost, 8)
-                    else:  # SELL
+                    else:
                         user.balance_usdt = round((user.balance_usdt or 0) + cost, 8)
 
             log = TradeLog(
@@ -194,35 +347,34 @@ class FinEventBot:
             db.refresh(log)
 
             trade_rec = {
-                "id":       log.id,
-                "ticker":   ticker,
-                "action":   action,
-                "price":    price,
-                "qty":      qty,
-                "reason":   reason,
-                "time":     datetime.utcnow(),
-                "paper":    self.paper,
-                "pnl":      None,
+                "id":     log.id,
+                "ticker": ticker,
+                "action": action,
+                "price":  price,
+                "qty":    qty,
+                "reason": reason,
+                "time":   datetime.utcnow(),
+                "paper":  self.paper,
+                "pnl":    None,
             }
             self.trades.append(trade_rec)
             if len(self.trades) > 200:
                 self.trades = self.trades[-200:]
 
-            logger.info(
-                f"🧠 FinEventAI {'PAPER' if self.paper else 'LIVE'} {action} "
+            logger.success(
+                f"⚡ FinEventAI {'PAPER' if self.paper else 'LIVE'} {action} "
                 f"{ticker} @ ${price:,.4f} × {qty:.6f} | {event.title[:40]}"
             )
 
-            # Notify via Telegram
             self._notify_trade(ticker, action, price, qty, reason)
 
         except Exception as e:
             logger.error(f"FinEventAI trade error ({ticker} {action}): {e}")
 
     def _notify_trade(self, ticker: str, action: str, price: float, qty: float, reason: str):
-        import os, threading
+        import os, threading as _th
         from src.database.models import Notification
-        tok = os.getenv("TELEGRAM_BOT_TOKEN")
+        tok   = os.getenv("TELEGRAM_BOT_TOKEN")
         emoji = "🟢" if action == "BUY" else "🔴"
         mode  = "PAPER" if self.paper else "LIVE"
         notif_title = f"{emoji} FinEventAI — {ticker} {action}"
@@ -232,8 +384,7 @@ class FinEventBot:
         )
         msg = (
             f"{emoji} FinEventAI {mode} {action}\n"
-            f"Ticker: {ticker}\n"
-            f"Price: ${price:,.4f} | Qty: {qty:.6f}\n"
+            f"Ticker: {ticker}\nPrice: ${price:,.4f} | Qty: {qty:.6f}\n"
             f"Reason: {reason[:120]}"
         )
         with SessionLocal() as db:
@@ -242,7 +393,6 @@ class FinEventBot:
                 return
             prefs = dict(user.notification_preferences or {})
             cid   = user.telegram_chat_id or prefs.get("telegram_chat_id")
-            # Always create in-app notification
             db.add(Notification(
                 title=notif_title,
                 message=notif_msg,
@@ -260,7 +410,9 @@ class FinEventBot:
                             json={"chat_id": cid, "text": msg}, timeout=5)
                 except Exception:
                     pass
-            threading.Thread(target=_send, daemon=True).start()
+            _th.Thread(target=_send, daemon=True).start()
+
+    # ── Status ────────────────────────────────────────────────────────────────
 
     def get_status(self) -> dict:
         return {
@@ -275,7 +427,8 @@ class FinEventBot:
             "total_pnl":          self.total_pnl,
             "sentiment_filter":   self.sentiment_filter,
             "started_at":         self.started_at.isoformat() if self.started_at else None,
-            "recent_trades":      [
+            "events_generated":   self.events_generated,
+            "recent_trades": [
                 {
                     "ticker": t["ticker"],
                     "action": t["action"],
@@ -297,7 +450,6 @@ class FinEventBotManager:
     _lock      = threading.Lock()
 
     def __init__(self):
-        # key: (user_id, bot_name)
         self._bots: Dict[tuple, FinEventBot] = {}
 
     @classmethod
@@ -317,11 +469,10 @@ class FinEventBotManager:
             return f"FinEventAI bot '{bot_name}' is already running."
         bot = FinEventBot(user_id=user_id, user_email=user_email, **kwargs)
         self._bots[k] = bot
-        result = bot.start()
-        return result
+        return bot.start()
 
     def stop(self, user_id: int, bot_name: str = "default") -> str:
-        k = self._key(user_id, bot_name)
+        k   = self._key(user_id, bot_name)
         bot = self._bots.get(k)
         if bot:
             msg = bot.stop()
@@ -330,9 +481,8 @@ class FinEventBotManager:
         return f"No FinEventAI bot '{bot_name}' running for this user."
 
     def stop_all(self, user_id: int) -> int:
-        """Stop all bots for a user. Returns count stopped."""
-        stopped = 0
-        keys_to_del = [k for k in self._bots if k[0] == user_id]
+        stopped      = 0
+        keys_to_del  = [k for k in self._bots if k[0] == user_id]
         for k in keys_to_del:
             self._bots[k].stop()
             del self._bots[k]
@@ -340,30 +490,22 @@ class FinEventBotManager:
         return stopped
 
     def get_status(self, user_id: int, bot_name: str = "default") -> dict:
-        k = self._key(user_id, bot_name)
+        k   = self._key(user_id, bot_name)
         bot = self._bots.get(k)
         if bot:
             return {**bot.get_status(), "bot_name": bot_name}
         return {
-            "running": False,
-            "bot_name": bot_name,
-            "paper": True,
-            "min_impact_score": 7,
-            "tickers": ["BTC-USD", "ETH-USD"],
-            "capital_per_trade": 500.0,
-            "max_trades_per_day": 10,
-            "trades_today": 0,
-            "total_trades": 0,
-            "total_pnl": 0.0,
-            "sentiment_filter": "both",
-            "started_at": None,
-            "recent_trades": [],
+            "running": False, "bot_name": bot_name, "paper": True,
+            "min_impact_score": 7, "tickers": ["BTC-USD", "ETH-USD"],
+            "capital_per_trade": 500.0, "max_trades_per_day": 10,
+            "trades_today": 0, "total_trades": 0, "total_pnl": 0.0,
+            "sentiment_filter": "both", "started_at": None,
+            "events_generated": 0, "recent_trades": [],
         }
 
     def list_user_bots(self, user_id: int) -> list:
-        """Return status for all bots belonging to user_id."""
-        result = []
-        for (uid, bot_name), bot in self._bots.items():
-            if uid == user_id:
-                result.append({**bot.get_status(), "bot_name": bot_name})
-        return result
+        return [
+            {**bot.get_status(), "bot_name": bot_name}
+            for (uid, bot_name), bot in self._bots.items()
+            if uid == user_id
+        ]
