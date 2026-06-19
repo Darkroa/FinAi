@@ -9,7 +9,6 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
-from prometheus_fastapi_instrumentator import Instrumentator
 from loguru import logger
 
 from src.api.routes import router
@@ -35,8 +34,6 @@ app.add_middleware(
 )
 app.add_middleware(APIRateLimitMiddleware)
 
-# Prometheus metrics
-Instrumentator().instrument(app).expose(app, endpoint="/metrics")
 
 # Include API routes
 app.include_router(router, prefix="/api")
