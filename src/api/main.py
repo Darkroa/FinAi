@@ -90,8 +90,15 @@ else:
 # ===================== Startup & Shutdown Events =====================
 @app.on_event("startup")
 async def startup_event():
-    
-    # DB schema
+
+    # ── Log which database is active ─────────────────────────────────────────
+    from src.database.session import SUPABASE_DB_URL, DATABASE_URL
+    if SUPABASE_DB_URL:
+        logger.success("🗄️  Database → Supabase PostgreSQL (SUPABASE_DB_URL)")
+    else:
+        logger.info(f"🗄️  Database → fallback PostgreSQL (DATABASE_URL)")
+
+    # ── DB schema + migrations (create_all + incremental ALTER TABLE) ─────────
     Base.metadata.create_all(bind=engine)
     from sqlalchemy import text as _text
     try:
