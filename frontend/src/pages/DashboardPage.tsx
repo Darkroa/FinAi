@@ -551,13 +551,6 @@ export default function DashboardPage() {
                   Start the FinEvent Bot in Bots page<br />to detect and display AI market events
                 </p>
               </div>
-              <button
-                onClick={() => navigate('/bots')}
-                className="flex items-center gap-1.5 text-[10px] font-semibold text-black bg-[#f0b90b] hover:bg-[#f0b90b]/90 px-3 py-1.5 rounded-lg transition"
-              >
-                <Bot size={11} />
-                Go to Bots
-              </button>
             </div>
           ) : events.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-8 gap-2">

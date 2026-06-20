@@ -497,8 +497,8 @@ export default function BotsPage() {
           )}
           {isFeSubscriber ? (
             <button onClick={() => { setFeCollapsed(false); setShowFePanel(s => !s) }}
-              className="flex items-center gap-1.5 text-xs bg-[#f0b90b]/10 hover:bg-[#f0b90b]/20 border border-[#f0b90b]/30 text-[#f0b90b] px-3 py-1.5 rounded-lg transition">
-              <Brain size={11} /> FinEventAI Bots
+              className="flex items-center gap-1 text-xs bg-[#f0b90b]/10 hover:bg-[#f0b90b]/20 border border-[#f0b90b]/30 text-[#f0b90b] px-2 py-1 rounded-lg transition">
+              <Brain size={9} /> FinEventAI Bots
             </button>
           ) : (
             <button onClick={() => navigate('/app/pricing')} title="Upgrade to unlock FinEventAI Bots"
@@ -519,8 +519,8 @@ export default function BotsPage() {
             </button>
           ) : (
             <button onClick={() => setShowAddBot(v => !v)}
-              className="flex items-center gap-1.5 text-xs bg-[#f0b90b] hover:bg-[#d9a60b] text-black font-semibold px-3 py-1.5 rounded-lg transition">
-              <Plus size={12} /> Add Bot
+              className="flex items-center gap-1 text-xs bg-[#f0b90b] hover:bg-[#d9a60b] text-black font-semibold px-2 py-1 rounded-lg transition">
+              <Plus size={9} /> Add FinBot
             </button>
           )}
           <button onClick={fetchData} disabled={loading}
@@ -839,11 +839,11 @@ export default function BotsPage() {
           </div>
           <div className="text-center">
             <p className="text-sm font-semibold text-[#eaecef]">No bots running</p>
-            <p className="text-xs text-[#848e9c] mt-1">Click "Add Bot" to launch your first AI trading bot</p>
+            <p className="text-xs text-[#848e9c] mt-1">Click "Add FinBot" to launch your Start trading bot</p>
           </div>
           <button onClick={() => setShowAddBot(true)}
             className="flex items-center gap-2 bg-[#f0b90b] hover:bg-[#d9a60b] text-black font-bold px-5 py-2.5 rounded-xl text-sm transition">
-            <Plus size={14} /> Add Bot
+            <Plus size={14} /> Add FinBot
           </button>
         </div>
       )}
@@ -1290,7 +1290,7 @@ export default function BotsPage() {
                           Edit
                         </button>
                         <button onClick={() => handleFeStop(bot.bot_name)} disabled={feLoading}
-                          className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-[#f6465d]/10 hover:bg-[#f6465d]/20 border border-[#f6465d]/30 text-[#f6465d] text-xs font-semibold transition disabled:opacity-60">
+                          className="flex items-center gap-1 px-1.5 py-1 rounded-lg bg-[#f6465d]/10 hover:bg-[#f6465d]/20 border border-[#f6465d]/30 text-[#f6465d] text-xs font-semibold transition disabled:opacity-60">
                           <Square size={10} /> Stop
                         </button>
                       </div>
@@ -1314,7 +1314,7 @@ export default function BotsPage() {
                 </div>
 
                 {/* Live summary chips */}
-                <div className="flex flex-wrap gap-1.5 text-[10px]">
+                <div className="flex flex-wrap gap-2 text-[10px]">
                   {[
                     { label: 'Name',       val: feParams.bot_name || `Bot ${feBots.length + 1}`,      color: 'text-[#eaecef]' },
                     { label: 'Tickers',    val: feTickerInput || 'BTC-USD,ETH-USD',                    color: 'text-[#f0b90b]'  },
@@ -1449,7 +1449,7 @@ export default function BotsPage() {
                   <button onClick={handleFeStart} disabled={feLoading}
                     className="flex items-center gap-1.5 px-6 py-2.5 bg-[#f0b90b] hover:bg-[#d9a60b] disabled:opacity-60 text-black rounded-xl text-sm font-bold transition">
                     {feLoading ? <RefreshCw size={13} className="animate-spin" /> : <Play size={13} />}
-                    {feLoading ? 'Starting…' : 'Launch FinEventAI Bot'}
+                    {feLoading ? 'Starting…' : 'Start Bot'}
                   </button>
                   <button onClick={() => setShowFePanel(false)}
                     className="text-sm px-4 py-2.5 rounded-xl border border-[#2b3139] text-[#848e9c] hover:text-[#eaecef] transition">
