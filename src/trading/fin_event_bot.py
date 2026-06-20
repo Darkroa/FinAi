@@ -64,6 +64,8 @@ class FinEventBot:
         self.total_pnl       = 0.0
         self.started_at      = None
         self.events_generated = 0
+        # key: ticker → {entry_price, qty, margin, opened_at}
+        self.open_positions: Dict[str, dict] = {}
 
     # ── Control ──────────────────────────────────────────────────────────────
 
@@ -331,16 +333,30 @@ class FinEventBot:
                     else:
                         user.balance_usdt = round((user.balance_usdt or 0) + cost, 8)
 
+            # ── Track open position ───────────────────────────────────────
+            pnl_value = None
+            if action == "BUY":
+                self.open_positions[ticker] = {
+                    "entry_price": price,
+                    "qty":         qty,
+                    "margin":      self.capital_per_trade,
+                    "opened_at":   datetime.utcnow().isoformat(),
+                }
+            elif action == "SELL" and ticker in self.open_positions:
+                op = self.open_positions.pop(ticker)
+                pnl_value = round((price - op["entry_price"]) * op["qty"], 4)
+                self.total_pnl = round(self.total_pnl + pnl_value, 4)
+
             log = TradeLog(
                 user_id  = self.user_id,
                 ticker   = ticker,
                 action   = action,
                 price    = price,
                 qty      = qty,
-                pnl      = None,
+                pnl      = pnl_value,
                 reason   = reason,
                 paper    = self.paper,
-                exchange = "FinEventAI",
+                exchange = "EventBot",
             )
             db.add(log)
             db.commit()
@@ -355,7 +371,7 @@ class FinEventBot:
                 "reason": reason,
                 "time":   datetime.utcnow(),
                 "paper":  self.paper,
-                "pnl":    None,
+                "pnl":    pnl_value,
             }
             self.trades.append(trade_rec)
             if len(self.trades) > 200:
@@ -417,6 +433,7 @@ class FinEventBot:
     def get_status(self) -> dict:
         return {
             "running":            self.running,
+            "open_positions":     self.open_positions,
             "paper":              self.paper,
             "min_impact_score":   self.min_impact_score,
             "tickers":            self.tickers,

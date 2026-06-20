@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback, useRef } from 'react'
+import { useEffect, useState, useCallback, useRef, useMemo } from 'react'
 import {
   getBotStatus, startBot, stopBot, closeBotPosition,
   getBotTrades, updateBotParams, getBotPnlHistory, listApiKeys,
@@ -1146,8 +1146,16 @@ export default function BotsPage() {
                     <div className="flex items-center gap-2 flex-1 min-w-0">
                       <span className={`w-2 h-2 rounded-full flex-shrink-0 ${bot.running ? 'bg-[#0ecb81] animate-pulse' : 'bg-[#2b3139]'}`} />
                       <span className="text-xs font-semibold text-[#eaecef] truncate capitalize">{bot.bot_name}</span>
-                      <span className={`text-[10px] px-1.5 py-0.5 rounded-full ${bot.running ? 'bg-[#0ecb81]/10 text-[#0ecb81]' : 'bg-[#2b3139] text-[#848e9c]'}`}>
-                        {bot.running ? 'Running' : 'Stopped'}
+                      <span className={`text-[10px] px-1.5 py-0.5 rounded-full ${
+                        bot.running && Object.keys(bot.open_positions ?? {}).length > 0
+                          ? 'bg-[#f0b90b]/10 text-[#f0b90b]'
+                          : bot.running
+                            ? 'bg-[#0ecb81]/10 text-[#0ecb81]'
+                            : 'bg-[#2b3139] text-[#848e9c]'
+                      }`}>
+                        {bot.running && Object.keys(bot.open_positions ?? {}).length > 0
+                          ? 'Open Position'
+                          : bot.running ? 'Running' : 'Stopped'}
                       </span>
                     </div>
                     <div className="flex flex-wrap items-center gap-3 text-xs text-[#848e9c]">
@@ -1156,12 +1164,29 @@ export default function BotsPage() {
                       <span>Impact: <span className="text-[#eaecef] font-mono">≥{bot.min_impact_score ?? 7}</span></span>
                       <span>Capital: <span className="text-[#eaecef] font-mono">${(bot.capital_per_trade ?? 500).toFixed(0)}</span></span>
                     </div>
-                    {(bot.recent_trades ?? []).length > 0 && (
-                      <div className="w-full mt-1 flex flex-wrap gap-1.5">
-                        {(bot.recent_trades as any[]).slice(0, 3).map((t: any, i: number) => (
-                          <span key={i} className={`text-[10px] font-mono px-2 py-0.5 rounded-full border ${t.action === 'BUY' ? 'bg-[#0ecb81]/10 border-[#0ecb81]/30 text-[#0ecb81]' : 'bg-[#f6465d]/10 border-[#f6465d]/30 text-[#f6465d]'}`}>
-                            {t.action} {t.ticker} @${(t.price ?? 0).toLocaleString(undefined, { maximumFractionDigits: 2 })} · {t.time}
-                          </span>
+                    {/* Open positions for this EventBot */}
+                    {Object.keys(bot.open_positions ?? {}).length > 0 && (
+                      <div className="w-full mt-1 space-y-1">
+                        {Object.entries(bot.open_positions as Record<string, { entry_price: number; qty: number; margin: number; opened_at: string }>).map(([ticker, pos]) => (
+                          <div key={ticker} className="bg-[#f0b90b]/5 border border-[#f0b90b]/20 rounded-lg px-3 py-2 space-y-1">
+                            <p className="text-[9px] text-[#f0b90b] font-semibold uppercase tracking-wide flex items-center gap-1">
+                              <Target size={8} /> Open Position · <span className="font-mono">{ticker}</span>
+                            </p>
+                            <div className="grid grid-cols-3 gap-2 text-[10px]">
+                              <div>
+                                <span className="text-[#848e9c]">Entry </span>
+                                <span className="font-mono text-[#eaecef]">${(pos.entry_price ?? 0).toLocaleString(undefined, { maximumFractionDigits: 2 })}</span>
+                              </div>
+                              <div>
+                                <span className="text-[#848e9c]">Qty </span>
+                                <span className="font-mono text-[#f0b90b]">{(pos.qty ?? 0).toFixed(6)}</span>
+                              </div>
+                              <div>
+                                <span className="text-[#848e9c]">Margin </span>
+                                <span className="font-mono text-[#eaecef]">${(pos.margin ?? 0).toFixed(2)}</span>
+                              </div>
+                            </div>
+                          </div>
                         ))}
                       </div>
                     )}
@@ -1277,44 +1302,6 @@ export default function BotsPage() {
               </div>
             )}
 
-            {/* Recent event trades — deposit-history card style */}
-            {feTrades.length > 0 && (
-              <div className="border-t border-[#2b3139]">
-                <div className="px-5 py-3 border-b border-[#2b3139] flex items-center justify-between">
-                  <p className="text-xs font-semibold text-[#848e9c] uppercase tracking-wide">Recent Event Trades</p>
-                  <span className="text-xs text-[#4a5568]">{feTrades.length} trades</span>
-                </div>
-                <div className="divide-y divide-[#2b3139]/50 max-h-80 overflow-y-auto">
-                  {feTrades.map((t, i) => (
-                    <div key={t.id ?? i} className="px-5 py-3.5 flex items-start gap-3 hover:bg-[#1e2329] transition">
-                      <div className={`w-9 h-9 rounded-full border flex items-center justify-center flex-shrink-0 ${t.action === 'BUY' ? 'bg-[#0ecb81]/10 border-[#0ecb81]/20' : 'bg-[#f6465d]/10 border-[#f6465d]/20'}`}>
-                        {t.action === 'BUY'
-                          ? <TrendingUp size={14} className="text-[#0ecb81]" />
-                          : <TrendingDown size={14} className="text-[#f6465d]" />}
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center justify-between gap-2">
-                          <p className="text-sm font-semibold text-[#eaecef] flex items-center gap-1.5">
-                            <span className="font-mono text-[#f0b90b]">{t.ticker}</span>
-                            <span className={`text-[10px] px-1.5 py-0.5 rounded font-bold ${t.action === 'BUY' ? 'bg-[#0ecb81]/10 text-[#0ecb81]' : 'bg-[#f6465d]/10 text-[#f6465d]'}`}>{t.action}</span>
-                          </p>
-                          <p className={`text-sm font-bold font-mono ${t.action === 'BUY' ? 'text-[#0ecb81]' : 'text-[#f6465d]'}`}>
-                            ${t.price < 1 ? Number(t.price).toFixed(5) : Number(t.price).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                          </p>
-                        </div>
-                        <div className="flex items-center justify-between gap-2 mt-1">
-                          <p className="text-[10px] text-[#848e9c]">Qty: <span className="font-mono">{Number(t.qty ?? 0).toFixed(6)}</span> · {t.created_at ? new Date(t.created_at).toLocaleDateString() : '—'}</p>
-                          {t.pnl != null
-                            ? <span className={`text-[10px] px-2 py-0.5 rounded-full font-medium ${t.pnl >= 0 ? 'bg-[#0ecb81]/10 text-[#0ecb81]' : 'bg-[#f6465d]/10 text-[#f6465d]'}`}>{t.pnl >= 0 ? '+' : ''}${fmt(t.pnl)}</span>
-                            : <span className="text-[10px] px-2 py-0.5 rounded-full bg-[#f0b90b]/10 text-[#f0b90b] font-medium">Open</span>}
-                        </div>
-                        {t.reason && <p className="text-[10px] text-[#4a5568] mt-1 truncate">{(t.reason || '').replace('FinEventAI | ', '')}</p>}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
 
             {/* Empty state */}
             {feBots.length === 0 && feTrades.length === 0 && !showFePanel && (
@@ -1415,67 +1402,87 @@ export default function BotsPage() {
         </div>
       </div>
 
-      {/* ── Full trade log — deposit-history card style ── */}
-      <div className="bg-[#161a1e] border border-[#2b3139] rounded-xl overflow-hidden">
-        <div className="px-4 py-3 border-b border-[#2b3139] flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <Zap size={13} className="text-[#f0b90b]" />
-            <h2 className="text-sm font-semibold text-[#eaecef]">Live Trade Log</h2>
-            {status.running && <span className="text-[10px] bg-[#0ecb81]/10 text-[#0ecb81] border border-[#0ecb81]/20 px-2 py-0.5 rounded-full animate-pulse">LIVE</span>}
-          </div>
-          <span className="text-xs text-[#848e9c]">{Math.min(trades.filter(t => !t.reason?.toLowerCase().includes('trading terminal')).length, 10)} AI trades</span>
-        </div>
+      {/* ── Full trade log — FinBot + EventBot merged ── */}
+      {(() => {
+        const mergedTrades = [
+          ...trades.map(t => ({ ...t, _src: 'finbot' as const })),
+          ...feTrades.map(t => ({ ...t, exchange: t.exchange || 'EventBot', _src: 'eventbot' as const })),
+        ]
+          .filter(t => !t.reason?.toLowerCase().includes('trading terminal'))
+          .sort((a, b) => new Date(b.created_at ?? 0).getTime() - new Date(a.created_at ?? 0).getTime())
+          .slice(0, 15)
 
-        {trades.filter(t => !t.reason?.toLowerCase().includes('trading terminal')).length === 0 ? (
-          <div className="py-14 flex flex-col items-center gap-2">
-            <Bot size={28} className="text-[#2b3139]" />
-            <p className="text-sm text-[#848e9c]">No AI trades yet — start a bot to begin</p>
-          </div>
-        ) : (
-          <div className="divide-y divide-[#2b3139]/50">
-            {trades.filter(t => !t.reason?.toLowerCase().includes('trading terminal')).slice(0, 10).map((t, i) => (
-              <div key={t.id ?? i} className="px-4 py-3.5 flex items-start gap-3 hover:bg-[#1e2329] transition">
-                <div className={`w-9 h-9 rounded-full border flex items-center justify-center flex-shrink-0 ${t.action === 'BUY' ? 'bg-[#0ecb81]/10 border-[#0ecb81]/20' : 'bg-[#f6465d]/10 border-[#f6465d]/20'}`}>
-                  {t.action === 'BUY'
-                    ? <TrendingUp size={14} className="text-[#0ecb81]" />
-                    : <TrendingDown size={14} className="text-[#f6465d]" />}
-                </div>
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center justify-between gap-2">
-                    <p className="text-sm font-semibold text-[#eaecef] flex items-center gap-1.5">
-                      <span className="font-mono text-[#f0b90b]">{t.ticker}</span>
-                      <span className={`text-[10px] px-1.5 py-0.5 rounded font-bold ${t.action === 'BUY' ? 'bg-[#0ecb81]/10 text-[#0ecb81]' : 'bg-[#f6465d]/10 text-[#f6465d]'}`}>{t.action}</span>
-                      <span className="text-[10px] text-[#848e9c] font-normal">{t.exchange}</span>
-                    </p>
-                    <p className={`text-sm font-bold font-mono ${t.action === 'BUY' ? 'text-[#0ecb81]' : 'text-[#f6465d]'}`}>
-                      ${t.price < 1 ? t.price.toFixed(5) : fmt(t.price)}
-                    </p>
-                  </div>
-                  <div className="flex items-center justify-between gap-2 mt-1">
-                    <p className="text-[10px] text-[#848e9c]">
-                      Qty: <span className="font-mono">{t.qty.toFixed(6)}</span>
-                      {' · '}{t.created_at ? new Date(t.created_at).toLocaleDateString() : '—'}
-                    </p>
-                    {t.pnl !== null
-                      ? <span className={`text-[10px] px-2 py-0.5 rounded-full font-medium ${t.pnl >= 0 ? 'bg-[#0ecb81]/10 text-[#0ecb81]' : 'bg-[#f6465d]/10 text-[#f6465d]'}`}>{t.pnl >= 0 ? '+' : ''}${fmt(t.pnl)}</span>
-                      : <span className="text-[10px] px-2 py-0.5 rounded-full bg-[#f0b90b]/10 text-[#f0b90b] font-medium">Open</span>}
-                  </div>
-                  {t.reason && <p className="text-[10px] text-[#4a5568] mt-1 truncate">{(t.reason ?? '').replace(/_/g, ' ')}</p>}
-                </div>
+        const isAnyBotLive = status.running || feBots.some(b => b.running)
+
+        return (
+          <div className="bg-[#161a1e] border border-[#2b3139] rounded-xl overflow-hidden">
+            <div className="px-4 py-3 border-b border-[#2b3139] flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Zap size={13} className="text-[#f0b90b]" />
+                <h2 className="text-sm font-semibold text-[#eaecef]">Live Trade Log</h2>
+                {isAnyBotLive && <span className="text-[10px] bg-[#0ecb81]/10 text-[#0ecb81] border border-[#0ecb81]/20 px-2 py-0.5 rounded-full animate-pulse">LIVE</span>}
               </div>
-            ))}
-          </div>
-        )}
+              <span className="text-xs text-[#848e9c]">{mergedTrades.length} AI trades</span>
+            </div>
 
-        {trades.length > 0 && (
-          <div className="px-4 py-3 border-t border-[#2b3139] flex justify-center">
-            <button onClick={() => navigate('/app/transactions')}
-              className="flex items-center gap-1.5 text-xs text-[#f0b90b] hover:text-[#eaecef] border border-[#f0b90b]/30 hover:border-[#f0b90b]/60 bg-[#f0b90b]/5 hover:bg-[#f0b90b]/10 px-4 py-2 rounded-lg transition font-medium">
-              <ArrowRight size={11} /> View All AI Trade History
-            </button>
+            {mergedTrades.length === 0 ? (
+              <div className="py-14 flex flex-col items-center gap-2">
+                <Bot size={28} className="text-[#2b3139]" />
+                <p className="text-sm text-[#848e9c]">No AI trades yet — start a bot to begin</p>
+              </div>
+            ) : (
+              <div className="divide-y divide-[#2b3139]/50">
+                {mergedTrades.map((t, i) => (
+                  <div key={(t.id ?? '') + i} className="px-4 py-3.5 flex items-start gap-3 hover:bg-[#1e2329] transition">
+                    <div className={`w-9 h-9 rounded-full border flex items-center justify-center flex-shrink-0 ${t.action === 'BUY' ? 'bg-[#0ecb81]/10 border-[#0ecb81]/20' : 'bg-[#f6465d]/10 border-[#f6465d]/20'}`}>
+                      {t.action === 'BUY'
+                        ? <TrendingUp size={14} className="text-[#0ecb81]" />
+                        : <TrendingDown size={14} className="text-[#f6465d]" />}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center justify-between gap-2">
+                        <p className="text-sm font-semibold text-[#eaecef] flex items-center gap-1.5">
+                          <span className="font-mono text-[#f0b90b]">{t.ticker}</span>
+                          <span className={`text-[10px] px-1.5 py-0.5 rounded font-bold ${t.action === 'BUY' ? 'bg-[#0ecb81]/10 text-[#0ecb81]' : 'bg-[#f6465d]/10 text-[#f6465d]'}`}>{t.action}</span>
+                          {t._src === 'eventbot'
+                            ? <span className="text-[10px] px-1.5 py-0.5 rounded bg-[#f0b90b]/10 text-[#f0b90b] font-medium">EventBot</span>
+                            : <span className="text-[10px] text-[#848e9c] font-normal">{t.exchange}</span>}
+                        </p>
+                        <p className={`text-sm font-bold font-mono ${t.action === 'BUY' ? 'text-[#0ecb81]' : 'text-[#f6465d]'}`}>
+                          ${(t.price ?? 0) < 1 ? Number(t.price).toFixed(5) : fmt(Number(t.price))}
+                        </p>
+                      </div>
+                      <div className="flex items-center justify-between gap-2 mt-1">
+                        <p className="text-[10px] text-[#848e9c]">
+                          Qty: <span className="font-mono">{Number(t.qty ?? 0).toFixed(6)}</span>
+                          {' · '}{t.created_at ? new Date(t.created_at).toLocaleDateString() : '—'}
+                        </p>
+                        {t.pnl != null
+                          ? <span className={`text-[10px] px-2 py-0.5 rounded-full font-medium ${t.pnl >= 0 ? 'bg-[#0ecb81]/10 text-[#0ecb81]' : 'bg-[#f6465d]/10 text-[#f6465d]'}`}>{t.pnl >= 0 ? '+' : ''}${fmt(t.pnl)}</span>
+                          : <span className="text-[10px] px-2 py-0.5 rounded-full bg-[#f0b90b]/10 text-[#f0b90b] font-medium">Open</span>}
+                      </div>
+                      {t.reason && (
+                        <p className="text-[10px] text-[#4a5568] mt-1 truncate">
+                          {(t.reason ?? '').replace('FinEventAI | ', '').replace(/_/g, ' ')}
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {mergedTrades.length > 0 && (
+              <div className="px-4 py-3 border-t border-[#2b3139] flex justify-center">
+                <button onClick={() => navigate('/app/transactions')}
+                  className="flex items-center gap-1.5 text-xs text-[#f0b90b] hover:text-[#eaecef] border border-[#f0b90b]/30 hover:border-[#f0b90b]/60 bg-[#f0b90b]/5 hover:bg-[#f0b90b]/10 px-4 py-2 rounded-lg transition font-medium">
+                  <ArrowRight size={11} /> View All AI Trade History
+                </button>
+              </div>
+            )}
           </div>
-        )}
-      </div>
+        )
+      })()}
     </div>
   )
 }
