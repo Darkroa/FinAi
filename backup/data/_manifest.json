@@ -1,0 +1,26 @@
+{
+  "exported_at": "2026-06-15 20:21:52 UTC",
+  "tables": [
+    "users",
+    "wallet_config",
+    "api_keys",
+    "transactions",
+    "user_money",
+    "trade_logs",
+    "notifications",
+    "support_tickets",
+    "support_messages",
+    "subscription_requests",
+    "price_alerts",
+    "ads",
+    "testimonials",
+    "bonuses",
+    "user_bonus_claims",
+    "events",
+    "trend_analyses",
+    "user_activity_logs",
+    "referrals",
+    "subscriptions"
+  ],
+  "total_rows": 451
+}
