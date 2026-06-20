@@ -186,50 +186,69 @@ export default function RecommendationsPage() {
   const fetchPrices = useCallback(async () => {
     setLoading(true);
     try {
-      const res = await fetch('/api/public/prices');
-      if (!res.ok) return;
+      // Fetch live prices and backend LLM-enhanced recommendations in parallel
+      const [pricesRes, recsRes] = await Promise.allSettled([
+        fetch('/api/public/prices'),
+        fetch('/api/public/recommendations'),
+      ]);
 
-      const data: PricesData = await res.json();
       const prices: Record<string, number> = {};
 
-      // Crypto mapping
-      const cryptoMap: Record<string, string> = {
-        bitcoin: 'BTC/USDT',
-        ethereum: 'ETH/USDT',
-        binancecoin: 'BNB/USDT',
-        solana: 'SOL/USDT',
-        ripple: 'XRP/USDT',
-        dogecoin: 'DOGE/USDT',
-        'avalanche-2': 'AVAX/USDT',
-        chainlink: 'LINK/USDT',
-      };
+      if (pricesRes.status === 'fulfilled' && pricesRes.value.ok) {
+        const data: PricesData = await pricesRes.value.json();
 
-      Object.entries(cryptoMap).forEach(([id, sym]) => {
-        const priceData = (data as any)[id] as LivePrice | undefined;
-        if (priceData?.usd) prices[sym] = priceData.usd;
-      });
+        const cryptoMap: Record<string, string> = {
+          bitcoin: 'BTC/USDT', ethereum: 'ETH/USDT', binancecoin: 'BNB/USDT',
+          solana: 'SOL/USDT', ripple: 'XRP/USDT', dogecoin: 'DOGE/USDT',
+          'avalanche-2': 'AVAX/USDT', chainlink: 'LINK/USDT',
+        };
+        Object.entries(cryptoMap).forEach(([id, sym]) => {
+          const priceData = (data as any)[id] as LivePrice | undefined;
+          if (priceData?.usd) prices[sym] = priceData.usd;
+        });
 
-      // Metals
-      const m = data.metals ?? {};
-      if (m.gold?.usd) prices['XAU/USD'] = m.gold.usd;
-      if (m.silver?.usd) prices['XAG/USD'] = m.silver.usd;
-      if (m.oil_wti?.usd) prices['OIL/WTI'] = m.oil_wti.usd;
-      if (m.platinum?.usd) prices['XPT/USD'] = m.platinum.usd;
+        const m = data.metals ?? {};
+        if (m.gold?.usd) prices['XAU/USD'] = m.gold.usd;
+        if (m.silver?.usd) prices['XAG/USD'] = m.silver.usd;
+        if (m.oil_wti?.usd) prices['OIL/WTI'] = m.oil_wti.usd;
+        if (m.platinum?.usd) prices['XPT/USD'] = m.platinum.usd;
 
-      // Stocks
-      const s = data.stocks ?? {};
-      Object.entries(s).forEach(([sym, priceData]) => {
-        if ((priceData as LivePrice)?.usd) {
-          prices[sym] = (priceData as LivePrice).usd;
-        }
-      });
+        const s = data.stocks ?? {};
+        Object.entries(s).forEach(([sym, priceData]) => {
+          if ((priceData as LivePrice)?.usd) prices[sym] = (priceData as LivePrice).usd;
+        });
+        setLivePrices(prices);
+      }
 
-      setLivePrices(prices);
+      // Merge backend LLM-enhanced crypto recs
+      let backendBySymbol: Record<string, { signal: string; confidence: number; reason: string; change: number }> = {};
+      if (recsRes.status === 'fulfilled' && recsRes.value.ok) {
+        const backendRecs: { symbol: string; recommendation: string; confidence: number; reason: string; change: number }[] = await recsRes.value.json();
+        backendRecs.forEach(r => {
+          backendBySymbol[r.symbol] = {
+            signal: r.recommendation as string,
+            confidence: r.confidence,
+            reason: r.reason,
+            change: r.change,
+          };
+        });
+      }
 
-      // Update recommendations with live prices
+      // Update recommendations: crypto get backend data, all get live prices
       setRecs(BASE_RECS.map(r => {
         const lp = prices[r.symbol];
-        return lp !== undefined ? { ...r, entry: lp } : r;
+        const be = r.cat === 'crypto' ? backendBySymbol[r.symbol] : undefined;
+        return {
+          ...r,
+          ...(lp !== undefined ? { entry: lp } : {}),
+          ...(be ? {
+            signal: (be.signal === 'BUY' || be.signal === 'SELL' || be.signal === 'HOLD') ? be.signal : r.signal,
+            confidence: be.confidence ?? r.confidence,
+            reason: be.reason || r.reason,
+            change24h: be.change ?? r.change24h,
+            sentiment: be.signal === 'BUY' ? 'Bullish' : be.signal === 'SELL' ? 'Bearish' : 'Neutral',
+          } : {}),
+        };
       }));
 
       setLastUpdate(new Date());

@@ -158,6 +158,7 @@ function BotPriceChart({ bot }: { bot: BotDetail }) {
 export default function BotsPage() {
   const navigate  = useNavigate()
   const { user, setUser }  = useAuthStore()
+  const isFeSubscriber = (user?.account_tier ?? 0) >= 1 || (user?.subscription && user.subscription !== 'free')
   const exchanges = (user as unknown as { exchange_connections?: { exchange: string; label: string; api_key_masked?: string }[] })?.exchange_connections ?? []
 
   const [status,       setStatus]       = useState<BotStatus>({ running: false })
@@ -1136,7 +1137,22 @@ export default function BotsPage() {
         </div>
 
         {/* Collapsible body */}
-        {!feCollapsed && (
+        {!feCollapsed && !isFeSubscriber && (
+          <div className="border-t border-[#2b3139] px-5 py-10 flex flex-col items-center gap-3 text-center">
+            <div className="w-14 h-14 rounded-2xl bg-[#f0b90b]/10 border border-[#f0b90b]/20 flex items-center justify-center">
+              <Lock size={24} className="text-[#f0b90b]" />
+            </div>
+            <p className="text-sm font-bold text-[#eaecef]">FinEventAI requires a paid plan</p>
+            <p className="text-xs text-[#848e9c] max-w-xs leading-relaxed">
+              Upgrade to Pro or higher to unlock FinEventAI bots — event-driven trading bots that react to real-time market news.
+            </p>
+            <button onClick={() => navigate('/app/pricing')}
+              className="mt-1 inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-[#f0b90b] hover:bg-[#d4a30a] text-black font-bold text-sm transition">
+              <Crown size={13} /> Upgrade Plan
+            </button>
+          </div>
+        )}
+        {!feCollapsed && isFeSubscriber && (
           <>
             {/* Running bots list */}
             {feBots.length > 0 && (

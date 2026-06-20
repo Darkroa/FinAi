@@ -6,7 +6,7 @@ import {
   Wifi, WifiOff, Link2, Clock, CheckCircle2, 
   Target, AlertTriangle, ArrowRight, Zap, Minus, Plus,
   MessageSquare, Tv, Bot, Settings, BarChart2, Maximize2, X,
-  SlidersHorizontal, Loader2, Sparkles,
+  SlidersHorizontal, Loader2, Sparkles, Lock, Crown,
 } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { useAuthStore } from '../store/authStore'
@@ -223,6 +223,7 @@ function FinChatPanel({ pair, livePrice, liveChange, collapsed, onToggle, usingB
   pair: string; livePrice: number; liveChange: number; collapsed: boolean
   onToggle: () => void; usingBalance: boolean; selExchange: string
 }) {
+  const navigate = useNavigate()
   const isUp = liveChange >= 0
   const [input, setInput] = useState('')
   const [messages, setMessages] = useState<FinMsg[]>([])
@@ -234,7 +235,12 @@ function FinChatPanel({ pair, livePrice, liveChange, collapsed, onToggle, usingB
   const chatEndRef = useRef<HTMLDivElement>(null)
   const bodyRef    = useRef<HTMLDivElement>(null)
   const [bodyHeight, setBodyHeight] = useState(0)
-  const { token } = useAuthStore()
+  const { token, user } = useAuthStore()
+  const isSubscriber = (user?.account_tier ?? 0) >= 1 || !!(user?.subscription && user.subscription !== 'free')
+  const today        = new Date().toDateString()
+  const freeKey      = `finai-free-chat-${pair.replace(/\//g, '-')}-${today}`
+  const [freeUsed, setFreeUsed] = useState(() => parseInt(localStorage.getItem(freeKey) || '0'))
+  const canSend = isSubscriber || freeUsed < 1
 
   useEffect(() => { chatEndRef.current?.scrollIntoView({ behavior: 'smooth' }) }, [messages, aiLoading])
   useEffect(() => {
@@ -245,7 +251,7 @@ function FinChatPanel({ pair, livePrice, liveChange, collapsed, onToggle, usingB
   useEffect(() => { setMessages([]) }, [pair])
 
   const callAI = async (userText: string) => {
-    if (aiLoading) return
+    if (aiLoading || !canSend) return
     const userMsg: FinMsg = { id: `u-${Date.now()}`, role: 'user', text: userText }
     setMessages(prev => [...prev, userMsg])
     setInput('')
@@ -266,6 +272,12 @@ function FinChatPanel({ pair, livePrice, liveChange, collapsed, onToggle, usingB
       const suggestion = livePrice > 0 ? parseTradeSuggestion(replyText, livePrice) : null
       const aiMsg: FinMsg = { id: `a-${Date.now()}`, role: 'ai', text: replyText, suggestion: suggestion ?? undefined }
       setMessages(prev => [...prev, aiMsg])
+      // Track free usage
+      if (!isSubscriber) {
+        const used = freeUsed + 1
+        localStorage.setItem(freeKey, String(used))
+        setFreeUsed(used)
+      }
     } catch {
       setMessages(prev => [...prev, { id: `a-${Date.now()}`, role: 'ai', text: 'Connection error — please try again.' }])
     } finally {
@@ -273,7 +285,7 @@ function FinChatPanel({ pair, livePrice, liveChange, collapsed, onToggle, usingB
     }
   }
 
-  const handleSend = () => { const t = input.trim(); if (t) callAI(t) }
+  const handleSend = () => { const t = input.trim(); if (t && canSend) callAI(t) }
 
   const handleSuggestTrade = () => {
     const prompt = `Suggest a trade for ${pair} right now at $${livePrice.toLocaleString('en-US', { maximumFractionDigits: 4 })}. Give me a clear BUY or SELL direction with entry price, stop-loss, and take-profit levels.`
@@ -544,6 +556,23 @@ function FinChatPanel({ pair, livePrice, liveChange, collapsed, onToggle, usingB
           <div ref={chatEndRef} />
         </div>
 
+        {/* Paywall banner for free users who have used their 1 daily message */}
+        {!isSubscriber && freeUsed >= 1 && (
+          <div className="mx-3 mb-2 px-3 py-2.5 rounded-xl bg-[#f0b90b]/8 border border-[#f0b90b]/25 flex items-center gap-3">
+            <Lock size={14} className="text-[#f0b90b] flex-shrink-0" />
+            <div className="flex-1 min-w-0">
+              <p className="text-[11px] font-semibold text-[#f0b90b]">Free limit reached</p>
+              <p className="text-[10px] text-[#848e9c]">1 AI message per day per pair on the free plan</p>
+            </div>
+            <button
+              onClick={() => navigate('/app/pricing')}
+              className="flex-shrink-0 flex items-center gap-1 text-[10px] font-bold text-black bg-[#f0b90b] hover:bg-[#d4a30a] px-2.5 py-1 rounded-lg transition"
+            >
+              <Crown size={9} /> Upgrade
+            </button>
+          </div>
+        )}
+
         {/* Input bar */}
         <div className="px-3 py-3 border-t border-[#2b3139] flex-shrink-0">
           <div className="flex gap-2">
@@ -551,13 +580,13 @@ function FinChatPanel({ pair, livePrice, liveChange, collapsed, onToggle, usingB
               value={input}
               onChange={e => setInput(e.target.value)}
               onKeyDown={e => e.key === 'Enter' && !e.shiftKey && handleSend()}
-              placeholder={`Ask Fin about ${pair}…`}
-              disabled={aiLoading}
-              className="flex-1 bg-[#0b0e11] border border-[#2b3139] focus:border-[#f0b90b]/40 rounded-lg px-3 py-2 text-xs text-[#eaecef] placeholder-[#4a5568] focus:outline-none transition disabled:opacity-50"
+              placeholder={canSend ? `Ask Fin about ${pair}…` : 'Upgrade to continue chatting'}
+              disabled={aiLoading || !canSend}
+              className="flex-1 bg-[#0b0e11] border border-[#2b3139] focus:border-[#f0b90b]/40 rounded-lg px-3 py-2 text-xs text-[#eaecef] placeholder-[#4a5568] focus:outline-none transition disabled:opacity-40"
             />
             <button
               onClick={handleSend}
-              disabled={aiLoading || !input.trim()}
+              disabled={aiLoading || !input.trim() || !canSend}
               className="px-3 py-2 rounded-lg bg-[#f0b90b]/10 border border-[#f0b90b]/20 text-[#f0b90b] hover:bg-[#f0b90b]/20 transition disabled:opacity-40 disabled:cursor-not-allowed"
             >
               {aiLoading ? <Loader2 size={12} className="animate-spin" /> : <ArrowRight size={12} />}

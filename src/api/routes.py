@@ -3727,6 +3727,56 @@ async def get_live_recommendations():
             "cat":            meta["cat"],
         })
     results.sort(key=lambda x: abs(x["change"]), reverse=True)
+
+    # ── LLM-enhanced reasons (cached 10 min) ────────────────────────────────
+    import time as _time
+    _cache = getattr(get_live_recommendations, "_cache", None)
+    _cache_ts = getattr(get_live_recommendations, "_cache_ts", 0.0)
+    now_ts = _time.time()
+    if _cache is not None and (now_ts - _cache_ts) < 600:
+        return _cache
+
+    try:
+        summary_lines = [
+            f"- {r['name']} ({r['symbol']}): ${r['price']:,.4f}, 24h {r['change']:+.2f}% → {r['recommendation']} ({r['confidence']}% confidence)"
+            for r in results
+        ]
+        llm_prompt = (
+            "You are a professional financial analyst. For each asset below, write a single concise sentence (max 20 words) "
+            "explaining the trading signal. Use technical analysis terms. Be specific about the reason.\n\n"
+            "Assets:\n" + "\n".join(summary_lines) + "\n\n"
+            "Reply ONLY with a JSON object mapping each symbol (e.g. \"BTC/USDT\") to a reason string. No extra text."
+        )
+        llm_reply = None
+        try:
+            from src.utils.llm import get_active_provider
+            provider = get_active_provider()
+            if provider == "groq":
+                from langchain_groq import ChatGroq
+                import os as _os
+                _llm = ChatGroq(api_key=_os.environ.get("GROQ_API_KEY",""), model="llama-3.3-70b-versatile", max_tokens=600)
+                llm_reply = _llm.invoke(llm_prompt).content
+            elif provider == "openai":
+                from langchain_openai import ChatOpenAI
+                import os as _os
+                _llm = ChatOpenAI(api_key=_os.environ.get("OPENAI_API_KEY",""), model="gpt-4o-mini", max_tokens=600)
+                llm_reply = _llm.invoke(llm_prompt).content
+        except Exception:
+            pass
+
+        if llm_reply:
+            import json as _json, re as _re
+            m = _re.search(r'\{.*\}', llm_reply, _re.DOTALL)
+            if m:
+                reasons_map: dict = _json.loads(m.group(0))
+                for r in results:
+                    if r["symbol"] in reasons_map:
+                        r["reason"] = reasons_map[r["symbol"]]
+    except Exception:
+        pass  # fall back to pre-computed random reasons
+
+    get_live_recommendations._cache    = results[:9]
+    get_live_recommendations._cache_ts = now_ts
     return results[:9]
 
 

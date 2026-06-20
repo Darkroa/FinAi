@@ -1,7 +1,6 @@
 import { useState, useRef, useEffect, useCallback } from 'react'
 import {
-  Send, Bot, Plus, MessageSquare, Trash2, Lock, ChevronLeft, Zap,
-  TrendingUp, TrendingDown, RefreshCw, Clock,
+  Send, Bot, Plus, MessageSquare, Trash2, Lock, ChevronLeft, Zap, Clock,
 } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import { useAuthStore } from '../store/authStore'
@@ -11,24 +10,8 @@ import { useLanguage } from '../contexts/LanguageContext'
 interface Message { role: 'user' | 'ai'; text: string; time: string }
 interface Conversation { id: string; title: string; messages: Message[]; createdAt: string }
 
-interface CoinData      { symbol: string; name: string; cgId: string; price: number; change: number; high: number; low: number; volume: number }
-interface FxRate        { code: string; name: string; rate: number; usdRate: number }
-interface IndexData     { ticker: string; name: string; price: number; change: number }
-interface CommodityData { ticker: string; name: string; symbol: string; unit: string; price: number; change: number }
 interface SessionInfo   { tokyo: boolean; london: boolean; new_york: boolean }
 interface DateInfo      { utc: string; day: string; is_weekend: boolean; sessions: SessionInfo }
-
-type MarketTab = 'crypto' | 'fx' | 'indexes' | 'metals'
-
-const COINS: { symbol: string; name: string; cgId: string }[] = [
-  { symbol: 'BTC',  name: 'Bitcoin',  cgId: 'bitcoin'      },
-  { symbol: 'ETH',  name: 'Ethereum', cgId: 'ethereum'     },
-  { symbol: 'SOL',  name: 'Solana',   cgId: 'solana'       },
-  { symbol: 'BNB',  name: 'BNB',      cgId: 'binancecoin'  },
-  { symbol: 'XRP',  name: 'XRP',      cgId: 'ripple'       },
-  { symbol: 'ADA',  name: 'Cardano',  cgId: 'cardano'      },
-  { symbol: 'DOGE', name: 'Doge',     cgId: 'dogecoin'     },
-]
 
 const QUICK_CHIPS = [
   'BTC analysis right now',
@@ -43,12 +26,6 @@ const QUICK_CHIPS = [
 // ── Helpers ──────────────────────────────────────────────────────────────────
 function makeId()  { return Math.random().toString(36).slice(2) }
 function makeTitle(msg: string) { return msg.slice(0, 40) + (msg.length > 40 ? '…' : '') }
-function fmtPrice(p: number, decimals = 2) {
-  if (p === 0) return '—'
-  if (p < 0.01) return p.toFixed(6)
-  if (p < 1)    return p.toFixed(4)
-  return p.toLocaleString('en-US', { maximumFractionDigits: decimals })
-}
 
 const WELCOME: Message = {
   role: 'ai',
@@ -77,18 +54,9 @@ export default function ChatFinPage() {
   const [input,  setInput]  = useState('')
   const [typing, setTyping] = useState(false)
 
-  // Market data state
-  const [marketTab,   setMarketTab]   = useState<MarketTab>('crypto')
-  const [coins,       setCoins]       = useState<CoinData[]>([])
-  const [fxRates,     setFxRates]     = useState<FxRate[]>([])
-  const [indexes,     setIndexes]     = useState<IndexData[]>([])
+  // Date/time state (from backend)
   const [dateInfo,    setDateInfo]    = useState<DateInfo | null>(null)
   const [mktLoading,  setMktLoading]  = useState(true)
-  const [commodities,    setCommodities]    = useState<CommodityData[]>([])
-  const [selectedCoin,   setSelectedCoin]   = useState<CoinData | null>(null)
-  const [selectedFx,     setSelectedFx]     = useState<FxRate | null>(null)
-  const [selectedIndex,  setSelectedIndex]  = useState<IndexData | null>(null)
-  const [selectedCommod, setSelectedCommod] = useState<CommodityData | null>(null)
 
   const endRef   = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLInputElement>(null)
@@ -102,48 +70,8 @@ export default function ChatFinPage() {
   const fetchMarketData = useCallback(async () => {
     setMktLoading(true)
     try {
-      const [pricesRes, extRes] = await Promise.all([
-        fetch('/api/public/prices'),
-        fetch('/api/public/market-extended'),
-      ])
-      const pricesData = await pricesRes.json()
-      const extData    = await extRes.json()
-
-      // Crypto
-      const built: CoinData[] = COINS.map(c => {
-        const d = pricesData[c.cgId] ?? {}
-        return { ...c, price: d.usd ?? 0, change: d.usd_24h_change ?? 0, high: d.usd_24h_high ?? 0, low: d.usd_24h_low ?? 0, volume: d.usd_24h_vol ?? 0 }
-      }).filter(c => c.price > 0)
-      setCoins(built)
-      if (built.length > 0 && !selectedCoin) setSelectedCoin(built[0])
-
-      // FX
-      const fxRaw: Record<string, { rate: number; name: string }> = extData?.fx?.rates ?? {}
-      const fxBuilt: FxRate[] = Object.entries(fxRaw).map(([code, info]) => ({
-        code,
-        name: info.name,
-        rate: info.rate,
-        usdRate: code === 'JPY' ? info.rate : (info.rate > 0 ? 1 / info.rate : 0),
-      }))
-      setFxRates(fxBuilt)
-
-      // Indexes
-      const idxRaw: Record<string, { name: string; price: number; change: number }> = extData?.indexes ?? {}
-      const idxBuilt: IndexData[] = Object.entries(idxRaw).map(([ticker, info]) => ({
-        ticker, name: info.name, price: info.price, change: info.change,
-      })).filter(i => i.price > 0)
-      setIndexes(idxBuilt)
-
-      // Commodities (Gold, Silver, Oil)
-      const comRaw: Record<string, { name: string; symbol: string; unit: string; price: number; change: number }> = extData?.commodities ?? {}
-      const comBuilt: CommodityData[] = Object.entries(comRaw).map(([ticker, info]) => ({
-        ticker, name: info.name, symbol: info.symbol, unit: info.unit,
-        price: info.price, change: info.change,
-      })).filter(c => c.price > 0)
-      setCommodities(comBuilt)
-      if (comBuilt.length > 0 && !selectedCommod) setSelectedCommod(comBuilt[0])
-
-      // DateTime
+      const extRes  = await fetch('/api/public/market-extended')
+      const extData = await extRes.json()
       if (extData?.datetime) setDateInfo(extData.datetime)
     } catch {
       /* keep stale data */
@@ -202,21 +130,6 @@ export default function ChatFinPage() {
     setTyping(true)
     try {
       const body: Record<string, unknown> = { message: q }
-      // Inject selected asset context
-      if (marketTab === 'crypto' && selectedCoin && selectedCoin.price > 0) {
-        body.pair = `${selectedCoin.symbol}/USDT`; body.price = selectedCoin.price
-        body.change_24h = selectedCoin.change; body.high_24h = selectedCoin.high
-        body.low_24h = selectedCoin.low; body.volume_24h = selectedCoin.volume
-      } else if (marketTab === 'fx' && selectedFx) {
-        body.pair = `${selectedFx.code}/USD`
-      } else if (marketTab === 'indexes' && selectedIndex) {
-        body.pair = selectedIndex.name
-      } else if (marketTab === 'metals' && selectedCommod) {
-        body.pair = selectedCommod.symbol
-        if (selectedCommod.price > 0) body.price = selectedCommod.price
-        if (selectedCommod.change !== 0) body.change_24h = selectedCommod.change
-      }
-
       const res  = await fetch('/api/ai/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
@@ -291,148 +204,27 @@ export default function ChatFinPage() {
         </button>
       </div>
 
-      {/* ── Market strip ── */}
-      <div className="flex-shrink-0 bg-[#161a1e] border-b border-[#2b3139]">
-
-        {/* Date + sessions row */}
-        {dateInfo && (
-          <div className="flex items-center gap-3 px-3 pt-1.5 pb-0.5 overflow-x-auto scrollbar-none">
-            <div className="flex items-center gap-1 flex-shrink-0">
-              <Clock size={9} className="text-[#848e9c]" />
-              <span className="text-[10px] text-[#848e9c]">{dateInfo.utc} UTC · {dateInfo.day}</span>
-            </div>
-            {sessionBadges.map(s => (
-              <span key={s.label}
-                className={`flex-shrink-0 text-[9px] font-bold px-1.5 py-0.5 rounded-full ${s.open ? 'bg-[#0ecb81]/15 text-[#0ecb81]' : 'bg-[#2b3139] text-[#4a5568]'}`}>
-                {s.label} {s.open ? '●' : '○'}
-              </span>
-            ))}
-          </div>
-        )}
-
-        {/* Tab row */}
-        <div className="flex items-center gap-0 px-3 pt-1">
-          {(['crypto', 'fx', 'indexes', 'metals'] as MarketTab[]).map(tab => (
-            <button key={tab}
-              onClick={() => setMarketTab(tab)}
-              className={`px-2.5 py-1 text-[11px] font-semibold rounded-t-lg border-b-2 transition ${
-                marketTab === tab
-                  ? 'border-[#f0b90b] text-[#f0b90b]'
-                  : 'border-transparent text-[#848e9c] hover:text-[#eaecef]'
-              }`}>
-              {tab === 'fx' ? 'FX / Forex' : tab === 'indexes' ? 'Indexes' : tab === 'metals' ? 'Metals & Oil' : 'Crypto'}
-            </button>
-          ))}
-          <button onClick={fetchMarketData} className="ml-auto text-[#848e9c] hover:text-[#f0b90b] transition p-1.5">
-            <RefreshCw size={10} className={mktLoading ? 'animate-spin' : ''} />
-          </button>
-        </div>
-
-        {/* Asset scroll row */}
-        <div className="flex items-center gap-1 px-3 py-1.5 overflow-x-auto scrollbar-none">
-          {mktLoading ? (
-            Array.from({ length: 5 }).map((_, i) => (
-              <div key={i} className="flex-shrink-0 h-7 w-24 bg-[#2b3139] rounded-lg animate-pulse" />
-            ))
-          ) : marketTab === 'crypto' ? (
-            coins.map(coin => {
-              const isUp = coin.change >= 0
-              const active = selectedCoin?.symbol === coin.symbol
-              return (
-                <button key={coin.symbol} onClick={() => setSelectedCoin(coin)}
-                  className={`flex-shrink-0 flex items-center gap-1.5 px-2.5 py-1 rounded-lg border transition ${
-                    active ? 'bg-[#f0b90b]/10 border-[#f0b90b]/40' : 'border-transparent hover:border-[#2b3139] hover:bg-[#1e2329]'
-                  }`}>
-                  <span className="text-[11px] font-bold text-[#eaecef]">{coin.symbol}</span>
-                  <span className="text-[10px] font-mono text-[#848e9c]">${fmtPrice(coin.price)}</span>
-                  <span className={`text-[10px] font-semibold flex items-center gap-0.5 ${isUp ? 'text-[#0ecb81]' : 'text-[#f6465d]'}`}>
-                    {isUp ? <TrendingUp size={8} /> : <TrendingDown size={8} />}
-                    {isUp ? '+' : ''}{coin.change.toFixed(2)}%
-                  </span>
-                </button>
-              )
-            })
-          ) : marketTab === 'fx' ? (
-            fxRates.map(fx => {
-              const active = selectedFx?.code === fx.code
-              return (
-                <button key={fx.code} onClick={() => setSelectedFx(fx)}
-                  className={`flex-shrink-0 flex items-center gap-1.5 px-2.5 py-1 rounded-lg border transition ${
-                    active ? 'bg-[#f0b90b]/10 border-[#f0b90b]/40' : 'border-transparent hover:border-[#2b3139] hover:bg-[#1e2329]'
-                  }`}>
-                  <span className="text-[11px] font-bold text-[#eaecef]">{fx.code === 'JPY' ? `USD/${fx.code}` : `${fx.code}/USD`}</span>
-                  <span className="text-[10px] font-mono text-[#848e9c]">
-                    {fx.code === 'JPY' ? fx.rate.toFixed(2) : fmtPrice(fx.usdRate, 5)}
-                  </span>
-                </button>
-              )
-            })
-          ) : marketTab === 'indexes' ? (
-            indexes.map(idx => {
-              const isUp = idx.change >= 0
-              const active = selectedIndex?.ticker === idx.ticker
-              return (
-                <button key={idx.ticker} onClick={() => setSelectedIndex(idx)}
-                  className={`flex-shrink-0 flex items-center gap-1.5 px-2.5 py-1 rounded-lg border transition ${
-                    active ? 'bg-[#f0b90b]/10 border-[#f0b90b]/40' : 'border-transparent hover:border-[#2b3139] hover:bg-[#1e2329]'
-                  }`}>
-                  <span className="text-[11px] font-bold text-[#eaecef]">{idx.name}</span>
-                  <span className="text-[10px] font-mono text-[#848e9c]">{fmtPrice(idx.price)}</span>
-                  <span className={`text-[10px] font-semibold flex items-center gap-0.5 ${isUp ? 'text-[#0ecb81]' : 'text-[#f6465d]'}`}>
-                    {isUp ? <TrendingUp size={8} /> : <TrendingDown size={8} />}
-                    {isUp ? '+' : ''}{idx.change.toFixed(2)}%
-                  </span>
-                </button>
-              )
-            })
-          ) : (
-            /* Metals & Oil */
-            commodities.map(com => {
-              const isUp = com.change >= 0
-              const active = selectedCommod?.ticker === com.ticker
-              return (
-                <button key={com.ticker} onClick={() => setSelectedCommod(com)}
-                  className={`flex-shrink-0 flex items-center gap-1.5 px-2.5 py-1 rounded-lg border transition ${
-                    active ? 'bg-[#f0b90b]/10 border-[#f0b90b]/40' : 'border-transparent hover:border-[#2b3139] hover:bg-[#1e2329]'
-                  }`}>
-                  <span className="text-[11px] font-bold text-[#eaecef]">{com.symbol}</span>
-                  <span className="text-[10px] font-mono text-[#848e9c]">${fmtPrice(com.price)}<span className="text-[9px] text-[#4a5568]">/{com.unit}</span></span>
-                  <span className={`text-[10px] font-semibold flex items-center gap-0.5 ${isUp ? 'text-[#0ecb81]' : 'text-[#f6465d]'}`}>
-                    {isUp ? <TrendingUp size={8} /> : <TrendingDown size={8} />}
-                    {isUp ? '+' : ''}{com.change.toFixed(2)}%
-                  </span>
-                </button>
-              )
-            })
-          )}
-        </div>
-
-        {/* Context info row */}
-        <div className="px-3 pb-1.5 flex items-center gap-2 text-[10px] text-[#4a5568]">
-          {marketTab === 'crypto' && selectedCoin && (
+      {/* ── Date / Session strip ── */}
+      {(dateInfo || mktLoading) && (
+        <div className="flex-shrink-0 bg-[#161a1e] border-b border-[#2b3139] px-3 py-1.5 flex items-center gap-3 overflow-x-auto scrollbar-none">
+          {mktLoading && !dateInfo ? (
+            <div className="h-4 w-40 bg-[#2b3139] rounded animate-pulse" />
+          ) : dateInfo && (
             <>
-              <span className="text-[#848e9c]">{selectedCoin.name} context active</span>
-              {selectedCoin.high > 0 && <span>H: <span className="text-[#0ecb81]">${fmtPrice(selectedCoin.high)}</span></span>}
-              {selectedCoin.low  > 0 && <span>L: <span className="text-[#f6465d]">${fmtPrice(selectedCoin.low)}</span></span>}
+              <div className="flex items-center gap-1 flex-shrink-0">
+                <Clock size={9} className="text-[#848e9c]" />
+                <span className="text-[10px] text-[#848e9c]">{dateInfo.utc} UTC · {dateInfo.day}</span>
+              </div>
+              {sessionBadges.map(s => (
+                <span key={s.label}
+                  className={`flex-shrink-0 text-[9px] font-bold px-1.5 py-0.5 rounded-full ${s.open ? 'bg-[#0ecb81]/15 text-[#0ecb81]' : 'bg-[#2b3139] text-[#4a5568]'}`}>
+                  {s.label} {s.open ? '●' : '○'}
+                </span>
+              ))}
             </>
           )}
-          {marketTab === 'fx' && selectedFx && (
-            <span className="text-[#848e9c]">{selectedFx.name} — AI will use live FX context</span>
-          )}
-          {marketTab === 'indexes' && selectedIndex && (
-            <span className="text-[#848e9c]">{selectedIndex.name} — AI will use live index context</span>
-          )}
-          {marketTab === 'metals' && selectedCommod && (
-            <>
-              <span className="text-[#848e9c]">{selectedCommod.name} ({selectedCommod.symbol}) context active</span>
-              <span className="text-[#eaecef]">${fmtPrice(selectedCommod.price)}<span className="text-[#4a5568]">/{selectedCommod.unit}</span></span>
-            </>
-          )}
-          {!selectedCoin && !selectedFx && !selectedIndex && !selectedCommod && (
-            <span>Select an asset above to focus AI context</span>
-          )}
         </div>
-      </div>
+      )}
 
       {/* ── Body: sidebar + chat ── */}
       <div className="flex flex-1 min-h-0">
@@ -524,13 +316,7 @@ export default function ChatFinPage() {
           <div className="border-t border-[#2b3139] px-4 pt-3 pb-3 bg-[#161a1e] flex-shrink-0">
             <form onSubmit={handleSubmit} className="flex gap-2">
               <input ref={inputRef} value={input} onChange={e => setInput(e.target.value)}
-                placeholder={
-                  marketTab === 'crypto'  && selectedCoin   ? `Ask about ${selectedCoin.symbol} or any market…`
-                  : marketTab === 'fx'   && selectedFx      ? `Ask about ${selectedFx.code}/USD or any forex pair…`
-                  : marketTab === 'indexes' && selectedIndex ? `Ask about ${selectedIndex.name}…`
-                  : marketTab === 'metals' && selectedCommod ? `Ask about ${selectedCommod.name} (${selectedCommod.symbol})…`
-                  : t('chat.placeholder')
-                }
+                placeholder={t('chat.placeholder')}
                 className="flex-1 bg-[#0b0e11] border border-[#2b3139] rounded-xl px-4 py-3 text-sm text-[#eaecef] placeholder-[#4a5568] focus:outline-none focus:border-[#f0b90b] transition" />
               <button type="submit" disabled={typing || !input.trim()}
                 className="w-12 h-12 flex items-center justify-center bg-[#f0b90b] hover:bg-[#d9a60b] disabled:opacity-50 text-black rounded-xl transition flex-shrink-0">
