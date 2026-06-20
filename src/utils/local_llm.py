@@ -16,12 +16,13 @@ _INTENTS: Dict[str, list] = {
         r"\bportfolio\b", r"\bbalance\b", r"\bmy (?:funds?|money|account)\b",
         r"\bhow much\b", r"\bwhat.*(?:have|got)\b",
     ],
-    "unsupported_market": [
-        r"\b(XAU|XAUUSD|gold|silver|XAG|XAGUSD|crude|oil|WTI|BRENT|forex|FX|EUR/?USD|GBP/?USD|USD/?JPY|AUD/?USD|USD/?CHF|NZD/?USD|commodity|commodities|metal)\b",
-    ],
     "price": [
-        r"\bprice\b", r"\bhow much is\b",
-        r"\b(BTC|ETH|BNB|SOL|ADA|DOGE|XRP|AVAX)\b",
+        r"\bprice\b", r"\bhow much is\b", r"\brate\b", r"\bquote\b",
+        r"\b(BTC|ETH|BNB|SOL|ADA|DOGE|XRP|AVAX|MATIC|DOT|LINK|LTC|BCH|ATOM|UNI)\b",
+        r"\b(XAU|XAUUSD|XAG|XAGUSD|gold|silver|platinum|palladium)\b",
+        r"\b(EUR|GBP|JPY|AUD|CHF|CAD|CNY|SGD|NZD|EURUSD|GBPUSD|USDJPY|AUDUSD|USDCHF)\b",
+        r"\b(oil|crude|WTI|BRENT|NATGAS|gas)\b",
+        r"\b(XAUUSD|XAGUSD|EURUSD|GBPUSD|USDJPY|AUDUSD|USDCHF|NZDUSD|CADUSD)\b",
     ],
     "pnl": [
         r"\bp&l\b", r"\bprofit\b", r"\bloss\b", r"\bearning\b",
@@ -215,32 +216,171 @@ def _reply_bot_status(bc: Dict) -> str:
     return "\n".join(lines)
 
 
-def _reply_unsupported_market() -> str:
-    return (
-        "⚠️ Local Mode Limitation\n\n"
-        "Gold (XAU), Silver (XAG), Forex pairs (EUR/USD, GBP/USD, etc.), and other "
-        "commodities are not available in local mode.\n\n"
-        "Local FinAi only supports live cryptocurrency prices:\n"
-        "• BTC, ETH, BNB, SOL, ADA, DOGE, XRP, AVAX, DOT, LINK\n\n"
-        "🔑 To get full market data including Gold & Forex, configure an AI API key "
-        "(Groq, OpenAI, or GitHub) in Settings."
-    )
+# ── Universal price resolver ──────────────────────────────────────────────────
+
+# Maps user-typed symbols/words → canonical ticker for _fetch_live_price
+_SYMBOL_ALIAS: Dict[str, str] = {
+    # Gold / metals
+    "XAUUSD": "XAU-USD", "XAUSD": "XAU-USD", "XAU": "XAU-USD", "GOLD": "XAU-USD",
+    "XAGUSD": "XAG-USD", "XAGSD": "XAG-USD", "XAG": "XAG-USD", "SILVER": "XAG-USD",
+    "PLATINUM": "XPT-USD", "XPT": "XPT-USD",
+    "PALLADIUM": "XPD-USD", "XPD": "XPD-USD",
+    # Oil / energy
+    "OIL": "OIL-WTI", "CRUDE": "OIL-WTI", "WTI": "OIL-WTI",
+    "BRENT": "OIL-WTI",
+    "NATGAS": "NATGAS", "GAS": "NATGAS",
+    # Crypto aliases
+    "BTCUSD": "BTC-USD", "BTC": "BTC-USD",
+    "ETHUSD": "ETH-USD", "ETH": "ETH-USD",
+    "BNBUSD": "BNB-USD", "BNB": "BNB-USD",
+    "SOLUSD": "SOL-USD", "SOL": "SOL-USD",
+    "ADAUSD": "ADA-USD", "ADA": "ADA-USD",
+    "DOGEUSD": "DOGE-USD", "DOGE": "DOGE-USD",
+    "XRPUSD": "XRP-USD", "XRP": "XRP-USD",
+    "AVAXUSD": "AVAX-USD", "AVAX": "AVAX-USD",
+    "MATICUSD": "MATIC-USD", "MATIC": "MATIC-USD",
+    "DOTUSD": "DOT-USD", "DOT": "DOT-USD",
+    "LINKUSD": "LINK-USD", "LINK": "LINK-USD",
+    "LTCUSD": "LTC-USD", "LTC": "LTC-USD",
+    "BCHUSD": "BCH-USD", "BCH": "BCH-USD",
+    "ATOMUSD": "ATOM-USD", "ATOM": "ATOM-USD",
+    "UNIUSD": "UNI-USD", "UNI": "UNI-USD",
+}
+
+# Forex currency codes supported via frankfurter.app
+_FOREX_CODES = {"EUR", "GBP", "JPY", "AUD", "CHF", "CAD", "CNY", "SGD", "HKD", "NZD", "MXN"}
+
+# Maps common forex pair strings → (base, quote) or a direction
+_FOREX_PAIRS: Dict[str, tuple] = {
+    "EURUSD": ("EUR", "USD"), "EUR/USD": ("EUR", "USD"),
+    "GBPUSD": ("GBP", "USD"), "GBP/USD": ("GBP", "USD"),
+    "USDJPY": ("USD", "JPY"), "USD/JPY": ("USD", "JPY"),
+    "AUDUSD": ("AUD", "USD"), "AUD/USD": ("AUD", "USD"),
+    "USDCHF": ("USD", "CHF"), "USD/CHF": ("USD", "CHF"),
+    "NZDUSD": ("NZD", "USD"), "NZD/USD": ("NZD", "USD"),
+    "USDCAD": ("USD", "CAD"), "USD/CAD": ("USD", "CAD"),
+    "USDCNY": ("USD", "CNY"), "USD/CNY": ("USD", "CNY"),
+}
+
+
+def _fetch_forex_price(pair_str: str) -> Optional[tuple]:
+    """Return (rate_str, label) for a forex pair, or None if unavailable."""
+    try:
+        from src.utils.market_data import get_fx_rates
+        data = get_fx_rates()
+        rates = data.get("rates", {})
+        pu = pair_str.upper().replace("/", "").replace("-", "")
+        # Check known pairs
+        pair = _FOREX_PAIRS.get(pu) or _FOREX_PAIRS.get(pair_str.upper())
+        if pair:
+            base, quote = pair
+            if base == "USD" and quote in rates:
+                # USD/JPY style — frankfurter gives JPY per USD
+                r = rates[quote]["rate"]
+                return (f"{r:.4f}", f"{base}/{quote}")
+            elif quote == "USD" and base in rates:
+                # EUR/USD style — invert
+                r = rates[base]["rate"]
+                inv = round(1 / r, 5) if r else None
+                if inv:
+                    return (f"{inv:.5f}", f"{base}/{quote}")
+        # Maybe just a currency code typed alone (e.g. "EUR")
+        code = pu[:3]
+        if code in rates:
+            r = rates[code]["rate"]
+            inv = round(1 / r, 5) if r else None
+            if inv:
+                return (f"{inv:.5f}", f"{code}/USD")
+    except Exception as exc:
+        logger.debug(f"LocalAI: forex fetch error: {exc}")
+    return None
+
+
+def _fetch_any_price(symbol_raw: str) -> Optional[str]:
+    """
+    Universal price fetch — handles crypto, gold, silver, forex, oil, etc.
+    Returns a formatted string like '$ 3,290.50' or '1.08523' or None.
+    """
+    su = symbol_raw.strip().upper().replace("/", "").replace("-", "")
+
+    # 1. Try forex pairs first (before alias mapping)
+    forex = _fetch_forex_price(su)
+    if forex:
+        rate_str, label = forex
+        return f"{label}: {rate_str}"
+
+    # 2. Map alias → canonical ticker
+    canonical = _SYMBOL_ALIAS.get(su) or _SYMBOL_ALIAS.get(symbol_raw.upper())
+    if not canonical:
+        # If ends in USD, try stripping it
+        if su.endswith("USD") and len(su) > 3:
+            base = su[:-3]
+            canonical = _SYMBOL_ALIAS.get(base) or f"{base}-USD"
+        else:
+            canonical = f"{su}-USD"
+
+    # 3. Fetch via _fetch_live_price (handles crypto + metals via Binance/Kraken/Yahoo)
+    try:
+        from src.trading.trade_bot import _fetch_live_price
+        price = _fetch_live_price(canonical)
+        if price and price > 0:
+            if price >= 1000:
+                return f"${price:,.2f}"
+            elif price >= 1:
+                return f"${price:,.4f}"
+            else:
+                return f"${price:.6f}"
+    except Exception as exc:
+        logger.debug(f"LocalAI: price fetch error for {canonical}: {exc}")
+    return None
+
+
+def _extract_symbols(message: str) -> list[str]:
+    """Extract all market symbols mentioned in a message."""
+    msg_up = message.upper()
+    found = []
+
+    # Check forex pairs first
+    for pair in _FOREX_PAIRS:
+        if pair.replace("/", "") in msg_up.replace("/", ""):
+            if pair not in found:
+                found.append(pair)
+
+    # Check aliases (crypto, metals, oil, etc.)
+    for alias in _SYMBOL_ALIAS:
+        pattern = r"\b" + re.escape(alias) + r"\b"
+        if re.search(pattern, msg_up):
+            canonical = _SYMBOL_ALIAS[alias]
+            if canonical not in found:
+                found.append(alias)
+
+    # Fallback words
+    word_map = {
+        "GOLD": "GOLD", "SILVER": "SILVER", "OIL": "OIL", "CRUDE": "CRUDE",
+        "PLATINUM": "PLATINUM", "NATGAS": "NATGAS",
+    }
+    for word, alias in word_map.items():
+        if re.search(r"\b" + word + r"\b", msg_up) and alias not in found:
+            found.append(alias)
+
+    return found[:6]
 
 
 def _reply_price(message: str) -> str:
-    coins = re.findall(
-        r"\b(BTC|ETH|BNB|SOL|ADA|DOGE|XRP|MATIC|AVAX|DOT|LINK)\b",
-        message.upper(),
-    )
-    if not coins:
-        coins = ["BTC", "ETH"]
-    lines = ["💰 Live Prices\n"]
-    for c in coins[:4]:
-        price = _fetch_price(f"{c}-USD")
-        if price:
-            lines.append(f"• {c}: ${price:,.4f}")
+    symbols = _extract_symbols(message)
+    if not symbols:
+        # Default to BTC + ETH if nothing specific mentioned
+        symbols = ["BTC", "ETH"]
+
+    lines = ["💰 Live Market Prices\n"]
+    for sym in symbols:
+        result = _fetch_any_price(sym)
+        display = sym.upper()
+        if result:
+            lines.append(f"• {display}: {result}")
         else:
-            lines.append(f"• {c}: Unavailable right now")
+            lines.append(f"• {display}: Unavailable right now")
+    lines.append("\n_Prices updated in real time · Add an AI key for full market analysis_")
     return "\n".join(lines)
 
 
@@ -370,8 +510,6 @@ def local_chat(message: str, user_email: Optional[str] = None) -> str:
         return _reply_pnl(bc)
     if intent == "bot_status":
         return _reply_bot_status(bc)
-    if intent == "unsupported_market":
-        return _reply_unsupported_market()
     if intent == "price":
         return _reply_price(message)
     if intent == "advice":
