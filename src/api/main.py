@@ -203,6 +203,16 @@ async def startup_event():
                 # EventBot config: leverage, TP, SL stored on trade_logs for position cards
                 "ALTER TABLE trade_logs ADD COLUMN IF NOT EXISTS take_profit FLOAT",
                 "ALTER TABLE trade_logs ADD COLUMN IF NOT EXISTS stop_loss FLOAT",
+                # Chat feedback (like/dislike on Fin AI responses)
+                """CREATE TABLE IF NOT EXISTS chat_feedback (
+                    id SERIAL PRIMARY KEY,
+                    user_id INTEGER REFERENCES users(id),
+                    message_hash VARCHAR(64) NOT NULL,
+                    feedback VARCHAR(8) NOT NULL,
+                    created_at TIMESTAMP DEFAULT NOW()
+                )""",
+                "CREATE INDEX IF NOT EXISTS idx_chat_feedback_hash ON chat_feedback(message_hash)",
+                "CREATE INDEX IF NOT EXISTS idx_chat_feedback_user ON chat_feedback(user_id)",
             ]:
                 _conn.execute(_text(stmt))
             _conn.commit()

@@ -417,3 +417,16 @@ class UserBonusClaim(Base):
 
     user  = relationship("User", foreign_keys=[user_id])
     bonus = relationship("Bonus", back_populates="claims")
+
+
+class ChatFeedback(Base):
+    """Stores user like/dislike feedback on Fin AI chat responses."""
+    __tablename__ = "chat_feedback"
+
+    id           = Column(Integer, primary_key=True, index=True)
+    user_id      = Column(Integer, ForeignKey("users.id"), nullable=True)
+    message_hash = Column(String(64), nullable=False)
+    feedback     = Column(String(8), nullable=False)   # 'like' or 'dislike'
+    created_at   = Column(DateTime, default=datetime.utcnow)
+
+    user = relationship("User", foreign_keys=[user_id])

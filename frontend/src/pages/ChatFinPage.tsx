@@ -1,13 +1,15 @@
 import { useState, useRef, useEffect, useCallback } from 'react'
 import {
   Send, Bot, Plus, MessageSquare, Trash2, Lock, ChevronLeft, Zap, Clock,
+  ThumbsUp, ThumbsDown,
 } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import { useAuthStore } from '../store/authStore'
 import { useLanguage } from '../contexts/LanguageContext'
+import { submitChatFeedback } from '../lib/api'
 
 // ── Types ────────────────────────────────────────────────────────────────────
-interface Message { role: 'user' | 'ai'; text: string; time: string }
+interface Message { role: 'user' | 'ai'; text: string; time: string; msgId?: string; feedback?: 'like' | 'dislike' | null }
 interface Conversation { id: string; title: string; messages: Message[]; createdAt: string }
 
 // ── Response styler ───────────────────────────────────────────────────────────
@@ -15,68 +17,137 @@ const BEAR_RE = /\b(sell|short|bearish|resistance|stop.?loss|stop|breakdown|down
 const BULL_RE = /\b(buy|long|bullish|support|breakout|uptrend|rally|rise|profit|target|strong|momentum|accumulate|oversold|opportunity|bounce)\b/gi
 const NUM_RE  = /(\$[\d,]+(?:\.\d+)?[KkMmBbTt]?|[\d,]+(?:\.\d+)?%|\b[\d]{1,3}(?:,\d{3})*(?:\.\d+)?\b)/g
 
+function styleLine(line: string): React.ReactNode {
+  const parts: React.ReactNode[] = []
+  let key = 0
+
+  const COMBINED = new RegExp(`(${NUM_RE.source})|(${BEAR_RE.source})|(${BULL_RE.source})`, 'gi')
+  let lastIndex = 0
+  let m: RegExpExecArray | null
+  COMBINED.lastIndex = 0
+
+  while ((m = COMBINED.exec(line)) !== null) {
+    if (m.index > lastIndex) parts.push(<span key={key++}>{line.slice(lastIndex, m.index)}</span>)
+    const match = m[0]
+    NUM_RE.lastIndex = 0; BEAR_RE.lastIndex = 0; BULL_RE.lastIndex = 0
+    if (NUM_RE.test(match)) {
+      parts.push(<span key={key++} style={{ color: '#f0b90b', fontWeight: 600 }}>{match}</span>)
+    } else if (BEAR_RE.test(match)) {
+      parts.push(<span key={key++} style={{ color: '#f6465d', fontWeight: 600 }}>{match}</span>)
+    } else {
+      parts.push(<span key={key++} style={{ color: '#0ecb81', fontWeight: 600 }}>{match}</span>)
+    }
+    NUM_RE.lastIndex = 0; BEAR_RE.lastIndex = 0; BULL_RE.lastIndex = 0
+    lastIndex = COMBINED.lastIndex
+  }
+  if (lastIndex < line.length) parts.push(<span key={key++}>{line.slice(lastIndex)}</span>)
+  return <>{parts}</>
+}
+
+function parseBoldInline(raw: string): React.ReactNode {
+  const boldRe = /\*\*(.+?)\*\*/g
+  const segments: Array<{ bold: boolean; text: string }> = []
+  let last = 0; let m: RegExpExecArray | null
+  while ((m = boldRe.exec(raw)) !== null) {
+    if (m.index > last) segments.push({ bold: false, text: raw.slice(last, m.index) })
+    segments.push({ bold: true, text: m[1] })
+    last = boldRe.lastIndex
+  }
+  if (last < raw.length) segments.push({ bold: false, text: raw.slice(last) })
+  return (
+    <>
+      {segments.map((s, i) =>
+        s.bold
+          ? <span key={i} style={{ color: '#f0b90b', fontWeight: 700 }}>{s.text}</span>
+          : <span key={i}>{styleLine(s.text)}</span>
+      )}
+    </>
+  )
+}
+
 function StyledResponse({ text }: { text: string }) {
   const lines = text.split('\n')
-
-  function styleLine(line: string): React.ReactNode {
-    // Split by tokens we want to colour, keeping delimiters
-    const parts: React.ReactNode[] = []
-    let remaining = line
-    let key = 0
-
-    // Combined regex pass: numbers, bearish words, bullish words
-    const COMBINED = new RegExp(
-      `(${NUM_RE.source})|(${BEAR_RE.source})|(${BULL_RE.source})`,
-      'gi'
-    )
-    let lastIndex = 0
-    let m: RegExpExecArray | null
-    COMBINED.lastIndex = 0
-
-    while ((m = COMBINED.exec(remaining)) !== null) {
-      if (m.index > lastIndex) {
-        parts.push(remaining.slice(lastIndex, m.index))
-      }
-      const match = m[0]
-      if (NUM_RE.test(match)) {
-        // figure → yellow
-        parts.push(<span key={key++} style={{ color: '#f0b90b', fontWeight: 600 }}>{match}</span>)
-      } else if (BEAR_RE.test(match)) {
-        // bearish/risk word → red
-        parts.push(<span key={key++} style={{ color: '#f6465d', fontWeight: 600 }}>{match}</span>)
-      } else {
-        // bullish word → green
-        parts.push(<span key={key++} style={{ color: '#0ecb81', fontWeight: 600 }}>{match}</span>)
-      }
-      lastIndex = COMBINED.lastIndex
-      // Reset individual regexes so .test() works correctly next loop
-      NUM_RE.lastIndex  = 0
-      BEAR_RE.lastIndex = 0
-      BULL_RE.lastIndex = 0
-    }
-    if (lastIndex < remaining.length) parts.push(remaining.slice(lastIndex))
-    return parts
-  }
 
   return (
     <div className="text-sm text-[#eaecef] leading-relaxed space-y-0.5">
       {lines.map((line, i) => {
-        // Section headers (lines starting with ── or ━ or all-caps label ending with :)
-        const isHeader = /^[━─#*]+/.test(line.trim()) || /^[A-Z][A-Z\s\/&]{3,}:/.test(line.trim())
-        // Bullet / list line
-        const isBullet = /^[\s]*[•\-*·]\s/.test(line)
+        const trimmed = line.trim()
+
+        // ### H3 header
+        if (/^###\s+/.test(trimmed)) {
+          const heading = trimmed.replace(/^###\s+/, '')
+          return (
+            <div key={i} className="flex items-center gap-2 mt-3 mb-1 pb-1 border-b border-[#f0b90b]/20">
+              <span className="text-[#f0b90b] font-bold text-xs tracking-wide">{parseBoldInline(heading)}</span>
+            </div>
+          )
+        }
+
+        // ## H2 / # H1 / ─── / ━━━ section dividers
+        if (/^[━─#]+/.test(trimmed) && trimmed.length < 80) {
+          const heading = trimmed.replace(/^[━─#*\s]+/, '').replace(/[━─#*\s]+$/, '')
+          if (!heading) return <div key={i} className="h-px bg-[#2b3139] my-2" />
+          return (
+            <div key={i} className="text-[#f0b90b] font-bold text-xs tracking-wide mt-3 mb-1 border-b border-[#2b3139] pb-0.5">
+              {parseBoldInline(heading)}
+            </div>
+          )
+        }
+
+        // Key | Value row (e.g. "Entry Zone: | $63,000" or "Support Level | $60,000")
+        if (/\|/.test(trimmed) && !/^[|─]+$/.test(trimmed)) {
+          const [rawKey, ...rest] = trimmed.split('|')
+          const key = rawKey.replace(/^[•\-*·\s]+/, '').replace(/:$/, '').trim()
+          const val = rest.join('|').trim().replace(/^:?\s*/, '')
+          if (key && val) {
+            return (
+              <div key={i} className="flex items-baseline justify-between gap-2 py-0.5 border-b border-[#2b3139]/40">
+                <span className="text-[10px] text-[#848e9c] flex-shrink-0">{key}</span>
+                <span className="text-xs font-semibold text-right">{styleLine(val)}</span>
+              </div>
+            )
+          }
+        }
+
+        // "Key: Value" rows (label with colon and non-empty value on same line)
+        const kvMatch = trimmed.match(/^([A-Za-z][A-Za-z0-9\s\/&-]{2,30}):\s+(.+)$/)
+        if (kvMatch && !kvMatch[1].includes('  ')) {
+          const [, k, v] = kvMatch
+          return (
+            <div key={i} className="flex items-baseline justify-between gap-2 py-0.5">
+              <span className="text-[10px] text-[#848e9c] flex-shrink-0">{k}</span>
+              <span className="text-xs font-semibold text-right">{parseBoldInline(v)}</span>
+            </div>
+          )
+        }
+
+        // Bullet lines
+        if (/^[\s]*[•\-*·]\s/.test(line)) {
+          const content = line.replace(/^[\s]*[•\-*·]\s/, '')
+          return (
+            <div key={i} className="flex gap-2 pl-2">
+              <span className="text-[#f0b90b] flex-shrink-0 mt-0.5">·</span>
+              <span>{parseBoldInline(content)}</span>
+            </div>
+          )
+        }
+
+        // Empty line
+        if (trimmed === '') return <div key={i} className="h-1.5" />
+
+        // All-caps label ending with colon (e.g. "TRADE IDEA:")
+        if (/^[A-Z][A-Z\s\/&(🧠📑)]{3,}:?\s*$/.test(trimmed)) {
+          return (
+            <div key={i} className="text-[#f0b90b] font-bold text-xs tracking-wide mt-3 mb-1 border-b border-[#2b3139] pb-0.5">
+              {trimmed}
+            </div>
+          )
+        }
+
+        // Normal line
         return (
-          <div key={i}
-            className={
-              isHeader
-                ? 'text-[#f0b90b] font-bold text-xs tracking-wide mt-3 mb-1 border-b border-[#2b3139] pb-0.5'
-                : isBullet
-                  ? 'pl-3 text-[#eaecef]'
-                  : line.trim() === ''
-                    ? 'h-2'
-                    : ''
-            }>
-            {styleLine(line)}
+          <div key={i} className="text-[#eaecef]">
+            {parseBoldInline(line)}
           </div>
         )
       })}
@@ -222,6 +293,24 @@ export default function ChatFinPage() {
 
   const handleSubmit = (e: React.FormEvent) => { e.preventDefault(); sendMessage(input) }
 
+  const handleFeedback = useCallback(async (msgIdx: number, fb: 'like' | 'dislike') => {
+    if (!activeId) return
+    const hash = (() => {
+      const msg = (conversations.find(c => c.id === activeId)?.messages ?? [])[msgIdx]
+      if (!msg) return ''
+      let h = 0
+      const s = msg.text.slice(0, 200)
+      for (let i = 0; i < s.length; i++) { h = (h << 5) - h + s.charCodeAt(i); h |= 0 }
+      return Math.abs(h).toString(36) + s.length.toString(36)
+    })()
+    const updated = conversations.map(c => {
+      if (c.id !== activeId) return c
+      return { ...c, messages: c.messages.map((m, i) => i === msgIdx ? { ...m, feedback: m.feedback === fb ? null : fb } : m) }
+    })
+    persistConvos(updated)
+    try { await submitChatFeedback(hash, fb) } catch { /* silent */ }
+  }, [activeId, conversations, persistConvos])
+
   // ── Paywall ──
   if (!isSubscriber) {
     return (
@@ -353,21 +442,46 @@ export default function ChatFinPage() {
             )}
 
             {messages.map((msg, i) => (
-              <div key={i} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-                {msg.role === 'ai' && (
-                  <div className="w-7 h-7 rounded-lg bg-[#f0b90b] flex items-center justify-center mr-2 flex-shrink-0 mt-0.5">
-                    <Bot size={13} className="text-black" />
+              <div key={i} className={`flex flex-col ${msg.role === 'user' ? 'items-end' : 'items-start'}`}>
+                <div className={`flex w-full ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+                  {msg.role === 'ai' && (
+                    <div className="w-7 h-7 rounded-lg bg-[#f0b90b] flex items-center justify-center mr-2 flex-shrink-0 mt-0.5">
+                      <Bot size={13} className="text-black" />
+                    </div>
+                  )}
+                  <div className={`max-w-[78%] rounded-2xl px-4 py-2.5 ${
+                    msg.role === 'user' ? 'bg-[#f0b90b]/10 border border-[#f0b90b]/20' : 'bg-[#1e2329] border border-[#2b3139]'
+                  }`}>
+                    {msg.role === 'ai'
+                      ? <StyledResponse text={msg.text} />
+                      : <p className="text-sm text-[#eaecef] leading-relaxed whitespace-pre-wrap">{msg.text}</p>
+                    }
+                    <p className="text-[9px] text-[#4a5568] mt-1">{msg.time}</p>
+                  </div>
+                </div>
+                {/* Like / dislike (AI messages only, not the welcome message) */}
+                {msg.role === 'ai' && i > 0 && (
+                  <div className="flex items-center gap-1.5 ml-9 mt-1.5">
+                    <button onClick={() => handleFeedback(i, 'like')}
+                      className={`flex items-center gap-1 text-[10px] px-2 py-1 rounded-lg border transition ${
+                        msg.feedback === 'like'
+                          ? 'bg-[#0ecb81]/15 text-[#0ecb81] border-[#0ecb81]/30 font-medium'
+                          : 'text-[#4a5568] hover:text-[#0ecb81] hover:bg-[#0ecb81]/10 border-transparent'
+                      }`}>
+                      <ThumbsUp size={10} />
+                      {msg.feedback === 'like' && <span>Helpful</span>}
+                    </button>
+                    <button onClick={() => handleFeedback(i, 'dislike')}
+                      className={`flex items-center gap-1 text-[10px] px-2 py-1 rounded-lg border transition ${
+                        msg.feedback === 'dislike'
+                          ? 'bg-[#f6465d]/15 text-[#f6465d] border-[#f6465d]/30 font-medium'
+                          : 'text-[#4a5568] hover:text-[#f6465d] hover:bg-[#f6465d]/10 border-transparent'
+                      }`}>
+                      <ThumbsDown size={10} />
+                      {msg.feedback === 'dislike' && <span>Not helpful</span>}
+                    </button>
                   </div>
                 )}
-                <div className={`max-w-[78%] rounded-2xl px-4 py-2.5 ${
-                  msg.role === 'user' ? 'bg-[#f0b90b]/10 border border-[#f0b90b]/20' : 'bg-[#1e2329] border border-[#2b3139]'
-                }`}>
-                  {msg.role === 'ai'
-                    ? <StyledResponse text={msg.text} />
-                    : <p className="text-sm text-[#eaecef] leading-relaxed whitespace-pre-wrap">{msg.text}</p>
-                  }
-                  <p className="text-[9px] text-[#4a5568] mt-1">{msg.time}</p>
-                </div>
               </div>
             ))}
 

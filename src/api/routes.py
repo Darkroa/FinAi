@@ -4311,6 +4311,35 @@ class AIChatRequest(BaseModel):
     low_24h:     Optional[float] = None
     volume_24h:  Optional[float] = None
 
+class ChatFeedbackRequest(BaseModel):
+    message_hash: str
+    feedback: str   # 'like' or 'dislike'
+
+@router.post("/ai/feedback")
+async def submit_chat_feedback(body: ChatFeedbackRequest, current_user=Depends(get_current_user), db: Session = Depends(get_db)):
+    """Record a like/dislike on a Fin AI chat response."""
+    from src.database.models import ChatFeedback as _CF
+    if body.feedback not in ("like", "dislike"):
+        raise HTTPException(status_code=400, detail="feedback must be 'like' or 'dislike'")
+    existing = db.query(_CF).filter(_CF.user_id == current_user.get("id"), _CF.message_hash == body.message_hash).first()
+    if existing:
+        existing.feedback = body.feedback
+    else:
+        db.add(_CF(user_id=current_user.get("id"), message_hash=body.message_hash, feedback=body.feedback))
+    db.commit()
+    return {"status": "ok"}
+
+@router.get("/admin/chat-feedback")
+async def get_chat_feedback_stats(current_user=Depends(get_current_user), db: Session = Depends(get_db)):
+    """Admin: get total like/dislike counts."""
+    if not current_user.get("is_admin"):
+        raise HTTPException(status_code=403, detail="Admin only")
+    from src.database.models import ChatFeedback as _CF
+    from sqlalchemy import func as _sqf2
+    likes    = db.query(_sqf2.count(_CF.id)).filter(_CF.feedback == "like").scalar()    or 0
+    dislikes = db.query(_sqf2.count(_CF.id)).filter(_CF.feedback == "dislike").scalar() or 0
+    return {"likes": likes, "dislikes": dislikes, "total": likes + dislikes}
+
 @router.post("/ai/chat")
 async def ai_chat(body: AIChatRequest, current_user=Depends(get_current_user)):
     """Chat with the FinAi AI assistant — injects live market context (crypto, FX, indexes, datetime)."""

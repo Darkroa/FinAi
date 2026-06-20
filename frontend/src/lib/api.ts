@@ -374,3 +374,10 @@ export const resend2faCode = (partial_token: string) =>
 
 // Admin — Wallet Stats
 export const adminGetWalletStats = () => api.get('/admin/wallet-stats')
+
+// Chat Feedback (like/dislike)
+export const submitChatFeedback = (message_hash: string, feedback: 'like' | 'dislike') =>
+  api.post('/ai/feedback', { message_hash, feedback })
+
+// Admin — Chat Feedback Stats
+export const adminGetChatFeedback = () => api.get('/admin/chat-feedback')

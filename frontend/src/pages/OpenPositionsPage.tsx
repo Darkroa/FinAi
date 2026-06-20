@@ -11,7 +11,8 @@ import {
   X,
   RefreshCw,
   Bot,
-  Zap,
+  Brain,
+  Target,
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { getOpenPositions, closeManualTrade, getBotStatus, finEventListBots } from '../lib/api';
@@ -221,144 +222,218 @@ export default function OpenPositionsPage() {
         </div>
       </div>
 
-      {/* ── FinBot Status Card → Same UI style as FinEvent AI ── */}
-      <div className="bg-[#161a1e] border-[#2b3139] rounded-xl overflow-hidden">
-        <button
-          onClick={() => setBotCollapsed(v =>!v)}
-          className="w-full flex items-center justify-between px-4 py-3 hover:bg-[#1e2329] transition"
-        >
+      {/* ── FinBot Positions Card — BotsPage style ── */}
+      <div className="bg-[#161a1e] border border-[#2b3139] rounded-xl overflow-hidden">
+        <button onClick={() => setBotCollapsed(v => !v)}
+          className="w-full flex items-center justify-between px-4 py-3 hover:bg-[#1e2329] transition">
           <div className="flex items-center gap-2">
             <Bot size={13} className="text-[#f0b90b]" />
-            <span className={`${titleSize} font-semibold text-[#eaecef]`}>FinBot Status</span>
+            <span className="text-sm font-semibold text-[#eaecef]">FinBot Positions</span>
             {botStatus?.bots && (
-              <span className="text-[9px] bg-[#f0b90b]/10 text-[#f0b90b] border-[#f0b90b]/20 px-1.5 py-0.5 rounded-full">
-                {Object.values(botStatus.bots).filter((b: any) => b.position > 0).length} positions
+              <span className="text-[9px] bg-[#f0b90b]/10 text-[#f0b90b] border border-[#f0b90b]/20 px-1.5 py-0.5 rounded-full font-semibold">
+                {Object.values(botStatus.bots as Record<string, any>).filter((b: any) => b.position > 0).length} open
               </span>
             )}
           </div>
-          {botCollapsed? <ChevronDown size={13} className="text-[#848e9c]" /> : <ChevronUp size={13} className="text-[#848e9c]" />}
+          {botCollapsed ? <ChevronDown size={13} className="text-[#848e9c]" /> : <ChevronUp size={13} className="text-[#848e9c]" />}
         </button>
 
         {!botCollapsed && (
-          <div className="border-t border-[#2b3139] divide-y divide-[#2b3139]/50">
-            {botStatus?.bots && Object.values(botStatus.bots).length > 0? (
-              Object.values(botStatus.bots).map((bot: any, i: number) => (
-                <div key={i} className="px-4 py-2.5 flex items-center justify-between gap-3">
-                  <div className="flex items-center gap-2 min-w-0">
-                    <span className="text-xs font-bold text-[#eaecef] font-mono">{bot.ticker}</span>
-                    {bot.position > 0? (
-                      <>
-                        <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-[#0ecb81]/10 text-[#0ecb81]">OPEN</span>
-                        <span className={`text-[9px] text-[#848e9c] truncate hidden sm:block`}>
-                          {bot.position.toFixed(4)} @ ${fmt(bot.entry_price)}
-                        </span>
-                      </>
-                    ) : (
-                      <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-[#848e9c]/10 text-[#848e9c]">IDLE</span>
-                    )}
-                  </div>
-                  <div className="flex items-center gap-1.5 flex-shrink-0">
-                    {bot.position > 0 && (
-                      <>
-                        <div className="w-16 bg-[#2b3139] rounded-full h-1.5">
-                          <div
-                            className={`h-1.5 rounded-full ${bot.unrealized_pnl >= 0? 'bg-[#0ecb81]' : 'bg-[#f6465d]'}`}
-                            style={{ width: `${Math.min(100, Math.abs((bot.unrealized_pnl / (bot.open_margin || 1)) * 100))}%` }}
-                          />
+          <div className="border-t border-[#2b3139]">
+            {botStatus?.bots && Object.values(botStatus.bots as Record<string, any>).length > 0 ? (
+              <div className="p-3 space-y-2">
+                {Object.entries(botStatus.bots as Record<string, any>).map(([botName, bot]: [string, any]) => (
+                  <div key={botName}>
+                    {/* Bot label row */}
+                    <div className="flex items-center gap-2 mb-1.5">
+                      <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${bot.position > 0 ? 'bg-[#0ecb81] animate-pulse' : 'bg-[#2b3139]'}`} />
+                      <span className="text-xs font-semibold text-[#eaecef] capitalize">{botName}</span>
+                      <span className={`text-[9px] px-1.5 py-0.5 rounded-full font-bold ${
+                        bot.position > 0 ? 'bg-[#0ecb81]/10 text-[#0ecb81]' : 'bg-[#2b3139] text-[#848e9c]'
+                      }`}>{bot.position > 0 ? 'OPEN' : 'IDLE'}</span>
+                    </div>
+
+                    {bot.position > 0 ? (
+                      /* ── Full BotsPage-style position card ── */
+                      <div className="bg-[#0b0e11] border border-[#0ecb81]/20 rounded-xl px-3 py-2.5 space-y-1.5 ml-3">
+                        {/* Header */}
+                        <div className="flex items-center justify-between">
+                          <p className="text-[10px] text-[#0ecb81] font-semibold uppercase tracking-wide flex items-center gap-1">
+                            <Target size={9} /> Open Position
+                          </p>
+                          <span className="text-[10px] font-mono font-bold text-[#f0b90b] bg-[#f0b90b]/10 px-1.5 py-0.5 rounded">{bot.ticker}</span>
                         </div>
-                        <span className={`text-[10px] font-mono w-12 text-right ${bot.unrealized_pnl >= 0? 'text-[#0ecb81]' : 'text-[#f6465d]'}`}>
-                          {bot.unrealized_pnl >= 0? '+' : ''}${bot.unrealized_pnl.toFixed(2)}
-                        </span>
-                      </>
-                    )}
-                    {bot.position === 0 && (
-                      <span className="text-[10px] text-[#4a5568]">Waiting</span>
+                        {/* Stats grid */}
+                        <div className="grid grid-cols-2 gap-x-4 gap-y-0.5 text-[10px]">
+                          <div className="flex justify-between">
+                            <span className="text-[#848e9c]">Entry</span>
+                            <span className="font-mono text-[#eaecef]">${fmt(bot.entry_price ?? 0)}</span>
+                          </div>
+                          <div className="flex justify-between">
+                            <span className="text-[#848e9c]">Size</span>
+                            <span className="font-mono text-[#f0b90b]">{(bot.position ?? 0).toFixed(6)}</span>
+                          </div>
+                          <div className="flex justify-between">
+                            <span className="text-[#848e9c]">Margin</span>
+                            <span className="font-mono text-[#eaecef]">${fmt(bot.open_margin ?? 0)}</span>
+                          </div>
+                          {bot.leverage && (
+                            <div className="flex justify-between">
+                              <span className="text-[#848e9c]">Leverage</span>
+                              <span className="font-mono text-[#eaecef]">{bot.leverage}x</span>
+                            </div>
+                          )}
+                        </div>
+                        {/* Unrealized P&L bar */}
+                        <div className="pt-1 border-t border-[#0ecb81]/10">
+                          <div className="flex items-center justify-between mb-1">
+                            <span className="text-[10px] text-[#848e9c]">Unrealized P&L</span>
+                            <span className={`text-sm font-bold font-mono ${(bot.unrealized_pnl ?? 0) >= 0 ? 'text-[#0ecb81]' : 'text-[#f6465d]'}`}>
+                              {(bot.unrealized_pnl ?? 0) >= 0 ? '+' : ''}${Math.abs(bot.unrealized_pnl ?? 0).toFixed(2)}
+                            </span>
+                          </div>
+                          <div className="w-full bg-[#2b3139] rounded-full h-1">
+                            <div className={`h-1 rounded-full transition-all ${(bot.unrealized_pnl ?? 0) >= 0 ? 'bg-[#0ecb81]' : 'bg-[#f6465d]'}`}
+                              style={{ width: `${Math.min(100, Math.abs(((bot.unrealized_pnl ?? 0) / Math.max(bot.open_margin ?? 1, 1)) * 100))}%` }} />
+                          </div>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="ml-3 px-3 py-2 rounded-lg bg-[#0b0e11] border border-[#2b3139]/50">
+                        <span className="text-[10px] text-[#4a5568]">Waiting for signal — {bot.ticker}</span>
+                      </div>
                     )}
                   </div>
-                </div>
-              ))
+                ))}
+              </div>
             ) : (
-              <div className="px-4 py-6 text-center">
-                <p className={`${titleSize} text-[#848e9c]`}>No bots found</p>
+              <div className="px-4 py-8 text-center">
+                <Bot size={24} className="text-[#2b3139] mx-auto mb-2" />
+                <p className="text-xs text-[#848e9c]">No bots configured</p>
               </div>
             )}
-            <button
-              onClick={() => navigate('/app/bots')}
-              className="w-full text-center text- text-[#f0b90b] text-[8px] hover:underline py-2"
-            >
-               FinBots →
-            </button>
+            <div className="border-t border-[#2b3139] px-4 py-2.5 flex justify-center">
+              <button onClick={() => navigate('/app/bots')}
+                className="text-xs text-[#f0b90b] hover:underline flex items-center gap-1">
+                Manage FinBots →
+              </button>
+            </div>
           </div>
         )}
       </div>
 
-      {/* ── FinEvent AI Signals Card → Same UI style as FinBot ── */}
-      <div className="bg-[#161a1e] border-[#2b3139] rounded-xl overflow-hidden">
-        <button
-          onClick={() => setEventCollapsed(v =>!v)}
-          className="w-full flex items-center justify-between px-4 py-3 hover:bg-[#1e2329] transition"
-        >
+      {/* ── FinEventAI Positions Card — BotsPage style ── */}
+      <div className="bg-[#161a1e] border border-[#f0b90b]/20 rounded-xl overflow-hidden">
+        <button onClick={() => setEventCollapsed(v => !v)}
+          className="w-full flex items-center justify-between px-4 py-3 hover:bg-[#1e2329] transition">
           <div className="flex items-center gap-2">
-            <Zap size={13} className="text-[#f0b90b]" />
-            <span className={`${titleSize} font-semibold text-[#eaecef]`}>FinEvent AI Signals</span>
+            <Brain size={13} className="text-[#f0b90b]" />
+            <span className="text-sm font-semibold text-[#eaecef]">FinEventAI Positions</span>
             {feStatus?.bots && (
-              <span className="text-[9px] bg-[#f0b90b]/10 text-[#f0b90b] border-[#f0b90b]/20 px-1.5 py-0.5 rounded-full">
-                {feStatus.bots.filter((b: any) => b.position > 0).length} positions
+              <span className="text-[9px] bg-[#f0b90b]/10 text-[#f0b90b] border border-[#f0b90b]/20 px-1.5 py-0.5 rounded-full font-semibold">
+                {feStatus.bots.filter((b: any) => b.position > 0 || Object.keys(b.open_positions ?? {}).length > 0).length} open
               </span>
             )}
           </div>
-          {eventCollapsed? <ChevronDown size={13} className="text-[#848e9c]" /> : <ChevronUp size={13} className="text-[#848e9c]" />}
+          {eventCollapsed ? <ChevronDown size={13} className="text-[#848e9c]" /> : <ChevronUp size={13} className="text-[#848e9c]" />}
         </button>
 
         {!eventCollapsed && (
-          <div className="border-t border-[#2b3139] divide-y divide-[#2b3139]/50">
-            {feStatus?.bots && feStatus.bots.length > 0? (
-              feStatus.bots.map((bot: any, i: number) => (
-                <div key={i} className="px-4 py-2.5 flex items-center justify-between gap-3">
-                  <div className="flex items-center gap-2 min-w-0">
-                    <span className="text-xs font-bold text-[#eaecef] font-mono">{bot.ticker}</span>
-                    {bot.position > 0? (
-                      <>
-                        <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-[#0ecb81]/10 text-[#0ecb81]">OPEN</span>
-                        <span className={`text-[9px] text-[#848e9c] truncate hidden sm:block`}>
-                          {bot.position.toFixed(4)} @ ${fmt(bot.entry_price)}
-                        </span>
-                      </>
-                    ) : (
-                      <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-[#848e9c]/10 text-[#848e9c]">IDLE</span>
-                    )}
-                  </div>
-                  <div className="flex items-center gap-1.5 flex-shrink-0">
-                    {bot.position > 0 && (
-                      <>
-                        <div className="w-16 bg-[#2b3139] rounded-full h-1.5">
-                          <div
-                            className={`h-1.5 rounded-full ${bot.unrealized_pnl >= 0? 'bg-[#0ecb81]' : 'bg-[#f6465d]'}`}
-                            style={{ width: `${Math.min(100, Math.abs((bot.unrealized_pnl / (bot.open_margin || bot.capital_per_trade || 1)) * 100))}%` }}
-                          />
+          <div className="border-t border-[#f0b90b]/20">
+            {feStatus?.bots && feStatus.bots.length > 0 ? (
+              <div className="p-3 space-y-2">
+                {feStatus.bots.map((bot: any, i: number) => {
+                  const openPositions: Record<string, any> = bot.open_positions ?? {}
+                  const hasOpenPos = Object.keys(openPositions).length > 0 || bot.position > 0
+                  return (
+                    <div key={i}>
+                      {/* Bot label row */}
+                      <div className="flex items-center gap-2 mb-1.5">
+                        <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${hasOpenPos ? 'bg-[#f0b90b] animate-pulse' : bot.running ? 'bg-[#0ecb81] animate-pulse' : 'bg-[#2b3139]'}`} />
+                        <span className="text-xs font-semibold text-[#eaecef] capitalize">{bot.bot_name ?? bot.ticker}</span>
+                        <span className={`text-[9px] px-1.5 py-0.5 rounded-full font-bold ${
+                          hasOpenPos ? 'bg-[#f0b90b]/10 text-[#f0b90b]' : bot.running ? 'bg-[#0ecb81]/10 text-[#0ecb81]' : 'bg-[#2b3139] text-[#848e9c]'
+                        }`}>{hasOpenPos ? 'OPEN' : bot.running ? 'RUNNING' : 'IDLE'}</span>
+                      </div>
+
+                      {/* BotsPage-style open position cards */}
+                      {Object.keys(openPositions).length > 0 ? (
+                        <div className="ml-3 space-y-1.5">
+                          {Object.entries(openPositions).map(([ticker, pos]: [string, any]) => {
+                            const upnl = pos.unrealized_pnl ?? 0
+                            const margin = pos.margin ?? bot.capital_per_trade ?? 0
+                            const lev = pos.leverage ?? bot.leverage ?? 10
+                            const tp = pos.take_profit_pct ?? bot.take_profit_pct ?? 50
+                            const sl = pos.stop_loss_pct ?? bot.stop_loss_pct ?? 30
+                            return (
+                              <div key={ticker} className="bg-[#f0b90b]/5 border border-[#f0b90b]/20 rounded-xl px-3 py-2.5 space-y-1.5">
+                                <div className="flex items-center justify-between">
+                                  <p className="text-[10px] text-[#f0b90b] font-semibold uppercase tracking-wide flex items-center gap-1">
+                                    <Target size={9} /> Open Position
+                                  </p>
+                                  <div className="flex items-center gap-1.5">
+                                    <span className="text-[10px] font-mono font-bold text-[#f0b90b] bg-[#f0b90b]/10 px-1.5 py-0.5 rounded">{ticker}</span>
+                                    <span className="text-[9px] font-bold text-[#848e9c] bg-[#2b3139] px-1.5 py-0.5 rounded">{lev}x</span>
+                                  </div>
+                                </div>
+                                <div className="grid grid-cols-2 gap-x-4 gap-y-0.5 text-[10px]">
+                                  <div className="flex justify-between"><span className="text-[#848e9c]">Entry</span><span className="font-mono text-[#eaecef]">${fmt(pos.entry_price ?? 0)}</span></div>
+                                  <div className="flex justify-between"><span className="text-[#848e9c]">Qty</span><span className="font-mono text-[#f0b90b]">{(pos.qty ?? 0).toFixed(6)}</span></div>
+                                  <div className="flex justify-between"><span className="text-[#848e9c]">Margin</span><span className="font-mono text-[#eaecef]">${margin.toFixed(2)}</span></div>
+                                  <div className="flex justify-between"><span className="text-[#848e9c]">Leverage</span><span className="font-mono text-[#eaecef]">{lev}x</span></div>
+                                  <div className="flex justify-between"><span className="text-[#0ecb81]">TP</span><span className="font-mono text-[#0ecb81]">+{tp}%</span></div>
+                                  <div className="flex justify-between"><span className="text-[#f6465d]">SL</span><span className="font-mono text-[#f6465d]">-{sl}%</span></div>
+                                </div>
+                                <div className="flex items-center justify-between pt-1 border-t border-[#f0b90b]/10">
+                                  <span className="text-[10px] text-[#848e9c]">Unrealized P&L</span>
+                                  <span className={`text-sm font-bold font-mono ${upnl >= 0 ? 'text-[#0ecb81]' : 'text-[#f6465d]'}`}>
+                                    {upnl >= 0 ? '+' : ''}${Math.abs(upnl).toFixed(2)}
+                                  </span>
+                                </div>
+                              </div>
+                            )
+                          })}
                         </div>
-                        <span className={`text- font-mono w-12 text-right ${bot.unrealized_pnl >= 0? 'text-[#0ecb81]' : 'text-[#f6465d]'}`}>
-                          {bot.unrealized_pnl >= 0? '+' : ''}${bot.unrealized_pnl.toFixed(2)}
-                        </span>
-                      </>
-                    )}
-                    {bot.position === 0 && (
-                      <span className="text- text-[#4a5568]">Waiting</span>
-                    )}
-                  </div>
-                </div>
-              ))
+                      ) : bot.position > 0 ? (
+                        /* Fallback: simple position card when open_positions not available */
+                        <div className="ml-3 bg-[#f0b90b]/5 border border-[#f0b90b]/20 rounded-xl px-3 py-2.5 space-y-1.5">
+                          <div className="flex items-center justify-between">
+                            <p className="text-[10px] text-[#f0b90b] font-semibold uppercase tracking-wide flex items-center gap-1"><Target size={9} /> Open Position</p>
+                            <span className="text-[10px] font-mono font-bold text-[#f0b90b] bg-[#f0b90b]/10 px-1.5 py-0.5 rounded">{bot.ticker}</span>
+                          </div>
+                          <div className="grid grid-cols-2 gap-x-4 gap-y-0.5 text-[10px]">
+                            <div className="flex justify-between"><span className="text-[#848e9c]">Entry</span><span className="font-mono text-[#eaecef]">${fmt(bot.entry_price ?? 0)}</span></div>
+                            <div className="flex justify-between"><span className="text-[#848e9c]">Size</span><span className="font-mono text-[#f0b90b]">{(bot.position ?? 0).toFixed(6)}</span></div>
+                            <div className="flex justify-between"><span className="text-[#848e9c]">Capital</span><span className="font-mono text-[#eaecef]">${fmt(bot.capital_per_trade ?? 0)}</span></div>
+                          </div>
+                          <div className="flex items-center justify-between pt-1 border-t border-[#f0b90b]/10">
+                            <span className="text-[10px] text-[#848e9c]">Unrealized P&L</span>
+                            <span className={`text-sm font-bold font-mono ${(bot.unrealized_pnl ?? 0) >= 0 ? 'text-[#0ecb81]' : 'text-[#f6465d]'}`}>
+                              {(bot.unrealized_pnl ?? 0) >= 0 ? '+' : ''}${Math.abs(bot.unrealized_pnl ?? 0).toFixed(2)}
+                            </span>
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="ml-3 px-3 py-2 rounded-lg bg-[#0b0e11] border border-[#2b3139]/50">
+                          <span className="text-[10px] text-[#4a5568]">{bot.running ? 'Monitoring events…' : 'Bot stopped'}</span>
+                        </div>
+                      )}
+                    </div>
+                  )
+                })}
+              </div>
             ) : (
-              <div className="px-4 py-6 text-center">
-                <p className={`${titleSize} text-[#848e9c]`}>No Event Bot data</p>
+              <div className="px-4 py-8 text-center">
+                <Brain size={24} className="text-[#2b3139] mx-auto mb-2" />
+                <p className="text-xs text-[#848e9c]">No EventBots configured</p>
               </div>
             )}
-            <button
-              onClick={() => navigate('/app/bots')}
-              className="w-full text-[8px] text-center text- text-[#f0b90b] hover:underline py-2"
-            >
-              FinEvent Bots →
-            </button>
+            <div className="border-t border-[#f0b90b]/10 px-4 py-2.5 flex justify-center">
+              <button onClick={() => navigate('/app/bots')}
+                className="text-xs text-[#f0b90b] hover:underline flex items-center gap-1">
+                Manage EventBots →
+              </button>
+            </div>
           </div>
         )}
       </div>

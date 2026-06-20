@@ -14,6 +14,7 @@ import {
   getVpsPlans, getAssetProducts, getPricingPlans,
   adminGetTestimonials, adminCreateTestimonial, adminUpdateTestimonial, adminToggleTestimonial, adminDeleteTestimonial,
   adminGetWalletStats,
+  adminGetChatFeedback,
 } from '../lib/api'
 import { AdminLiveVisitors } from '../components/AdminLiveVisitors'
 import toast from 'react-hot-toast'
@@ -23,7 +24,7 @@ import {
   Edit3, CreditCard, Eye, Gift, Trash2, ToggleLeft, ToggleRight,
   Share2, Copy, RotateCcw, Megaphone, Image, Plus, Link2, ExternalLink,
   Server, ShoppingBag, Package, DollarSign, X, Star, ChevronDown, Clock, Monitor, Download,
-  BarChart2,
+  BarChart2, ThumbsUp, ThumbsDown,
 } from 'lucide-react'
 import { adminGetUserActivity, adminClearUserActivity } from '../lib/api'
 
@@ -107,6 +108,8 @@ export default function AdminPage() {
   // Platform wallet stats
   const [walletStats, setWalletStats] = useState<any>(null)
   const [statsLoading, setStatsLoading] = useState(false)
+  // Chat feedback stats
+  const [feedbackStats, setFeedbackStats] = useState<{ likes: number; dislikes: number; total: number } | null>(null)
 
   // Notification form
   const [notifTitle, setNotifTitle] = useState('')
@@ -202,8 +205,12 @@ export default function AdminPage() {
     if (t === 'platform-stats') {
       setStatsLoading(true)
       try {
-        const res = await adminGetWalletStats()
-        setWalletStats(res.data)
+        const [statsRes, fbRes] = await Promise.all([
+          adminGetWalletStats(),
+          adminGetChatFeedback().catch(() => null),
+        ])
+        setWalletStats(statsRes.data)
+        if (fbRes?.data) setFeedbackStats(fbRes.data)
       } catch { toast.error('Failed to load platform stats') }
       finally { setStatsLoading(false) }
     }
@@ -2602,6 +2609,41 @@ export default function AdminPage() {
                   ))}
                 </div>
               </div>
+
+              {/* Chat Fin Feedback */}
+              {feedbackStats && (
+                <div>
+                  <p className="text-[10px] font-semibold text-[#848e9c] uppercase tracking-wide mb-2">Chat Fin Feedback</p>
+                  <div className="grid grid-cols-3 gap-3">
+                    <div className="bg-[#161a1e] border border-[#0ecb81]/20 rounded-xl p-4">
+                      <div className="flex items-center gap-2 mb-2">
+                        <ThumbsUp size={14} className="text-[#0ecb81]" />
+                        <p className="text-[10px] text-[#848e9c] font-medium uppercase tracking-wide">Helpful</p>
+                      </div>
+                      <p className="text-2xl font-bold font-mono text-[#0ecb81]">{feedbackStats.likes.toLocaleString()}</p>
+                    </div>
+                    <div className="bg-[#161a1e] border border-[#f6465d]/20 rounded-xl p-4">
+                      <div className="flex items-center gap-2 mb-2">
+                        <ThumbsDown size={14} className="text-[#f6465d]" />
+                        <p className="text-[10px] text-[#848e9c] font-medium uppercase tracking-wide">Not Helpful</p>
+                      </div>
+                      <p className="text-2xl font-bold font-mono text-[#f6465d]">{feedbackStats.dislikes.toLocaleString()}</p>
+                    </div>
+                    <div className="bg-[#161a1e] border border-[#2b3139] rounded-xl p-4">
+                      <div className="flex items-center gap-2 mb-2">
+                        <MessageSquare size={14} className="text-[#f0b90b]" />
+                        <p className="text-[10px] text-[#848e9c] font-medium uppercase tracking-wide">Total Rated</p>
+                      </div>
+                      <p className="text-2xl font-bold font-mono text-[#eaecef]">{feedbackStats.total.toLocaleString()}</p>
+                      {feedbackStats.total > 0 && (
+                        <p className="text-[10px] text-[#848e9c] mt-1">
+                          {Math.round((feedbackStats.likes / feedbackStats.total) * 100)}% positive
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
           ) : (
             <div className="py-20 text-center">

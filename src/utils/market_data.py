@@ -249,38 +249,34 @@ def get_commodities() -> dict:
     hit = _cached("commodities", 120)
     if hit:
         return hit
+    result = {}
     try:
         import yfinance as yf
-        tickers_str = " ".join(_COMMODITY_TICKERS.keys())
-        data = yf.download(
-            tickers_str,
-            period="2d",
-            interval="1d",
-            progress=False,
-            auto_adjust=True,
-        )
-        closes = data.get("Close", {})
-        result = {}
         for ticker, meta in _COMMODITY_TICKERS.items():
             try:
-                col = closes.get(ticker) if isinstance(closes, dict) else (
-                    closes[ticker] if hasattr(closes, '__getitem__') else None
-                )
-                if col is not None:
-                    vals = col.dropna()
-                    if len(vals) >= 2:
-                        prev = float(vals.iloc[-2])
-                        curr = float(vals.iloc[-1])
+                t = yf.Ticker(ticker)
+                hist = t.history(period="5d", interval="1d", auto_adjust=True)
+                if hist is not None and len(hist) >= 2:
+                    closes = hist["Close"].dropna()
+                    if len(closes) >= 2:
+                        curr = float(closes.iloc[-1])
+                        prev = float(closes.iloc[-2])
                         chg  = ((curr - prev) / prev * 100) if prev else 0
                         result[ticker] = {**meta, "price": round(curr, 2), "change": round(chg, 2), "prev": round(prev, 2)}
-                    elif len(vals) == 1:
-                        result[ticker] = {**meta, "price": round(float(vals.iloc[-1]), 2), "change": 0, "prev": 0}
-            except Exception:
-                pass
-        if result:
-            return _store("commodities", result)
+                        continue
+                # Fallback: fast_info
+                fi   = t.fast_info
+                curr = getattr(fi, "last_price", None) or getattr(fi, "regular_market_price", None)
+                prev = getattr(fi, "previous_close", None) or curr
+                if curr:
+                    chg = ((curr - prev) / prev * 100) if prev else 0
+                    result[ticker] = {**meta, "price": round(curr, 2), "change": round(chg, 2), "prev": round(prev, 2)}
+            except Exception as te:
+                logger.warning(f"Commodity {ticker} fetch failed: {te}")
     except Exception as e:
-        logger.warning(f"Commodities fetch failed: {e}")
+        logger.warning(f"Commodities import failed: {e}")
+    if result:
+        return _store("commodities", result)
     return _cached("commodities", 9999) or {}
 
 
