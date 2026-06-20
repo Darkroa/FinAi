@@ -39,12 +39,16 @@ def _resolve_database_url() -> str:
 DATABASE_URL = _resolve_database_url()
 
 # ── SQLAlchemy engine ─────────────────────────────────────────────────────────
+# Supabase requires SSL; local/fallback connections work with or without it
+_connect_args = {"sslmode": "require"} if SUPABASE_DB_URL else {}
+
 engine = create_engine(
     DATABASE_URL,
     pool_pre_ping=True,
     pool_size=10,
     max_overflow=20,
     echo=False,
+    connect_args=_connect_args,
 )
 
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)

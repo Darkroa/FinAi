@@ -218,19 +218,38 @@ def test_supabase_env():
 def test_db_connection():
     """
     Verify the active database (Supabase or fallback) is reachable via SQLAlchemy.
+    Self-contained — reads env vars directly so it works when the script is run
+    standalone (python src/utils/trykey.py) without the src package on sys.path.
     Run AFTER AI checks — as the last connectivity check.
     """
     try:
-        from src.database.session import engine, DATABASE_URL, SUPABASE_DB_URL
-        from sqlalchemy import text
+        from sqlalchemy import create_engine, text
         import time
 
-        source = "Supabase PostgreSQL" if SUPABASE_DB_URL else "Fallback DATABASE_URL"
+        supabase_db_url = SUPABASE_VARS["SUPABASE_DB_URL"]
+        fallback_url    = os.getenv("DATABASE_URL", "").strip()
+
+        if supabase_db_url:
+            db_url = supabase_db_url
+            source = "Supabase PostgreSQL (SUPABASE_DB_URL)"
+        elif fallback_url:
+            db_url = fallback_url
+            source = "Fallback DATABASE_URL"
+        else:
+            print("❌ Database: no DATABASE_URL or SUPABASE_DB_URL set")
+            return False
+
+        engine = create_engine(
+            db_url,
+            pool_pre_ping=True,
+            connect_args={"connect_timeout": 8, "sslmode": "require"},
+        )
         t0 = time.time()
         with engine.connect() as conn:
             conn.execute(text("SELECT 1"))
         latency = round((time.time() - t0) * 1000)
         print(f"✅ Database ({source}): connected  [{latency} ms]")
+        engine.dispose()
         return True
     except Exception as e:
         print(f"❌ Database: connection failed — {e}")
