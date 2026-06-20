@@ -266,6 +266,7 @@ class TradeLog(Base):
     take_profit = Column(Float, nullable=True)
     leverage = Column(Float, nullable=True, default=1.0)
     lot_size = Column(Float, nullable=True)
+    is_event_bot = Column(Boolean, default=False, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
 
 

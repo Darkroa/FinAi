@@ -2697,7 +2697,14 @@ async def jwt_stop_bot(ticker: str = Query(default="ALL"), current_user=Depends(
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
     manager = get_user_bot_manager(user.email, user.id)
-    return {"status": "success", "message": manager.stop_bot(ticker)}
+    msg = manager.stop_bot(ticker)
+    # When stopping ALL FinBots, also stop all FinEvent bots
+    if ticker.upper() == "ALL":
+        from src.trading.fin_event_bot import FinEventBotManager
+        fe_stopped = FinEventBotManager.instance().stop_all(user.id)
+        if fe_stopped:
+            msg += f" | FinEventAI: {fe_stopped} bot(s) stopped"
+    return {"status": "success", "message": msg}
 
 
 @router.post("/bots/close-position")
@@ -2716,13 +2723,14 @@ async def get_open_positions(current_user=Depends(get_current_user), db: Session
     user = db.query(User).filter(User.email == current_user["email"]).first()
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
-    # Get ALL buy trades (paper + real) that don't have a realized pnl yet
+    # Get manual BUY trades (exclude FinEventAI bot trades)
     open_buys = (
         db.query(TradeLog)
         .filter(
             TradeLog.user_id == user.id,
             TradeLog.action == "BUY",
             TradeLog.pnl == None,
+            TradeLog.exchange != "EventBot",
         )
         .order_by(TradeLog.created_at.desc())
         .limit(50)
@@ -4766,9 +4774,25 @@ async def start_fin_event_bot(
         raise HTTPException(status_code=404, detail="User not found")
 
     # Check subscription / tier limit
-    # Tier 2+ users always get at least 2 event bots regardless of subscription
     tier = user.account_tier or 0
-    limits = _subscription_limits(user.subscription or "free")
+    sub  = user.subscription or "free"
+    limits = _subscription_limits(sub)
+
+    # Free users (tier 0, free subscription) cannot use FinEventAI
+    if tier == 0 and sub == "free":
+        raise HTTPException(
+            status_code=403,
+            detail="FinEventAI bots require KYC Tier 1 verification or a Pro subscription."
+        )
+
+    # Balance check — must have at least capital_per_trade available
+    required = float(body.capital_per_trade or 500.0)
+    if not body.paper and (user.balance_usdt or 0) < required:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Insufficient balance. FinEventAI needs at least ${required:,.2f} USDT (capital per trade). Your balance: ${(user.balance_usdt or 0):,.2f} USDT."
+        )
+
     if tier >= 3:
         effective_event_bots = max(limits["event_bots"], 50)   # admin / tier-3
     elif tier >= 2:
@@ -4776,7 +4800,8 @@ async def start_fin_event_bot(
     elif tier >= 1:
         effective_event_bots = max(limits["event_bots"], 1)    # tier-1 gets at least 1
     else:
-        effective_event_bots = limits["event_bots"]            # free / unverified
+        effective_event_bots = limits["event_bots"]
+
     from src.trading.fin_event_bot import FinEventBotManager
     mgr = FinEventBotManager.instance()
     running = mgr.list_user_bots(user.id)

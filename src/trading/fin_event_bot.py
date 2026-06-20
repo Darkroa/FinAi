@@ -321,18 +321,6 @@ class FinEventBot:
                 f"Impact {event.impact_score}/10 | {event.sentiment}"
             )
 
-            if not self.paper:
-                user = db.query(User).filter(User.id == self.user_id).first()
-                if user:
-                    cost = price * qty
-                    if action == "BUY":
-                        if (user.balance_usdt or 0) < cost:
-                            logger.warning(f"FinEventAI: insufficient balance for {ticker}")
-                            return
-                        user.balance_usdt = round((user.balance_usdt or 0) - cost, 8)
-                    else:
-                        user.balance_usdt = round((user.balance_usdt or 0) + cost, 8)
-
             # ── Track open position ───────────────────────────────────────
             pnl_value = None
             if action == "BUY":
@@ -348,16 +336,17 @@ class FinEventBot:
                 self.total_pnl = round(self.total_pnl + pnl_value, 4)
 
             log = TradeLog(
-                user_id  = self.user_id,
-                ticker   = ticker,
-                action   = action,
-                price    = price,
-                qty      = qty,
-                pnl      = pnl_value,
-                reason   = reason,
-                paper    = self.paper,
-                exchange = "EventBot",
+                user_id      = self.user_id,
+                ticker       = ticker,
+                action       = action,
+                price        = price,
+                qty          = qty,
+                pnl          = pnl_value,
+                reason       = reason,
+                paper        = True,        # always paper — own execution, no balance touch
+                exchange     = "EventBot",
             )
+            log.is_event_bot = True  # excluded from manual open positions list
             db.add(log)
             db.commit()
             db.refresh(log)

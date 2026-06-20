@@ -385,8 +385,14 @@ export default function BotsPage() {
     setActionLoading(botId)
     try {
       await stopBot(botId)
-      if (botId === 'ALL') setStatus(s => ({ ...s, running: false }))
-      toast.success(botId === 'ALL' ? 'All bots stopped' : `Bot "${botId}" stopped`)
+      if (botId === 'ALL') {
+        // Also stop all running FinEvent bots
+        const runningFe = feBots.filter(b => b.running)
+        await Promise.allSettled(runningFe.map(b => finEventStop(b.bot_name)))
+        setStatus(s => ({ ...s, running: false }))
+        await fetchFeStatus()
+      }
+      toast.success(botId === 'ALL' ? 'All bots stopped (FinBot + FinEventAI)' : `Bot "${botId}" stopped`)
       fetchData()
     } catch { toast.error('Failed to stop bot') } finally { setActionLoading(null) }
   }
