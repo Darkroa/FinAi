@@ -998,15 +998,16 @@ async def update_notification_preferences(
 
 @router.post("/users/upload-photo")
 async def upload_photo(current_user=Depends(get_current_user), db: Session = Depends(get_db), file: UploadFile = File(...)):
+    from src.utils.storage import upload_image
     user = db.query(User).filter(User.email == current_user["email"]).first()
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
     content = await file.read()
     if len(content) > 2 * 1024 * 1024:
         raise HTTPException(status_code=400, detail="Photo must be under 2MB")
-    b64 = base64.b64encode(content).decode()
     mime = file.content_type or "image/jpeg"
-    user.profile_photo = f"data:{mime};base64,{b64}"
+    url = upload_image(content, mime=mime)
+    user.profile_photo = url
     db.commit()
     return {"profile_photo": user.profile_photo}
 
@@ -1502,9 +1503,16 @@ async def get_pricing_plans(db: Session = Depends(get_db)):
 
 @router.post("/wallet/deposit")
 async def request_deposit(data: DepositRequest, current_user=Depends(get_current_user), db: Session = Depends(get_db)):
+    from src.utils.storage import upload_image_from_base64
     user = db.query(User).filter(User.email == current_user["email"]).first()
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
+    proof_url = None
+    if data.payment_proof:
+        try:
+            proof_url = upload_image_from_base64(data.payment_proof)
+        except Exception:
+            proof_url = data.payment_proof
     tx = Transaction(
         user_id=user.id,
         tx_type="deposit",
@@ -1518,7 +1526,7 @@ async def request_deposit(data: DepositRequest, current_user=Depends(get_current
         wallet_address=data.wallet_address,
         bank_ref=data.bank_ref,
         note=data.note,
-        payment_proof=data.payment_proof,
+        payment_proof=proof_url,
     )
     db.add(tx)
     db.commit()
@@ -5297,12 +5305,19 @@ async def admin_list_ads(db: Session = Depends(get_db)):
 
 @router.post("/admin/ads", dependencies=[Depends(require_admin)])
 async def admin_create_ad(data: AdCreate, current_user=Depends(get_current_user), db: Session = Depends(get_db)):
+    from src.utils.storage import upload_image_from_base64
     user = db.query(User).filter(User.email == current_user["email"]).first()
+    image_url = None
+    if data.image_base64:
+        try:
+            image_url = upload_image_from_base64(data.image_base64)
+        except Exception:
+            image_url = data.image_base64
     ad = Ad(
         title=data.title,
         description=data.description,
         ad_type=data.ad_type or "banner",
-        image_base64=data.image_base64,
+        image_base64=image_url,
         link_url=data.link_url,
         is_active=data.is_active,
         created_by=user.id if user else None,
@@ -5329,7 +5344,12 @@ async def admin_update_ad(ad_id: int, data: AdUpdate, db: Session = Depends(get_
     if data.title is not None: ad.title = data.title
     if data.description is not None: ad.description = data.description
     if data.ad_type is not None: ad.ad_type = data.ad_type
-    if data.image_base64 is not None: ad.image_base64 = data.image_base64
+    if data.image_base64 is not None:
+        from src.utils.storage import upload_image_from_base64
+        try:
+            ad.image_base64 = upload_image_from_base64(data.image_base64)
+        except Exception:
+            ad.image_base64 = data.image_base64
     if data.link_url is not None: ad.link_url = data.link_url
     if data.is_active is not None: ad.is_active = data.is_active
     db.commit()

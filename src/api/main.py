@@ -16,6 +16,9 @@ from src.api.middleware import APIRateLimitMiddleware
 from src.database.models import Base
 from src.database.session import engine
 
+UPLOADS_DIR = Path(__file__).parent.parent.parent / "uploads"
+UPLOADS_DIR.mkdir(parents=True, exist_ok=True)
+
 app = FastAPI(
     title="FinAi API",
     version="1.0.0",
@@ -40,6 +43,8 @@ app.include_router(router, prefix="/api")
 
 # ===================== Static Frontend Serving =====================
 FRONTEND_DIST = Path(__file__).parent.parent.parent / "frontend" / "dist"
+
+app.mount("/uploads", StaticFiles(directory=str(UPLOADS_DIR)), name="uploads")
 
 if FRONTEND_DIST.exists():
     app.mount("/assets", StaticFiles(directory=str(FRONTEND_DIST / "assets")), name="assets")

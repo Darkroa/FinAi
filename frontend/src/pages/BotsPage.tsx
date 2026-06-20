@@ -452,13 +452,13 @@ export default function BotsPage() {
         <div className="bg-[#161a1e] border border-[#f0b90b]/20 rounded-2xl p-6 max-w-sm w-full space-y-3 text-left">
           <p className="text-xs font-semibold text-[#f0b90b] uppercase tracking-widest">How to get access</p>
           <ol className="space-y-2 text-sm text-[#848e9c]">
-            <li className="flex gap-2"><span className="text-[#f0b90b] font-bold">1.</span> Go to your Profile page</li>
+            <li className="flex gap-2"><span className="text-[#f0b90b] font-bold">1.</span> Go to your FinApi</li>
             <li className="flex gap-2"><span className="text-[#f0b90b] font-bold">2.</span> Open the <span className="text-[#eaecef] font-medium">FinAPI</span> tab</li>
             <li className="flex gap-2"><span className="text-[#f0b90b] font-bold">3.</span> Create a new API key</li>
             <li className="flex gap-2"><span className="text-[#f0b90b] font-bold">4.</span> Return here to start trading</li>
           </ol>
         </div>
-        <button onClick={() => navigate('/app/profile')}
+        <button onClick={() => navigate('/app/finapi')}
           className="flex items-center gap-2 bg-[#f0b90b] hover:bg-[#d9a60b] text-black font-bold px-6 py-3 rounded-xl transition">
           <KeyRound size={16} /> Go to Profile — Create Key <ArrowRight size={14} />
         </button>
