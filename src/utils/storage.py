@@ -1,5 +1,5 @@
 """
-Storage utility: upload images to Supabase Storage (bucket: amen) when
+Storage utility: upload images to Supabase Storage (bucket: Finstroage, folder: amen) when
 SUPABASE_URL + SUPABASE_KEY are configured, otherwise save to local
 /uploads/ folder and return a relative URL.
 """
@@ -12,7 +12,8 @@ from loguru import logger
 
 SUPABASE_URL = os.getenv("SUPABASE_URL", "").strip()
 SUPABASE_KEY = os.getenv("SUPABASE_KEY", "").strip()
-BUCKET = "amen"
+BUCKET = "Finstroage"
+FOLDER = "amen"
 
 LOCAL_UPLOADS_DIR = Path(__file__).parent.parent.parent / "uploads"
 LOCAL_UPLOADS_DIR.mkdir(parents=True, exist_ok=True)
@@ -46,8 +47,8 @@ def upload_image(content: bytes, mime: str = "image/jpeg", filename: str | None 
     Upload raw image bytes. Returns a public URL string.
 
     Priority:
-      1. Supabase Storage bucket 'amen'  (if SUPABASE_URL + SUPABASE_KEY set)
-      2. Local /uploads/ folder          (fallback)
+      1. Supabase Storage bucket 'Finstroage', folder 'amen'  (if SUPABASE_URL + SUPABASE_KEY set)
+      2. Local /uploads/ folder                               (fallback)
     """
     ext = _ext_from_mime(mime)
     fname = filename or f"{uuid.uuid4().hex}{ext}"
@@ -56,7 +57,7 @@ def upload_image(content: bytes, mime: str = "image/jpeg", filename: str | None 
         try:
             client = _get_supabase_client()
             if _ensure_bucket(client):
-                path = f"amen/{fname}"
+                path = f"{FOLDER}/{fname}"
                 client.storage.from_(BUCKET).upload(
                     path=path,
                     file=content,
