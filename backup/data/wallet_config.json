@@ -1,0 +1,26 @@
+[
+  {
+    "id": "id",
+    "key": "key",
+    "value": "value",
+    "label": "label",
+    "updated_at": "updated_at",
+    "updated_by": "updated_by"
+  },
+  {
+    "id": "id",
+    "key": "key",
+    "value": "value",
+    "label": "label",
+    "updated_at": "updated_at",
+    "updated_by": "updated_by"
+  },
+  {
+    "id": "id",
+    "key": "key",
+    "value": "value",
+    "label": "label",
+    "updated_at": "updated_at",
+    "updated_by": "updated_by"
+  }
+]
