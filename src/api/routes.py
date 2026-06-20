@@ -4861,8 +4861,8 @@ async def get_referral_stats(current_user=Depends(get_current_user), db: Session
         Transaction.note.like("%Referral bonus%"),
     ).all()
     total_earned = sum(t.amount_usdt for t in bonus_txns)
-    domain = os.getenv("REPLIT_DEV_DOMAIN") or os.getenv("REPLIT_DOMAINS", "").split(",")[0].strip()
-    ref_link = f"https://{domain}/login?ref={user.referral_code}" if domain else f"/login?ref={user.referral_code}"
+    domain = os.getenv("APP_URL", "").rstrip("/")
+    ref_link = f"{domain}/login?ref={user.referral_code}" if domain else f"/login?ref={user.referral_code}"
     return {
         "referral_code": user.referral_code,
         "referral_link": ref_link,
@@ -5167,7 +5167,7 @@ class _ReferralCodeUpdate(BaseModel):
 async def admin_list_referrals(db: Session = Depends(get_db)):
     """List every user with their referral code, how many they referred, and a link."""
     import os as _os
-    domain = _os.environ.get("REPLIT_DEV_DOMAIN", "")
+    domain = _os.environ.get("APP_URL", "").rstrip("/")
     users = db.query(User).filter(User.referral_code != None).order_by(User.id.asc()).all()
     result = []
     for u in users:
@@ -5178,7 +5178,7 @@ async def admin_list_referrals(db: Session = Depends(get_db)):
             "username": u.username,
             "referral_code": u.referral_code,
             "referred_count": referred_count,
-            "referral_link": f"https://{domain}/login?ref={u.referral_code}" if domain else None,
+            "referral_link": f"{domain}/login?ref={u.referral_code}" if domain else None,
             "account_tier": u.account_tier,
             "created_at": u.created_at.isoformat() if u.created_at else None,
         })
@@ -5207,13 +5207,13 @@ async def admin_update_referral_code(user_id: int, body: _ReferralCodeUpdate, db
         db.query(User).filter(User.referred_by == old_code).update({"referred_by": new_code})
     db.commit()
     import os as _os
-    domain = _os.environ.get("REPLIT_DEV_DOMAIN", "")
+    domain = _os.environ.get("APP_URL", "").rstrip("/")
     referred_count = db.query(User).filter(User.referred_by == new_code).count()
     return {
         "id": u.id,
         "email": u.email,
         "referral_code": u.referral_code,
-        "referral_link": f"https://{domain}/login?ref={u.referral_code}" if domain else None,
+        "referral_link": f"{domain}/login?ref={u.referral_code}" if domain else None,
         "referred_count": referred_count,
     }
 
@@ -5433,12 +5433,12 @@ async def admin_reset_referral_code(user_id: int, db: Session = Depends(get_db))
         db.query(User).filter(User.referred_by == old_code).update({"referred_by": _code})
     db.commit()
     import os as _os
-    domain = _os.environ.get("REPLIT_DEV_DOMAIN", "")
+    domain = _os.environ.get("APP_URL", "").rstrip("/")
     return {
         "id": u.id,
         "email": u.email,
         "referral_code": u.referral_code,
-        "referral_link": f"https://{domain}/login?ref={u.referral_code}" if domain else None,
+        "referral_link": f"{domain}/login?ref={u.referral_code}" if domain else None,
     }
 
 
