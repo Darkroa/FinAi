@@ -10,6 +10,80 @@ import { useLanguage } from '../contexts/LanguageContext'
 interface Message { role: 'user' | 'ai'; text: string; time: string }
 interface Conversation { id: string; title: string; messages: Message[]; createdAt: string }
 
+// ── Response styler ───────────────────────────────────────────────────────────
+const BEAR_RE = /\b(sell|short|bearish|resistance|stop.?loss|stop|breakdown|downtrend|decline|drop|fall|risk|warn(?:ing)?|caution|overbought|reversal|reject(?:ion)?|lower)\b/gi
+const BULL_RE = /\b(buy|long|bullish|support|breakout|uptrend|rally|rise|profit|target|strong|momentum|accumulate|oversold|opportunity|bounce)\b/gi
+const NUM_RE  = /(\$[\d,]+(?:\.\d+)?[KkMmBbTt]?|[\d,]+(?:\.\d+)?%|\b[\d]{1,3}(?:,\d{3})*(?:\.\d+)?\b)/g
+
+function StyledResponse({ text }: { text: string }) {
+  const lines = text.split('\n')
+
+  function styleLine(line: string): React.ReactNode {
+    // Split by tokens we want to colour, keeping delimiters
+    const parts: React.ReactNode[] = []
+    let remaining = line
+    let key = 0
+
+    // Combined regex pass: numbers, bearish words, bullish words
+    const COMBINED = new RegExp(
+      `(${NUM_RE.source})|(${BEAR_RE.source})|(${BULL_RE.source})`,
+      'gi'
+    )
+    let lastIndex = 0
+    let m: RegExpExecArray | null
+    COMBINED.lastIndex = 0
+
+    while ((m = COMBINED.exec(remaining)) !== null) {
+      if (m.index > lastIndex) {
+        parts.push(remaining.slice(lastIndex, m.index))
+      }
+      const match = m[0]
+      if (NUM_RE.test(match)) {
+        // figure → yellow
+        parts.push(<span key={key++} style={{ color: '#f0b90b', fontWeight: 600 }}>{match}</span>)
+      } else if (BEAR_RE.test(match)) {
+        // bearish/risk word → red
+        parts.push(<span key={key++} style={{ color: '#f6465d', fontWeight: 600 }}>{match}</span>)
+      } else {
+        // bullish word → green
+        parts.push(<span key={key++} style={{ color: '#0ecb81', fontWeight: 600 }}>{match}</span>)
+      }
+      lastIndex = COMBINED.lastIndex
+      // Reset individual regexes so .test() works correctly next loop
+      NUM_RE.lastIndex  = 0
+      BEAR_RE.lastIndex = 0
+      BULL_RE.lastIndex = 0
+    }
+    if (lastIndex < remaining.length) parts.push(remaining.slice(lastIndex))
+    return parts
+  }
+
+  return (
+    <div className="text-sm text-[#eaecef] leading-relaxed space-y-0.5">
+      {lines.map((line, i) => {
+        // Section headers (lines starting with ── or ━ or all-caps label ending with :)
+        const isHeader = /^[━─#*]+/.test(line.trim()) || /^[A-Z][A-Z\s\/&]{3,}:/.test(line.trim())
+        // Bullet / list line
+        const isBullet = /^[\s]*[•\-*·]\s/.test(line)
+        return (
+          <div key={i}
+            className={
+              isHeader
+                ? 'text-[#f0b90b] font-bold text-xs tracking-wide mt-3 mb-1 border-b border-[#2b3139] pb-0.5'
+                : isBullet
+                  ? 'pl-3 text-[#eaecef]'
+                  : line.trim() === ''
+                    ? 'h-2'
+                    : ''
+            }>
+            {styleLine(line)}
+          </div>
+        )
+      })}
+    </div>
+  )
+}
+
 interface SessionInfo   { tokyo: boolean; london: boolean; new_york: boolean }
 interface DateInfo      { utc: string; day: string; is_weekend: boolean; sessions: SessionInfo }
 
@@ -288,7 +362,10 @@ export default function ChatFinPage() {
                 <div className={`max-w-[78%] rounded-2xl px-4 py-2.5 ${
                   msg.role === 'user' ? 'bg-[#f0b90b]/10 border border-[#f0b90b]/20' : 'bg-[#1e2329] border border-[#2b3139]'
                 }`}>
-                  <p className="text-sm text-[#eaecef] leading-relaxed whitespace-pre-wrap">{msg.text}</p>
+                  {msg.role === 'ai'
+                    ? <StyledResponse text={msg.text} />
+                    : <p className="text-sm text-[#eaecef] leading-relaxed whitespace-pre-wrap">{msg.text}</p>
+                  }
                   <p className="text-[9px] text-[#4a5568] mt-1">{msg.time}</p>
                 </div>
               </div>

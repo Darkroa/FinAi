@@ -349,11 +349,18 @@ def chat_with_agent(
 
     auto_context = ""
     try:
-        auto_context = get_datetime_context()
+        # Always inject the full live snapshot: datetime + crypto + FX + indexes + commodities
+        auto_context = build_full_context()
     except Exception:
-        pass
+        try:
+            auto_context = get_datetime_context()
+        except Exception:
+            pass
 
-    combined_context = "\n\n".join(filter(None, [auto_context, market_context]))
+    # Merge auto-fetched context with any caller-supplied context (deduplicate)
+    combined_context = auto_context if auto_context else market_context
+    if auto_context and market_context and market_context not in auto_context:
+        combined_context = f"{auto_context}\n\n{market_context}"
     market_block = f"\n\n{combined_context}\n" if combined_context else ""
 
     system_content = (
