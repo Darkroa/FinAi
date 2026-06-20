@@ -9,68 +9,52 @@ try:
 except ImportError:
     _HAS_REQUESTS = False
 
-RECEIVER_EMAIL = os.getenv("TEST_RECEIVER_EMAIL", "tomiwakhalifa@gmail.com")
-
-SMTP_PROVIDERS = [
-    {
-        "name": "Gmail",
-        "server": "smtp.gmail.com",
-        "port": 587,
-        "user": os.getenv("GMAIL_USER", "khalifatomiwa@gmail.com"),
-        "password": os.getenv("GMAIL_APP_PASSWORD", "cjninslrbxmsvgwt"),
-    },
-    {
-        "name": "Outlook / Hotmail",
-        "server": "smtp.office365.com",
-        "port": 587,
-        "user": os.getenv("OUTLOOK_USER", ""),
-        "password": os.getenv("OUTLOOK_PASSWORD", ""),
-    },
-]
+# ── Credentials from env vars (matching local.env / app config) ───────────────
+SMTP_HOST     = os.getenv("SMTP_HOST",     "smtp.gmail.com")
+SMTP_PORT     = int(os.getenv("SMTP_PORT", "587"))
+SENDER_EMAIL  = os.getenv("SMTP_USER",     "")
+SENDER_PASSWORD = os.getenv("SMTP_PASSWORD", "")
 
 RESEND_API_KEY = os.getenv("RESEND_API_KEY", "")
-RESEND_FROM = os.getenv("RESEND_FROM", "onboarding@resend.dev")
+RESEND_FROM    = os.getenv("RESEND_FROM",    "FinAi <onboarding@resend.dev>")
+
+RECEIVER_EMAIL = os.getenv("TEST_RECEIVER_EMAIL", "tomiwakhalifa@gmail.com")
+
+SUBJECT = "FinAi Project — Test Email"
+BODY    = "It's working! Your email connection is successfully configured."
 
 
-def _build_message(sender: str, subject: str, body: str) -> MIMEMultipart:
-    msg = MIMEMultipart()
-    msg["From"] = sender
-    msg["To"] = RECEIVER_EMAIL
-    msg["Subject"] = subject
-    msg.attach(MIMEText(body, "plain"))
-    return msg
-
-
-def _try_smtp(provider: dict, subject: str, body: str) -> bool:
-    user = provider["user"]
-    password = provider["password"]
-    if not user or not password:
-        print(f"  ⚠️  [{provider['name']}] credentials not set — skipping.")
+def _try_smtp() -> bool:
+    if not SENDER_EMAIL or not SENDER_PASSWORD:
+        print("  ⚠️  [SMTP] SMTP_USER or SMTP_PASSWORD not set — skipping.")
         return False
-
-    msg = _build_message(user, subject, body)
     try:
-        print(f"  Connecting to {provider['server']}:{provider['port']} ...")
-        server = smtplib.SMTP(provider["server"], provider["port"], timeout=10)
+        msg = MIMEMultipart()
+        msg["From"]    = SENDER_EMAIL
+        msg["To"]      = RECEIVER_EMAIL
+        msg["Subject"] = SUBJECT
+        msg.attach(MIMEText(BODY, "plain"))
+
+        print(f"  Connecting to {SMTP_HOST}:{SMTP_PORT} ...")
+        server = smtplib.SMTP(SMTP_HOST, SMTP_PORT, timeout=10)
         server.starttls()
-        server.login(user, password)
-        server.sendmail(user, [RECEIVER_EMAIL], msg.as_string())
+        server.login(SENDER_EMAIL, SENDER_PASSWORD)
+        server.sendmail(SENDER_EMAIL, [RECEIVER_EMAIL], msg.as_string())
         server.quit()
-        print(f"  ✅ [{provider['name']}] Email sent successfully.")
+        print("  ✅ [SMTP] Email sent successfully.")
         return True
     except Exception as e:
-        print(f"  ❌ [{provider['name']}] Failed: {e}")
+        print(f"  ❌ [SMTP] Failed: {e}")
         return False
 
 
-def _try_resend(subject: str, body: str) -> bool:
-    if not _HAS_REQUESTS:
-        print("  ⚠️  [Resend] 'requests' library not installed — skipping.")
-        return False
+def _try_resend() -> bool:
     if not RESEND_API_KEY:
         print("  ⚠️  [Resend] RESEND_API_KEY not set — skipping.")
         return False
-
+    if not _HAS_REQUESTS:
+        print("  ⚠️  [Resend] 'requests' library not installed — skipping.")
+        return False
     try:
         print("  Calling Resend API ...")
         resp = requests.post(
@@ -81,14 +65,14 @@ def _try_resend(subject: str, body: str) -> bool:
             },
             json={
                 "from": RESEND_FROM,
-                "to": [RECEIVER_EMAIL],
-                "subject": subject,
-                "text": body,
+                "to":   [RECEIVER_EMAIL],
+                "subject": SUBJECT,
+                "text": BODY,
             },
             timeout=10,
         )
         if resp.status_code in (200, 201):
-            print(f"  ✅ [Resend] Email sent successfully (id={resp.json().get('id')}).")
+            print(f"  ✅ [Resend] Email sent (id={resp.json().get('id')}).")
             return True
         else:
             print(f"  ❌ [Resend] API error {resp.status_code}: {resp.text}")
@@ -99,21 +83,25 @@ def _try_resend(subject: str, body: str) -> bool:
 
 
 def send_test_email():
-    subject = "FinAi Project — Test Email"
-    body = "It's working! Your email connection is successfully configured."
-
     print(f"\n📧 Sending test email to {RECEIVER_EMAIL} ...\n")
 
-    for provider in SMTP_PROVIDERS:
-        print(f"[Trying {provider['name']} SMTP]")
-        if _try_smtp(provider, subject, body):
-            return
+    smtp_ok   = False
+    resend_ok = False
 
-    print("[Trying Resend API]")
-    if _try_resend(subject, body):
-        return
+    print("[SMTP]")
+    smtp_ok = _try_smtp()
 
-    print("\n❌ All providers failed. Check your credentials / env vars.")
+    print("\n[Resend]")
+    resend_ok = _try_resend()
+
+    print()
+    if smtp_ok and resend_ok:
+        print("🎉 Both SMTP and Resend delivered the email.")
+    elif smtp_ok or resend_ok:
+        which = "SMTP" if smtp_ok else "Resend"
+        print(f"✅ Email delivered via {which}.")
+    else:
+        print("❌ All providers failed. Set SMTP_USER / SMTP_PASSWORD and/or RESEND_API_KEY.")
 
 
 if __name__ == "__main__":
