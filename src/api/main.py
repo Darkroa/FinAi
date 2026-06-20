@@ -198,6 +198,11 @@ async def startup_event():
                 "ALTER TABLE bonuses ADD COLUMN IF NOT EXISTS granted_count INTEGER DEFAULT 0",
                 "ALTER TABLE bonuses ADD COLUMN IF NOT EXISTS created_by INTEGER REFERENCES users(id)",
                 "ALTER TABLE bonuses ADD COLUMN IF NOT EXISTS note TEXT",
+                # EventBot trade identification
+                "ALTER TABLE trade_logs ADD COLUMN IF NOT EXISTS is_event_bot BOOLEAN DEFAULT FALSE",
+                # EventBot config: leverage, TP, SL stored on trade_logs for position cards
+                "ALTER TABLE trade_logs ADD COLUMN IF NOT EXISTS take_profit FLOAT",
+                "ALTER TABLE trade_logs ADD COLUMN IF NOT EXISTS stop_loss FLOAT",
             ]:
                 _conn.execute(_text(stmt))
             _conn.commit()

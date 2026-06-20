@@ -20,12 +20,8 @@ class SentimentAnalyzer:
     @property
     def llm(self):
         if self._llm is None:
-            from langchain_openai import ChatOpenAI
-            self._llm = ChatOpenAI(
-                model="gpt-4o-mini",
-                temperature=0.2,
-                api_key=os.getenv("OPENAI_API_KEY") or os.getenv("GROK_API_KEY") or os.getenv("GROQ_API_KEY") or "placeholder",
-            )
+            from src.utils.keymodel import get_llm
+            self._llm = get_llm(temperature=0.2)
         return self._llm
 
     def analyze(self, news_text: str, ticker: str) -> NewsSentiment:

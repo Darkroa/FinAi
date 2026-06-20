@@ -31,9 +31,11 @@ class FinancialRAG:
     def embeddings(self):
         if self._embeddings is None:
             from langchain_openai import OpenAIEmbeddings
+            from src.utils.keymodel import get_best_api_key
+            api_key, _, _ = get_best_api_key()
             self._embeddings = OpenAIEmbeddings(
                 model="text-embedding-3-small",
-                api_key=os.getenv("OPENAI_API_KEY") or os.getenv("GROK_API_KEY") or os.getenv("GROQ_API_KEY") or "placeholder",
+                api_key=api_key,
             )
         return self._embeddings
 

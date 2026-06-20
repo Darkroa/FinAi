@@ -3319,18 +3319,11 @@ async def telegram_webhook(request: Request, db: Session = Depends(get_db)):
             ctx = f"User balance ${bal:,.2f} USDT, {len(running)} active bots."
             answer = None
             try:
-                grok_key = os.getenv("GROQ_API_KEY") or os.getenv("GROK_API_KEY") or os.getenv("XAI_API_KEY")
-                oai_key  = os.getenv("OPENAI_API_KEY")
-                if grok_key:
-                    from langchain_groq import ChatGroq
-                    _llm = ChatGroq(api_key=grok_key, model="llama-3.3-70b-versatile", max_tokens=200)
-                    _msg = _llm.invoke(f"You are FinAi, an AI trading assistant. {ctx} Answer briefly (2-3 sentences): {question}")
-                    answer = _msg.content.strip()
-                elif oai_key:
-                    from langchain_openai import ChatOpenAI
-                    _llm = ChatOpenAI(api_key=oai_key, model="gpt-4o-mini", max_tokens=200)
-                    _msg = _llm.invoke(f"You are FinAi, an AI trading assistant. {ctx} Answer briefly: {question}")
-                    answer = _msg.content.strip()
+                from src.utils.keymodel import call_ai as _call_ai
+                answer = _call_ai(
+                    [{"role": "user", "content": f"You are FinAi, an AI trading assistant. {ctx} Answer briefly (2-3 sentences): {question}"}],
+                    max_tokens=200,
+                ).strip()
             except Exception as _ae:
                 logger.error(f"AI /ask error: {_ae}")
             if not answer:
@@ -3587,18 +3580,11 @@ async def whatsapp_webhook(request: Request, db: Session = Depends(get_db)):
             ctx    = f"User balance ${bal:,.2f} USDT, {len(running)} active bots."
             answer = None
             try:
-                grok_key = os.getenv("GROQ_API_KEY") or os.getenv("GROK_API_KEY") or os.getenv("XAI_API_KEY")
-                oai_key  = os.getenv("OPENAI_API_KEY")
-                if grok_key:
-                    from langchain_groq import ChatGroq
-                    _llm = ChatGroq(api_key=grok_key, model="llama-3.3-70b-versatile", max_tokens=200)
-                    _msg = _llm.invoke(f"You are FinAi, an AI trading assistant. {ctx} Answer briefly (2-3 sentences): {question}")
-                    answer = _msg.content.strip()
-                elif oai_key:
-                    from langchain_openai import ChatOpenAI
-                    _llm = ChatOpenAI(api_key=oai_key, model="gpt-4o-mini", max_tokens=200)
-                    _msg = _llm.invoke(f"You are FinAi, an AI trading assistant. {ctx} Answer briefly: {question}")
-                    answer = _msg.content.strip()
+                from src.utils.keymodel import call_ai as _call_ai
+                answer = _call_ai(
+                    [{"role": "user", "content": f"You are FinAi, an AI trading assistant. {ctx} Answer briefly (2-3 sentences): {question}"}],
+                    max_tokens=200,
+                ).strip()
             except Exception:
                 pass
             if not answer:

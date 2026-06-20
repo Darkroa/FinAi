@@ -1,2 +1,5 @@
 - [DashboardLayout architecture](dashboard-layout.md) — right-side nav drawer (profile pic opens it), no desktop sidebar, bottom 5-button nav with elevated center FinBot button.
 - [ProfilePage card-nav pattern](profile-page-pattern.md) — main view is a card-based list; each row sets subPage state; SubPageWrapper adds back-button; no tab bar.
+- [AI hub keymodel](keymodel-hub.md) — `src/utils/keymodel.py` is the single source for all 8 AI providers; `llm.py` is a shim; all modules must import from keymodel.
+- [BotsPage trade log split](bots-trade-log-split.md) — FinBot trades filtered by excluding 'fineventai' in reason field; EventBot trades shown in separate FinEventAI Trade Log card at bottom.
+- [trade_logs DB columns](trade-logs-db.md) — Added is_event_bot BOOLEAN, take_profit FLOAT, stop_loss FLOAT via startup migrations in main.py.

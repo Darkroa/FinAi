@@ -1,11 +1,11 @@
 from .vector_store import FinancialRAG
 from langchain.chains import RetrievalQA
-from langchain_openai import ChatOpenAI
+from src.utils.keymodel import get_llm
 
 rag = FinancialRAG()
 
 def get_rag_chain():
-    llm = ChatOpenAI(model="gpt-4o-mini", temperature=0.3)
+    llm = get_llm(temperature=0.3)
     return RetrievalQA.from_chain_type(
         llm=llm,
         chain_type="stuff",

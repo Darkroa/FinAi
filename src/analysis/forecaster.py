@@ -24,12 +24,8 @@ class Forecaster:
     @property
     def llm(self):
         if self._llm is None:
-            from langchain_openai import ChatOpenAI
-            self._llm = ChatOpenAI(
-                model="gpt-4o-mini",
-                temperature=0.3,
-                api_key=os.getenv("OPENAI_API_KEY") or os.getenv("GROK_API_KEY") or os.getenv("GROQ_API_KEY") or "placeholder",
-            )
+            from src.utils.keymodel import get_llm
+            self._llm = get_llm(temperature=0.3)
         return self._llm
 
     def forecast(self, ticker: str, current_price: float, sentiment_score: float,

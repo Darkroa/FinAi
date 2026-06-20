@@ -9,7 +9,7 @@ import {
 import { useAuthStore } from '../store/authStore'
 import toast from 'react-hot-toast'
 import {
-  Bot, Play, Square, RefreshCw, TrendingUp, Activity, Zap, Brain,
+  Bot, Play, Square, RefreshCw, TrendingUp, Activity, Brain,
   Save, ChevronDown, BarChart2, Lock, KeyRound, ArrowRight,
   TrendingDown, DollarSign, Cpu, Plus, X, Target, ArrowUpDown,
   ChevronUp, Crown, Calculator,
@@ -194,6 +194,9 @@ export default function BotsPage() {
     max_trades_per_day: 10,
     balance_to_use:     1000,
     sentiment_filter:   'both',
+    leverage:           10,
+    take_profit_pct:    50,
+    stop_loss_pct:      30,
   })
   const [feTickerInput, setFeTickerInput] = useState('BTC-USD,ETH-USD')
   const [showFePanel,  setShowFePanel]  = useState(false)
@@ -486,10 +489,23 @@ export default function BotsPage() {
               <Square size={11} /> Stop All
             </button>
           )}
-          <button onClick={() => { setFeCollapsed(false); setShowFePanel(s => !s) }}
-            className="flex items-center gap-1.5 text-xs bg-[#f0b90b]/10 hover:bg-[#f0b90b]/20 border border-[#f0b90b]/30 text-[#f0b90b] px-3 py-1.5 rounded-lg transition">
-            <Brain size={11} /> FinEventAI Bots
-          </button>
+          {isFeSubscriber ? (
+            <button onClick={() => { setFeCollapsed(false); setShowFePanel(s => !s) }}
+              className="flex items-center gap-1.5 text-xs bg-[#f0b90b]/10 hover:bg-[#f0b90b]/20 border border-[#f0b90b]/30 text-[#f0b90b] px-3 py-1.5 rounded-lg transition">
+              <Brain size={11} /> FinEventAI Bots
+            </button>
+          ) : (
+            <button onClick={() => navigate('/app/pricing')} title="Upgrade to unlock FinEventAI Bots"
+              className="flex items-center gap-1.5 text-xs bg-[#2b3139] border border-[#2b3139] text-[#848e9c] px-3 py-1.5 rounded-lg transition cursor-pointer relative group">
+              <Lock size={11} />
+              <Brain size={11} className="text-[#f0b90b]/50" />
+              FinEventAI Bots
+              <span className="text-[9px] text-[#f0b90b] font-bold ml-0.5">PRO</span>
+              <span className="absolute -top-8 left-1/2 -translate-x-1/2 bg-[#0b0e11] border border-[#2b3139] text-[#eaecef] text-[10px] px-2 py-1 rounded-lg whitespace-nowrap opacity-0 group-hover:opacity-100 transition pointer-events-none z-20">
+                Upgrade to unlock FinEventAI
+              </span>
+            </button>
+          )}
           {atBotLimit ? (
             <button onClick={() => navigate('/app/pricing')}
               className="flex items-center gap-1.5 text-xs bg-[#f0b90b]/10 hover:bg-[#f0b90b]/20 border border-[#f0b90b]/30 text-[#f0b90b] px-3 py-1.5 rounded-lg transition">
@@ -1180,30 +1196,75 @@ export default function BotsPage() {
                       <span>Impact: <span className="text-[#eaecef] font-mono">≥{bot.min_impact_score ?? 7}</span></span>
                       <span>Capital: <span className="text-[#eaecef] font-mono">${(bot.capital_per_trade ?? 500).toFixed(0)}</span></span>
                     </div>
-                    {/* Open positions for this EventBot */}
+                    {/* Open positions for this EventBot — FinBot-style position cards */}
                     {Object.keys(bot.open_positions ?? {}).length > 0 && (
-                      <div className="w-full mt-1 space-y-1">
-                        {Object.entries(bot.open_positions as Record<string, { entry_price: number; qty: number; margin: number; opened_at: string }>).map(([ticker, pos]) => (
-                          <div key={ticker} className="bg-[#f0b90b]/5 border border-[#f0b90b]/20 rounded-lg px-3 py-2 space-y-1">
-                            <p className="text-[9px] text-[#f0b90b] font-semibold uppercase tracking-wide flex items-center gap-1">
-                              <Target size={8} /> Open Position · <span className="font-mono">{ticker}</span>
-                            </p>
-                            <div className="grid grid-cols-3 gap-2 text-[10px]">
-                              <div>
-                                <span className="text-[#848e9c]">Entry </span>
-                                <span className="font-mono text-[#eaecef]">${(pos.entry_price ?? 0).toLocaleString(undefined, { maximumFractionDigits: 2 })}</span>
+                      <div className="w-full mt-2 space-y-2">
+                        {Object.entries(bot.open_positions as Record<string, {
+                          entry_price: number; qty: number; margin: number; opened_at: string;
+                          leverage?: number; take_profit_pct?: number; stop_loss_pct?: number;
+                          unrealized_pnl?: number; current_price?: number;
+                        }>).map(([ticker, pos]) => {
+                          const lev = pos.leverage ?? bot.leverage ?? 10
+                          const tp  = pos.take_profit_pct ?? bot.take_profit_pct ?? 50
+                          const sl  = pos.stop_loss_pct  ?? bot.stop_loss_pct  ?? 30
+                          const upnl = pos.unrealized_pnl ?? 0
+                          const margin = pos.margin ?? 0
+                          return (
+                            <div key={ticker} className="bg-[#f0b90b]/5 border border-[#f0b90b]/20 rounded-xl px-3 py-2.5 space-y-1.5">
+                              {/* Header row */}
+                              <div className="flex items-center justify-between">
+                                <p className="text-[10px] text-[#f0b90b] font-semibold uppercase tracking-wide flex items-center gap-1">
+                                  <Target size={9} /> Open Position
+                                </p>
+                                <div className="flex items-center gap-1.5">
+                                  <span className="text-[10px] font-mono font-bold text-[#f0b90b] bg-[#f0b90b]/10 px-1.5 py-0.5 rounded">{ticker}</span>
+                                  <span className="text-[9px] font-bold text-[#848e9c] bg-[#2b3139] px-1.5 py-0.5 rounded">{lev}x</span>
+                                </div>
                               </div>
-                              <div>
-                                <span className="text-[#848e9c]">Qty </span>
-                                <span className="font-mono text-[#f0b90b]">{(pos.qty ?? 0).toFixed(6)}</span>
+                              {/* Stats grid */}
+                              <div className="grid grid-cols-2 gap-x-4 gap-y-0.5 text-[10px]">
+                                <div className="flex justify-between">
+                                  <span className="text-[#848e9c]">Entry</span>
+                                  <span className="font-mono text-[#eaecef]">${(pos.entry_price ?? 0).toLocaleString(undefined, { maximumFractionDigits: 2 })}</span>
+                                </div>
+                                <div className="flex justify-between">
+                                  <span className="text-[#848e9c]">Qty</span>
+                                  <span className="font-mono text-[#f0b90b]">{(pos.qty ?? 0).toFixed(6)}</span>
+                                </div>
+                                <div className="flex justify-between">
+                                  <span className="text-[#848e9c]">Margin</span>
+                                  <span className="font-mono text-[#eaecef]">${margin.toFixed(2)}</span>
+                                </div>
+                                <div className="flex justify-between">
+                                  <span className="text-[#848e9c]">Leverage</span>
+                                  <span className="font-mono text-[#eaecef]">{lev}x</span>
+                                </div>
+                                <div className="flex justify-between">
+                                  <span className="text-[#0ecb81]">TP Target</span>
+                                  <span className="font-mono text-[#0ecb81]">+{tp}% (+${(margin * tp / 100).toFixed(2)})</span>
+                                </div>
+                                <div className="flex justify-between">
+                                  <span className="text-[#f6465d]">SL Target</span>
+                                  <span className="font-mono text-[#f6465d]">-{sl}% (-${(margin * sl / 100).toFixed(2)})</span>
+                                </div>
                               </div>
-                              <div>
-                                <span className="text-[#848e9c]">Margin </span>
-                                <span className="font-mono text-[#eaecef]">${(pos.margin ?? 0).toFixed(2)}</span>
+                              {/* Unrealized P&L bar */}
+                              <div className="flex items-center justify-between pt-1 border-t border-[#f0b90b]/10">
+                                <span className="text-[10px] text-[#848e9c]">Unrealized P&L</span>
+                                <span className={`text-sm font-bold font-mono ${upnl >= 0 ? 'text-[#0ecb81]' : 'text-[#f6465d]'}`}>
+                                  {upnl >= 0 ? '+' : ''}${Math.abs(upnl).toFixed(2)}
+                                </span>
+                              </div>
+                              {/* Realized P&L */}
+                              <div className="flex items-center justify-between">
+                                <span className="text-[10px] text-[#848e9c]">Bot Realized P&L</span>
+                                <span className={`text-xs font-semibold font-mono ${(bot.total_pnl ?? 0) >= 0 ? 'text-[#0ecb81]' : 'text-[#f6465d]'}`}>
+                                  {(bot.total_pnl ?? 0) >= 0 ? '+' : ''}${Math.abs(bot.total_pnl ?? 0).toFixed(2)}
+                                </span>
                               </div>
                             </div>
-                          </div>
-                        ))}
+                          )
+                        })}
                       </div>
                     )}
                     {bot.running && (
@@ -1233,84 +1294,159 @@ export default function BotsPage() {
               </div>
             )}
 
-            {/* Config panel for new bot — compact chip style */}
+            {/* Config panel for new bot — full FinBot-style design */}
             {showFePanel && (
-              <div className="px-5 py-4 space-y-3 border-t border-[#2b3139]">
-                <p className="text-xs font-semibold text-[#f0b90b]">Configure FinEventAI Bot</p>
+              <div className="border-t border-[#f0b90b]/30 bg-[#0b0e11]/40 px-5 py-5 space-y-4">
+                {/* Panel header */}
+                <div className="flex items-center justify-between">
+                  <h3 className="text-sm font-semibold text-[#eaecef] flex items-center gap-2">
+                    <Brain size={14} className="text-[#f0b90b]" /> Configure FinEventAI Bot
+                  </h3>
+                  <button onClick={() => setShowFePanel(false)} className="text-[#848e9c] hover:text-[#eaecef] transition">
+                    <X size={14} />
+                  </button>
+                </div>
 
-                {/* Summary chips row */}
+                {/* Live summary chips */}
                 <div className="flex flex-wrap gap-1.5 text-[10px]">
                   {[
-                    { label: 'Name', val: feParams.bot_name || `Bot ${feBots.length + 1}`, color: 'text-[#eaecef]' },
-                    { label: 'Tickers', val: feTickerInput || 'BTC-USD,ETH-USD', color: 'text-[#f0b90b]' },
-                    { label: 'Impact', val: `≥${feParams.min_impact_score}`, color: 'text-[#0ecb81]' },
-                    { label: 'Capital', val: `$${feParams.capital_per_trade}`, color: 'text-[#eaecef]' },
-                    { label: 'Max Trades', val: `${feParams.max_trades_per_day}/day`, color: 'text-[#eaecef]' },
-                    { label: 'Signal', val: feParams.sentiment_filter === 'both' ? 'Both ↕' : feParams.sentiment_filter === 'bullish' ? 'Buy ↑' : 'Sell ↓', color: feParams.sentiment_filter === 'bullish' ? 'text-[#0ecb81]' : feParams.sentiment_filter === 'bearish' ? 'text-[#f6465d]' : 'text-[#848e9c]' },
+                    { label: 'Name',       val: feParams.bot_name || `Bot ${feBots.length + 1}`,      color: 'text-[#eaecef]' },
+                    { label: 'Tickers',    val: feTickerInput || 'BTC-USD,ETH-USD',                    color: 'text-[#f0b90b]'  },
+                    { label: 'Impact',     val: `≥${feParams.min_impact_score}`,                       color: 'text-[#0ecb81]'  },
+                    { label: 'Capital',    val: `$${feParams.capital_per_trade}`,                       color: 'text-[#eaecef]'  },
+                    { label: 'Leverage',   val: `${feParams.leverage}x`,                               color: 'text-[#f0b90b]'  },
+                    { label: 'TP',         val: `+${feParams.take_profit_pct}%`,                       color: 'text-[#0ecb81]'  },
+                    { label: 'SL',         val: `-${feParams.stop_loss_pct}%`,                         color: 'text-[#f6465d]'  },
+                    { label: 'Signal',     val: feParams.sentiment_filter === 'both' ? 'Both ↕' : feParams.sentiment_filter === 'bullish' ? 'Buy ↑' : 'Sell ↓',
+                                           color: feParams.sentiment_filter === 'bullish' ? 'text-[#0ecb81]' : feParams.sentiment_filter === 'bearish' ? 'text-[#f6465d]' : 'text-[#848e9c]' },
                   ].map(c => (
-                    <span key={c.label} className="bg-[#0b0e11] border border-[#2b3139] rounded-full px-2 py-0.5">
+                    <span key={c.label} className="bg-[#161a1e] border border-[#2b3139] rounded-full px-2.5 py-0.5">
                       <span className="text-[#4a5568]">{c.label} </span>
                       <span className={`font-semibold font-mono ${c.color}`}>{c.val}</span>
                     </span>
                   ))}
                 </div>
 
-                {/* Compact grid of inputs */}
-                <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-                  <div>
-                    <label className="text-[10px] text-[#848e9c] mb-1 block">Bot Name</label>
+                {/* Input grid — FinBot style full config */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+
+                  {/* Bot name */}
+                  <div className="lg:col-span-1">
+                    <label className="text-xs text-[#848e9c] mb-1.5 block">Bot Name (optional)</label>
                     <input value={feParams.bot_name} onChange={e => setFeParams(p => ({ ...p, bot_name: e.target.value }))}
-                      placeholder={`Bot ${feBots.length + 1}`}
-                      className="w-full bg-[#0b0e11] border border-[#2b3139] rounded-lg px-2.5 py-2 text-xs text-[#eaecef] focus:outline-none focus:border-[#f0b90b]" />
+                      placeholder={`e.g. EventBot ${feBots.length + 1}`}
+                      className="w-full bg-[#0b0e11] border border-[#2b3139] focus:border-[#f0b90b] rounded-xl px-3 py-2.5 text-sm text-[#eaecef] focus:outline-none transition" />
                   </div>
+
+                  {/* Tickers */}
                   <div>
-                    <label className="text-[10px] text-[#848e9c] mb-1 block">Tickers</label>
+                    <label className="text-xs text-[#848e9c] mb-1.5 block">Tickers (comma-separated)</label>
                     <input value={feTickerInput} onChange={e => setFeTickerInput(e.target.value)}
-                      placeholder="BTC-USD,ETH-USD"
-                      className="w-full bg-[#0b0e11] border border-[#2b3139] rounded-lg px-2.5 py-2 text-xs text-[#eaecef] font-mono focus:outline-none focus:border-[#f0b90b]" />
+                      placeholder="BTC-USD,ETH-USD,SOL-USD"
+                      className="w-full bg-[#0b0e11] border border-[#2b3139] focus:border-[#f0b90b] rounded-xl px-3 py-2.5 text-sm text-[#eaecef] font-mono focus:outline-none transition" />
                   </div>
+
+                  {/* Signal filter */}
                   <div>
-                    <label className="text-[10px] text-[#848e9c] mb-1 block">Impact Score (1–10)</label>
-                    <input type="number" min={1} max={10} value={feParams.min_impact_score}
-                      onChange={e => setFeParams(p => ({ ...p, min_impact_score: Number(e.target.value) }))}
-                      className="w-full bg-[#0b0e11] border border-[#2b3139] rounded-lg px-2.5 py-2 text-xs text-[#eaecef] focus:outline-none focus:border-[#f0b90b]" />
+                    <label className="text-xs text-[#848e9c] mb-1.5 block">Signal Filter</label>
+                    <div className="grid grid-cols-3 gap-1 bg-[#0b0e11] p-1 rounded-xl border border-[#2b3139]">
+                      {([['both','Both ↕'],['bullish','Buy ↑'],['bearish','Sell ↓']] as const).map(([v, lbl]) => (
+                        <button key={v} onClick={() => setFeParams(p => ({ ...p, sentiment_filter: v }))}
+                          className={`py-2 rounded-lg text-xs font-semibold transition ${feParams.sentiment_filter === v
+                            ? v === 'bullish' ? 'bg-[#0ecb81] text-black' : v === 'bearish' ? 'bg-[#f6465d] text-white' : 'bg-[#f0b90b] text-black'
+                            : 'text-[#848e9c] hover:text-[#eaecef]'}`}>
+                          {lbl}
+                        </button>
+                      ))}
+                    </div>
                   </div>
+
+                  {/* Capital per trade */}
                   <div>
-                    <label className="text-[10px] text-[#848e9c] mb-1 block">Capital / Trade (USDT)</label>
+                    <label className="text-xs text-[#848e9c] mb-1.5 block">Capital / Trade (USDT)</label>
                     <input type="number" min={10} value={feParams.capital_per_trade}
                       onChange={e => setFeParams(p => ({ ...p, capital_per_trade: Number(e.target.value) }))}
-                      className="w-full bg-[#0b0e11] border border-[#2b3139] rounded-lg px-2.5 py-2 text-xs text-[#eaecef] focus:outline-none focus:border-[#f0b90b]" />
+                      className="w-full bg-[#0b0e11] border border-[#2b3139] focus:border-[#f0b90b] rounded-xl px-3 py-2.5 text-sm text-[#eaecef] focus:outline-none transition" />
                   </div>
+
+                  {/* Leverage */}
                   <div>
-                    <label className="text-[10px] text-[#848e9c] mb-1 block">Max Trades / Day</label>
+                    <label className="text-xs text-[#848e9c] mb-1.5 block">Leverage</label>
+                    <div className="flex flex-wrap gap-1.5">
+                      {[1, 5, 10, 20, 50, 100].map(l => (
+                        <button key={l} onClick={() => setFeParams(p => ({ ...p, leverage: l }))}
+                          className={`px-3 py-1.5 rounded-lg text-xs font-bold border transition ${feParams.leverage === l
+                            ? 'bg-[#f0b90b] text-black border-[#f0b90b]'
+                            : 'border-[#2b3139] text-[#848e9c] hover:border-[#f0b90b] hover:text-[#f0b90b]'}`}>
+                          {l}x
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Impact score */}
+                  <div>
+                    <label className="text-xs text-[#848e9c] mb-1.5 block">Min Impact Score (1–10)</label>
+                    <input type="number" min={1} max={10} value={feParams.min_impact_score}
+                      onChange={e => setFeParams(p => ({ ...p, min_impact_score: Number(e.target.value) }))}
+                      className="w-full bg-[#0b0e11] border border-[#2b3139] focus:border-[#f0b90b] rounded-xl px-3 py-2.5 text-sm text-[#eaecef] focus:outline-none transition" />
+                    <p className="text-[10px] text-[#4a5568] mt-0.5">Only react to events scoring ≥ this value</p>
+                  </div>
+
+                  {/* Take profit */}
+                  <div>
+                    <label className="text-xs text-[#848e9c] mb-1.5 block">Take Profit %</label>
+                    <input type="number" min={1} max={500} value={feParams.take_profit_pct}
+                      onChange={e => setFeParams(p => ({ ...p, take_profit_pct: Number(e.target.value) }))}
+                      className="w-full bg-[#0b0e11] border border-[#2b3139] focus:border-[#0ecb81] rounded-xl px-3 py-2.5 text-sm text-[#0ecb81] focus:outline-none transition" />
+                    <p className="text-[10px] text-[#4a5568] mt-0.5">Exit at +{feParams.take_profit_pct}% gain on margin</p>
+                  </div>
+
+                  {/* Stop loss */}
+                  <div>
+                    <label className="text-xs text-[#848e9c] mb-1.5 block">Stop Loss %</label>
+                    <input type="number" min={1} max={100} value={feParams.stop_loss_pct}
+                      onChange={e => setFeParams(p => ({ ...p, stop_loss_pct: Number(e.target.value) }))}
+                      className="w-full bg-[#0b0e11] border border-[#2b3139] focus:border-[#f6465d] rounded-xl px-3 py-2.5 text-sm text-[#f6465d] focus:outline-none transition" />
+                    <p className="text-[10px] text-[#4a5568] mt-0.5">Exit at -{feParams.stop_loss_pct}% loss on margin</p>
+                  </div>
+
+                  {/* Max trades per day */}
+                  <div>
+                    <label className="text-xs text-[#848e9c] mb-1.5 block">Max Trades / Day</label>
                     <input type="number" min={1} max={100} value={feParams.max_trades_per_day}
                       onChange={e => setFeParams(p => ({ ...p, max_trades_per_day: Number(e.target.value) }))}
-                      className="w-full bg-[#0b0e11] border border-[#2b3139] rounded-lg px-2.5 py-2 text-xs text-[#eaecef] focus:outline-none focus:border-[#f0b90b]" />
+                      className="w-full bg-[#0b0e11] border border-[#2b3139] focus:border-[#f0b90b] rounded-xl px-3 py-2.5 text-sm text-[#eaecef] focus:outline-none transition" />
+                    <p className="text-[10px] text-[#4a5568] mt-0.5">Caps daily exposure to this many trades</p>
                   </div>
-                  <div>
-                    <label className="text-[10px] text-[#848e9c] mb-1 block">Signal Filter</label>
-                    <div className="relative">
-                      <select value={feParams.sentiment_filter}
-                        onChange={e => setFeParams(p => ({ ...p, sentiment_filter: e.target.value }))}
-                        className="w-full bg-[#0b0e11] border border-[#2b3139] rounded-lg px-2.5 py-2 text-xs text-[#eaecef] focus:outline-none focus:border-[#f0b90b] appearance-none pr-7 cursor-pointer">
-                        <option value="both">Both ↕</option>
-                        <option value="bullish">Bullish (BUY) ↑</option>
-                        <option value="bearish">Bearish (SELL) ↓</option>
-                      </select>
-                      <ChevronDown size={11} className="absolute right-2 top-1/2 -translate-y-1/2 text-[#848e9c] pointer-events-none" />
-                    </div>
+
+                </div>
+
+                {/* Risk-reward preview */}
+                <div className="grid grid-cols-3 gap-3 bg-[#0b0e11] rounded-xl p-3">
+                  <div className="text-center">
+                    <p className="text-[10px] text-[#848e9c] mb-1">Margin / Trade</p>
+                    <p className="text-sm font-bold font-mono text-[#eaecef]">${feParams.capital_per_trade.toLocaleString()}</p>
+                  </div>
+                  <div className="text-center">
+                    <p className="text-[10px] text-[#0ecb81] mb-1">Max Profit</p>
+                    <p className="text-sm font-bold font-mono text-[#0ecb81]">+${(feParams.capital_per_trade * feParams.take_profit_pct / 100).toFixed(2)}</p>
+                  </div>
+                  <div className="text-center">
+                    <p className="text-[10px] text-[#f6465d] mb-1">Max Loss</p>
+                    <p className="text-sm font-bold font-mono text-[#f6465d]">-${(feParams.capital_per_trade * feParams.stop_loss_pct / 100).toFixed(2)}</p>
                   </div>
                 </div>
 
                 {/* Action row */}
-                <div className="flex items-center gap-3 pt-1 border-t border-[#2b3139]">
+                <div className="flex items-center gap-3 pt-2 border-t border-[#2b3139]">
                   <button onClick={handleFeStart} disabled={feLoading}
-                    className="flex items-center gap-1.5 px-5 py-2 bg-[#f0b90b] hover:bg-[#d9a60b] disabled:opacity-60 text-black rounded-lg text-xs font-bold transition">
-                    {feLoading ? <RefreshCw size={11} className="animate-spin" /> : <Play size={11} />}
-                    {feLoading ? 'Starting…' : 'Launch Bot'}
+                    className="flex items-center gap-1.5 px-6 py-2.5 bg-[#f0b90b] hover:bg-[#d9a60b] disabled:opacity-60 text-black rounded-xl text-sm font-bold transition">
+                    {feLoading ? <RefreshCw size={13} className="animate-spin" /> : <Play size={13} />}
+                    {feLoading ? 'Starting…' : 'Launch FinEventAI Bot'}
                   </button>
                   <button onClick={() => setShowFePanel(false)}
-                    className="text-xs px-3 py-2 rounded-lg border border-[#2b3139] text-[#848e9c] hover:text-[#eaecef] transition">
+                    className="text-sm px-4 py-2.5 rounded-xl border border-[#2b3139] text-[#848e9c] hover:text-[#eaecef] transition">
                     Cancel
                   </button>
                   <p className="text-[10px] text-[#4a5568] ml-auto">{feBots.filter(b => b.running).length}/{feMaxBots} slots used</p>
@@ -1418,51 +1554,42 @@ export default function BotsPage() {
         </div>
       </div>
 
-      {/* ── Full trade log — FinBot + EventBot merged ── */}
+      {/* ── FinBot trade log (FinBot only) ── */}
       {(() => {
-        const mergedTrades = [
-          ...trades.map(t => ({ ...t, _src: 'finbot' as const })),
-          ...feTrades.map(t => ({ ...t, exchange: t.exchange || 'EventBot', _src: 'eventbot' as const })),
-        ]
-          .filter(t => !t.reason?.toLowerCase().includes('trading terminal'))
-          .sort((a, b) => new Date(b.created_at ?? 0).getTime() - new Date(a.created_at ?? 0).getTime())
-          .slice(0, 15)
-
-        const isAnyBotLive = status.running || feBots.some(b => b.running)
+        const finbotTrades = trades
+          .filter(t => !t.reason?.toLowerCase().includes('trading terminal') && !t.reason?.toLowerCase().includes('fineventai'))
+          .slice(0, 12)
+        const isBotLive = status.running
 
         return (
           <div className="bg-[#161a1e] border border-[#2b3139] rounded-xl overflow-hidden">
             <div className="px-4 py-3 border-b border-[#2b3139] flex items-center justify-between">
               <div className="flex items-center gap-2">
-                <Zap size={13} className="text-[#f0b90b]" />
-                <h2 className="text-sm font-semibold text-[#eaecef]">Live Trade Log</h2>
-                {isAnyBotLive && <span className="text-[10px] bg-[#0ecb81]/10 text-[#0ecb81] border border-[#0ecb81]/20 px-2 py-0.5 rounded-full animate-pulse">LIVE</span>}
+                <Bot size={13} className="text-[#f0b90b]" />
+                <h2 className="text-sm font-semibold text-[#eaecef]">FinBot Trade Log</h2>
+                {isBotLive && <span className="text-[10px] bg-[#0ecb81]/10 text-[#0ecb81] border border-[#0ecb81]/20 px-2 py-0.5 rounded-full animate-pulse">LIVE</span>}
               </div>
-              <span className="text-xs text-[#848e9c]">{mergedTrades.length} AI trades</span>
+              <span className="text-xs text-[#848e9c]">{finbotTrades.length} trades</span>
             </div>
 
-            {mergedTrades.length === 0 ? (
-              <div className="py-14 flex flex-col items-center gap-2">
-                <Bot size={28} className="text-[#2b3139]" />
-                <p className="text-sm text-[#848e9c]">No AI trades yet — start a bot to begin</p>
+            {finbotTrades.length === 0 ? (
+              <div className="py-10 flex flex-col items-center gap-2">
+                <Bot size={26} className="text-[#2b3139]" />
+                <p className="text-sm text-[#848e9c]">No FinBot trades yet — start a bot to begin</p>
               </div>
             ) : (
               <div className="divide-y divide-[#2b3139]/50">
-                {mergedTrades.map((t, i) => (
+                {finbotTrades.map((t, i) => (
                   <div key={(t.id ?? '') + i} className="px-4 py-3.5 flex items-start gap-3 hover:bg-[#1e2329] transition">
                     <div className={`w-9 h-9 rounded-full border flex items-center justify-center flex-shrink-0 ${t.action === 'BUY' ? 'bg-[#0ecb81]/10 border-[#0ecb81]/20' : 'bg-[#f6465d]/10 border-[#f6465d]/20'}`}>
-                      {t.action === 'BUY'
-                        ? <TrendingUp size={14} className="text-[#0ecb81]" />
-                        : <TrendingDown size={14} className="text-[#f6465d]" />}
+                      {t.action === 'BUY' ? <TrendingUp size={14} className="text-[#0ecb81]" /> : <TrendingDown size={14} className="text-[#f6465d]" />}
                     </div>
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center justify-between gap-2">
                         <p className="text-sm font-semibold text-[#eaecef] flex items-center gap-1.5">
                           <span className="font-mono text-[#f0b90b]">{t.ticker}</span>
                           <span className={`text-[10px] px-1.5 py-0.5 rounded font-bold ${t.action === 'BUY' ? 'bg-[#0ecb81]/10 text-[#0ecb81]' : 'bg-[#f6465d]/10 text-[#f6465d]'}`}>{t.action}</span>
-                          {t._src === 'eventbot'
-                            ? <span className="text-[10px] px-1.5 py-0.5 rounded bg-[#f0b90b]/10 text-[#f0b90b] font-medium">EventBot</span>
-                            : <span className="text-[10px] text-[#848e9c] font-normal">{t.exchange}</span>}
+                          <span className="text-[10px] text-[#848e9c] font-normal">{t.exchange}</span>
                         </p>
                         <p className={`text-sm font-bold font-mono ${t.action === 'BUY' ? 'text-[#0ecb81]' : 'text-[#f6465d]'}`}>
                           ${(t.price ?? 0) < 1 ? Number(t.price).toFixed(5) : fmt(Number(t.price))}
@@ -1477,28 +1604,83 @@ export default function BotsPage() {
                           ? <span className={`text-[10px] px-2 py-0.5 rounded-full font-medium ${t.pnl >= 0 ? 'bg-[#0ecb81]/10 text-[#0ecb81]' : 'bg-[#f6465d]/10 text-[#f6465d]'}`}>{t.pnl >= 0 ? '+' : ''}${fmt(t.pnl)}</span>
                           : <span className="text-[10px] px-2 py-0.5 rounded-full bg-[#f0b90b]/10 text-[#f0b90b] font-medium">Open</span>}
                       </div>
-                      {t.reason && (
-                        <p className="text-[10px] text-[#4a5568] mt-1 truncate">
-                          {(t.reason ?? '').replace('FinEventAI | ', '').replace(/_/g, ' ')}
-                        </p>
-                      )}
+                      {t.reason && <p className="text-[10px] text-[#4a5568] mt-1 truncate">{t.reason.replace(/_/g, ' ')}</p>}
                     </div>
                   </div>
                 ))}
               </div>
             )}
 
-            {mergedTrades.length > 0 && (
+            {finbotTrades.length > 0 && (
               <div className="px-4 py-3 border-t border-[#2b3139] flex justify-center">
                 <button onClick={() => navigate('/app/transactions')}
                   className="flex items-center gap-1.5 text-xs text-[#f0b90b] hover:text-[#eaecef] border border-[#f0b90b]/30 hover:border-[#f0b90b]/60 bg-[#f0b90b]/5 hover:bg-[#f0b90b]/10 px-4 py-2 rounded-lg transition font-medium">
-                  <ArrowRight size={11} /> View All AI Trade History
+                  <ArrowRight size={11} /> View All Trade History
                 </button>
               </div>
             )}
           </div>
         )
       })()}
+
+      {/* ── FinEventAI trade log (EventBot only) ── */}
+      {feTrades.length > 0 && (
+        <div className="bg-[#161a1e] border border-[#f0b90b]/20 rounded-xl overflow-hidden">
+          <div className="px-4 py-3 border-b border-[#f0b90b]/20 flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <Brain size={13} className="text-[#f0b90b]" />
+              <h2 className="text-sm font-semibold text-[#eaecef]">FinEventAI Trade Log</h2>
+              {feBots.some(b => b.running) && (
+                <span className="text-[10px] bg-[#f0b90b]/10 text-[#f0b90b] border border-[#f0b90b]/20 px-2 py-0.5 rounded-full animate-pulse">LIVE</span>
+              )}
+            </div>
+            <span className="text-xs text-[#848e9c]">{feTrades.length} event trades</span>
+          </div>
+          <div className="divide-y divide-[#2b3139]/50">
+            {feTrades.slice(0, 12).map((t, i) => (
+              <div key={(t.id ?? '') + i} className="px-4 py-3.5 flex items-start gap-3 hover:bg-[#1e2329] transition">
+                <div className={`w-9 h-9 rounded-full border flex items-center justify-center flex-shrink-0 ${t.action === 'BUY' ? 'bg-[#0ecb81]/10 border-[#0ecb81]/20' : 'bg-[#f6465d]/10 border-[#f6465d]/20'}`}>
+                  {t.action === 'BUY' ? <TrendingUp size={14} className="text-[#0ecb81]" /> : <TrendingDown size={14} className="text-[#f6465d]" />}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center justify-between gap-2">
+                    <p className="text-sm font-semibold text-[#eaecef] flex items-center gap-1.5">
+                      <span className="font-mono text-[#f0b90b]">{t.ticker}</span>
+                      <span className={`text-[10px] px-1.5 py-0.5 rounded font-bold ${t.action === 'BUY' ? 'bg-[#0ecb81]/10 text-[#0ecb81]' : 'bg-[#f6465d]/10 text-[#f6465d]'}`}>{t.action}</span>
+                      <span className="text-[10px] px-1.5 py-0.5 rounded bg-[#f0b90b]/10 text-[#f0b90b] font-medium">EventBot</span>
+                    </p>
+                    <p className={`text-sm font-bold font-mono ${t.action === 'BUY' ? 'text-[#0ecb81]' : 'text-[#f6465d]'}`}>
+                      ${(t.price ?? 0) < 1 ? Number(t.price).toFixed(5) : fmt(Number(t.price))}
+                    </p>
+                  </div>
+                  <div className="flex items-center justify-between gap-2 mt-1">
+                    <p className="text-[10px] text-[#848e9c]">
+                      Qty: <span className="font-mono">{Number(t.qty ?? 0).toFixed(6)}</span>
+                      {' · '}{t.created_at ? new Date(t.created_at).toLocaleDateString() : '—'}
+                    </p>
+                    {t.pnl != null
+                      ? <span className={`text-[10px] px-2 py-0.5 rounded-full font-medium ${t.pnl >= 0 ? 'bg-[#0ecb81]/10 text-[#0ecb81]' : 'bg-[#f6465d]/10 text-[#f6465d]'}`}>{t.pnl >= 0 ? '+' : ''}${fmt(t.pnl)}</span>
+                      : <span className="text-[10px] px-2 py-0.5 rounded-full bg-[#f0b90b]/10 text-[#f0b90b] font-medium">Open</span>}
+                  </div>
+                  {t.reason && (
+                    <p className="text-[10px] text-[#4a5568] mt-1 truncate">
+                      {(t.reason ?? '').replace('FinEventAI | ', '').replace(/_/g, ' ')}
+                    </p>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+          {feTrades.length > 12 && (
+            <div className="px-4 py-3 border-t border-[#2b3139] flex justify-center">
+              <button onClick={() => navigate('/app/transactions')}
+                className="flex items-center gap-1.5 text-xs text-[#f0b90b] hover:text-[#eaecef] border border-[#f0b90b]/30 hover:border-[#f0b90b]/60 bg-[#f0b90b]/5 hover:bg-[#f0b90b]/10 px-4 py-2 rounded-lg transition font-medium">
+                <ArrowRight size={11} /> View All EventBot History
+              </button>
+            </div>
+          )}
+        </div>
+      )}
     </div>
   )
 }
