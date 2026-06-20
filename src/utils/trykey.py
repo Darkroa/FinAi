@@ -220,39 +220,44 @@ def test_db_connection():
     Verify the active database (Supabase or fallback) is reachable via SQLAlchemy.
     Self-contained — reads env vars directly so it works when the script is run
     standalone (python src/utils/trykey.py) without the src package on sys.path.
+    Priority: SUPABASE_DB_URL → DATABASE_URL (fallback).
     Run AFTER AI checks — as the last connectivity check.
     """
+    from sqlalchemy import create_engine, text
+    import time
+
+    supabase_db_url = SUPABASE_VARS["SUPABASE_DB_URL"]
+    fallback_url    = os.getenv("DATABASE_URL", "").strip()
+
+    if supabase_db_url:
+        db_url = supabase_db_url
+        source = "Supabase PostgreSQL (SUPABASE_DB_URL)"
+    elif fallback_url:
+        db_url = fallback_url
+        source = "Fallback DATABASE_URL"
+    else:
+        print("❌ Database: no DATABASE_URL or SUPABASE_DB_URL is set")
+        return False
+
+    print(f"Connecting to {source}...")
     try:
-        from sqlalchemy import create_engine, text
-        import time
-
-        supabase_db_url = SUPABASE_VARS["SUPABASE_DB_URL"]
-        fallback_url    = os.getenv("DATABASE_URL", "").strip()
-
-        if supabase_db_url:
-            db_url = supabase_db_url
-            source = "Supabase PostgreSQL (SUPABASE_DB_URL)"
-        elif fallback_url:
-            db_url = fallback_url
-            source = "Fallback DATABASE_URL"
-        else:
-            print("❌ Database: no DATABASE_URL or SUPABASE_DB_URL set")
-            return False
-
-        engine = create_engine(
-            db_url,
-            pool_pre_ping=True,
-            connect_args={"connect_timeout": 8, "sslmode": "require"},
-        )
+        engine = create_engine(db_url)
         t0 = time.time()
         with engine.connect() as conn:
-            conn.execute(text("SELECT 1"))
+            result = conn.execute(text("SELECT version();"))
+            row = result.fetchone()
         latency = round((time.time() - t0) * 1000)
-        print(f"✅ Database ({source}): connected  [{latency} ms]")
+        print(f"\n✅ SUCCESS: Connection established!  [{latency} ms]")
+        print(f"   Database version: {row[0]}\n")
         engine.dispose()
         return True
     except Exception as e:
-        print(f"❌ Database: connection failed — {e}")
+        print(f"\n❌ CONNECTION FAILED!")
+        print(f"   Error details: {e}\n")
+        print("   Troubleshooting checklist:")
+        print("   1. Did you change the DB password recently? (Wait 2 min to sync)")
+        print("   2. Is port 6543 blocked by your network or VPN?")
+        print("   3. Check SUPABASE_DB_URL format: postgresql://postgres.<ref>:<pass>@<host>:6543/postgres")
         return False
 
 
