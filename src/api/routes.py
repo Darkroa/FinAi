@@ -465,6 +465,58 @@ def _send_login_telegram(chat_id: str, bot_token: str, email: str, ip: str, ua: 
     threading.Thread(target=_do, daemon=True).start()
 
 
+def _send_login_email(to: str, ip: str, ua: str):
+    """Fire-and-forget login alert email to the user — tries Resend then SMTP fallback."""
+    import threading
+    now = datetime.utcnow().strftime("%Y-%m-%d %H:%M UTC")
+    html = f"""
+    <div style="font-family:Arial,sans-serif;max-width:520px;margin:0 auto;background:#0b0e11;padding:32px;border-radius:12px">
+      <div style="text-align:center;margin-bottom:24px">
+        <span style="font-size:28px;font-weight:900;color:#f0b90b">⚡ FinAi</span>
+      </div>
+      <h2 style="color:#eaecef;font-size:20px;margin:0 0 12px">New Login Detected</h2>
+      <p style="color:#848e9c;font-size:14px;margin:0 0 20px">
+        A new login to your FinAi account was just detected.
+      </p>
+      <div style="background:#1e2329;border:1px solid #2b3139;border-radius:10px;padding:20px;margin-bottom:20px">
+        <table style="width:100%;border-collapse:collapse;font-size:14px">
+          <tr><td style="color:#848e9c;padding:6px 0">Account</td><td style="color:#eaecef;text-align:right">{to}</td></tr>
+          <tr><td style="color:#848e9c;padding:6px 0">Time</td><td style="color:#eaecef;text-align:right">{now}</td></tr>
+          <tr><td style="color:#848e9c;padding:6px 0">IP Address</td><td style="color:#eaecef;text-align:right">{ip}</td></tr>
+          <tr><td style="color:#848e9c;padding:6px 0">Device</td><td style="color:#eaecef;text-align:right;font-size:12px">{ua[:80]}</td></tr>
+        </table>
+      </div>
+      <p style="color:#f6465d;font-size:13px;text-align:center;margin:0">
+        If this wasn't you, change your password immediately.
+      </p>
+    </div>
+    """
+    subject = "FinAi — New Login to Your Account"
+
+    def _do():
+        sent = False
+        resend_key = os.getenv("RESEND_API_KEY", "").strip()
+        if resend_key:
+            try:
+                import resend as _resend_login
+                _resend_login.api_key = resend_key
+                from_addr = os.getenv("RESEND_FROM_EMAIL", "onboarding@resend.dev")
+                _resend_login.Emails.send({
+                    "from": f"FinAi <{from_addr}>",
+                    "to": [to],
+                    "subject": subject,
+                    "html": html,
+                })
+                logger.info(f"✉️  Login alert email sent via Resend to {to}")
+                sent = True
+            except Exception as _e:
+                logger.warning(f"Login email (Resend) failed for {to}: {_e}")
+        if not sent:
+            _send_email_smtp(to, subject, html)
+
+    threading.Thread(target=_do, daemon=True).start()
+
+
 @router.post("/auth/forgot-password")
 async def forgot_password(data: dict, db: Session = Depends(get_db)):
     """Generate a 6-digit reset code and send it to the user's email (and Telegram/WhatsApp if linked)."""
@@ -726,6 +778,9 @@ async def login(request: Request, user_data: UserCreate2, db: Session = Depends(
         tg_chat_id = db_user.telegram_chat_id or prefs.get("telegram_chat_id")
         if tg_token and tg_chat_id:
             _send_login_telegram(tg_chat_id, tg_token, db_user.email, client_ip, user_agent)
+
+        # 2b. Email login alert to the user (always — Resend → SMTP fallback)
+        _send_login_email(db_user.email, client_ip, user_agent)
 
         # 3. Notify ALL admins — in-app + Telegram (including the admin logging in)
         _admin_tg_text = (
