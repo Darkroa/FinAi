@@ -176,6 +176,28 @@ async def startup_event():
                 "CREATE TABLE IF NOT EXISTS subscriptions (id SERIAL PRIMARY KEY, user_id INTEGER REFERENCES users(id), plan VARCHAR(50), status VARCHAR(20) DEFAULT 'pending', amount FLOAT, payment_proof TEXT, created_at TIMESTAMP DEFAULT NOW(), approved_at TIMESTAMP)",
                 "CREATE TABLE IF NOT EXISTS bonuses (id SERIAL PRIMARY KEY, title VARCHAR(200), description TEXT, amount FLOAT, bonus_type VARCHAR(50), require_claim BOOLEAN DEFAULT FALSE, task_description TEXT, is_active BOOLEAN DEFAULT TRUE, created_at TIMESTAMP DEFAULT NOW())",
                 "CREATE TABLE IF NOT EXISTS bonus_claims (id SERIAL PRIMARY KEY, user_id INTEGER REFERENCES users(id), bonus_id INTEGER REFERENCES bonuses(id), claimed_at TIMESTAMP DEFAULT NOW(), status VARCHAR(20) DEFAULT 'approved')",
+                # Ensure model-named tables exist (create_all handles new DBs; these guard existing DBs)
+                "CREATE TABLE IF NOT EXISTS subscription_requests (id SERIAL PRIMARY KEY, user_id INTEGER REFERENCES users(id) NOT NULL, plan VARCHAR(50) NOT NULL, period VARCHAR(20) DEFAULT 'monthly', amount_usdt FLOAT NOT NULL, payment_method VARCHAR(50) DEFAULT 'wallet', status VARCHAR(20) DEFAULT 'pending', auto_renew BOOLEAN DEFAULT TRUE, created_at TIMESTAMP DEFAULT NOW(), processed_at TIMESTAMP, processed_by INTEGER, note TEXT)",
+                "CREATE TABLE IF NOT EXISTS user_bonus_claims (id SERIAL PRIMARY KEY, user_id INTEGER REFERENCES users(id) NOT NULL, bonus_id INTEGER REFERENCES bonuses(id) NOT NULL, status VARCHAR(20) DEFAULT 'pending', assigned_at TIMESTAMP DEFAULT NOW(), claimed_at TIMESTAMP)",
+                # Column additions for subscription_requests
+                "ALTER TABLE subscription_requests ADD COLUMN IF NOT EXISTS period VARCHAR(20) DEFAULT 'monthly'",
+                "ALTER TABLE subscription_requests ADD COLUMN IF NOT EXISTS auto_renew BOOLEAN DEFAULT TRUE",
+                "ALTER TABLE subscription_requests ADD COLUMN IF NOT EXISTS payment_method VARCHAR(50) DEFAULT 'wallet'",
+                "ALTER TABLE subscription_requests ADD COLUMN IF NOT EXISTS processed_at TIMESTAMP",
+                "ALTER TABLE subscription_requests ADD COLUMN IF NOT EXISTS processed_by INTEGER",
+                "ALTER TABLE subscription_requests ADD COLUMN IF NOT EXISTS note TEXT",
+                # Column additions for user_bonus_claims
+                "ALTER TABLE user_bonus_claims ADD COLUMN IF NOT EXISTS status VARCHAR(20) DEFAULT 'pending'",
+                "ALTER TABLE user_bonus_claims ADD COLUMN IF NOT EXISTS assigned_at TIMESTAMP DEFAULT NOW()",
+                # Bonus model extra columns
+                "ALTER TABLE bonuses ADD COLUMN IF NOT EXISTS amount_usdt FLOAT",
+                "ALTER TABLE bonuses ADD COLUMN IF NOT EXISTS target VARCHAR(30)",
+                "ALTER TABLE bonuses ADD COLUMN IF NOT EXISTS target_user_id INTEGER REFERENCES users(id)",
+                "ALTER TABLE bonuses ADD COLUMN IF NOT EXISTS tier_required INTEGER",
+                "ALTER TABLE bonuses ADD COLUMN IF NOT EXISTS active BOOLEAN DEFAULT TRUE",
+                "ALTER TABLE bonuses ADD COLUMN IF NOT EXISTS granted_count INTEGER DEFAULT 0",
+                "ALTER TABLE bonuses ADD COLUMN IF NOT EXISTS created_by INTEGER REFERENCES users(id)",
+                "ALTER TABLE bonuses ADD COLUMN IF NOT EXISTS note TEXT",
             ]:
                 _conn.execute(_text(stmt))
             _conn.commit()

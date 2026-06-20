@@ -8,17 +8,21 @@ load_dotenv(override=False)
 # ==================== API Keys ====================
 # Reads from Replit Secrets first, falls back to .env file
 KEYS = {
-    "Google AI Studio (Gemini)": os.getenv("GEMINI_API_KEY"),
-    "Groq Cloud":                 os.getenv("GROQ_API_KEY"),
     "GitHub Models":              os.getenv("GITHUB_API_KEY"),
-    "OpenRouter":                 os.getenv("OPENROUTER_API_KEY"),
+    "Groq Cloud":                 os.getenv("GROQ_API_KEY"),
     "NVIDIA Build (NIM)":         os.getenv("NVIDIA_API_KEY"),
+    "Google AI Studio (Gemini)": os.getenv("GEMINI_API_KEY"),
+    "OpenRouter":                 os.getenv("OPENROUTER_API_KEY"),
     "DeepSeek":                   os.getenv("DEEPSEEK_API_KEY"),
     "OpenAI":                     os.getenv("OPENAI_API_KEY"),
     "Grok (xAI)":                 os.getenv("GROK_API_KEY"),
     "Alpaca":                     os.getenv("ALPACA_API_KEY"),
     "CoinGecko":                  os.getenv("COINGECKO_API_KEY"),
     "Telegram Bot":               os.getenv("TELEGRAM_BOT_TOKEN"),
+    # Email / SMS services
+    "SMTP":                       os.getenv("SMTP_USER"),
+    "Resend":                     os.getenv("RESEND_API_KEY"),
+    "Twilio":                     os.getenv("TWILIO_ACCOUNT_SID"),
 }
 
 # ==================== Supabase Env ====================
@@ -190,6 +194,86 @@ def test_telegram():
         return False
 
 
+def test_smtp():
+    """Test SMTP connectivity using smtplib (no actual email sent)."""
+    smtp_user = os.getenv("SMTP_USER", "").strip()
+    smtp_pass = os.getenv("SMTP_PASSWORD", "").strip()
+    smtp_host = os.getenv("SMTP_HOST", "smtp.gmail.com")
+    smtp_port = int(os.getenv("SMTP_PORT", "587"))
+
+    if not smtp_user or not smtp_pass:
+        print("⏭️  SMTP: SMTP_USER / SMTP_PASSWORD not set")
+        return False
+    try:
+        import smtplib
+        with smtplib.SMTP(smtp_host, smtp_port, timeout=8) as srv:
+            srv.ehlo()
+            srv.starttls()
+            srv.login(smtp_user, smtp_pass)
+        print(f"✅ SMTP: OK ({smtp_host}:{smtp_port} as {smtp_user})")
+        return True
+    except smtplib.SMTPAuthenticationError:
+        print(f"❌ SMTP: Authentication failed — check SMTP_USER / SMTP_PASSWORD (or enable App Passwords for Gmail)")
+        return False
+    except Exception as e:
+        print(f"❌ SMTP: Error — {e}")
+        return False
+
+
+def test_resend():
+    """Test Resend API key validity via /domains list (no email sent)."""
+    key = os.getenv("RESEND_API_KEY", "").strip()
+    if not key:
+        print("⏭️  Resend: RESEND_API_KEY not set")
+        return False
+    try:
+        r = requests.get(
+            "https://api.resend.com/domains",
+            headers={"Authorization": f"Bearer {key}", "Content-Type": "application/json"},
+            timeout=8,
+        )
+        if r.status_code == 200:
+            domains = r.json().get("data", [])
+            domain_list = ", ".join(d.get("name", "?") for d in domains) if domains else "(no domains)"
+            print(f"✅ Resend: OK — domains: {domain_list}")
+            return True
+        elif r.status_code in (401, 403):
+            print(f"❌ Resend: Invalid or expired API key (HTTP {r.status_code})")
+        else:
+            print(f"❌ Resend: Failed (HTTP {r.status_code})")
+        return False
+    except Exception as e:
+        print(f"❌ Resend: Error — {e}")
+        return False
+
+
+def test_twilio():
+    """Test Twilio credentials via Account SID lookup (no SMS sent)."""
+    sid   = os.getenv("TWILIO_ACCOUNT_SID", "").strip()
+    token = os.getenv("TWILIO_AUTH_TOKEN", "").strip()
+    if not sid or not token:
+        print("⏭️  Twilio: TWILIO_ACCOUNT_SID / TWILIO_AUTH_TOKEN not set")
+        return False
+    try:
+        r = requests.get(
+            f"https://api.twilio.com/2010-04-01/Accounts/{sid}.json",
+            auth=(sid, token),
+            timeout=8,
+        )
+        if r.status_code == 200:
+            data = r.json()
+            print(f"✅ Twilio: OK — account: {data.get('friendly_name', sid)} (status: {data.get('status', '?')})")
+            return True
+        elif r.status_code in (401, 403):
+            print(f"❌ Twilio: Invalid credentials (HTTP {r.status_code})")
+        else:
+            print(f"❌ Twilio: Failed (HTTP {r.status_code})")
+        return False
+    except Exception as e:
+        print(f"❌ Twilio: Error — {e}")
+        return False
+
+
 # ==================== Supabase Env Check ====================
 
 def test_supabase_env():
@@ -283,17 +367,23 @@ if __name__ == "__main__":
 
     # ── Live connectivity tests ───────────────────────────
     testers = {
-        "Google AI Studio (Gemini)": test_google_ai_studio,
-        "Groq Cloud":                test_groq,
+        # AI providers — priority order matches llm.py chain
         "GitHub Models":             test_github_models,
-        "OpenRouter":                test_openrouter,
+        "Groq Cloud":                test_groq,
         "NVIDIA Build (NIM)":        test_nvidia,
+        "Google AI Studio (Gemini)": test_google_ai_studio,
+        "OpenRouter":                test_openrouter,
         "DeepSeek":                  test_deepseek,
         "OpenAI":                    test_openai,
         "Grok (xAI)":               test_grok,
+        # Trading / market data
         "Alpaca":                    test_alpaca,
         "CoinGecko":                 test_coingecko,
+        # Messaging / notifications
         "Telegram Bot":              test_telegram,
+        "SMTP":                      test_smtp,
+        "Resend":                    test_resend,
+        "Twilio":                    test_twilio,
     }
 
     print("\n🔍 Testing API connectivity:\n")

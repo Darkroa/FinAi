@@ -3728,12 +3728,12 @@ async def get_live_recommendations():
         })
     results.sort(key=lambda x: abs(x["change"]), reverse=True)
 
-    # ── LLM-enhanced reasons (cached 10 min) ────────────────────────────────
+    # ── LLM-enhanced reasons (cached 3 min) ─────────────────────────────────
     import time as _time
     _cache = getattr(get_live_recommendations, "_cache", None)
     _cache_ts = getattr(get_live_recommendations, "_cache_ts", 0.0)
     now_ts = _time.time()
-    if _cache is not None and (now_ts - _cache_ts) < 600:
+    if _cache is not None and (now_ts - _cache_ts) < 180:
         return _cache
 
     try:
@@ -3749,18 +3749,10 @@ async def get_live_recommendations():
         )
         llm_reply = None
         try:
-            from src.utils.llm import get_active_provider
-            provider = get_active_provider()
-            if provider == "groq":
-                from langchain_groq import ChatGroq
-                import os as _os
-                _llm = ChatGroq(api_key=_os.environ.get("GROQ_API_KEY",""), model="llama-3.3-70b-versatile", max_tokens=600)
-                llm_reply = _llm.invoke(llm_prompt).content
-            elif provider == "openai":
-                from langchain_openai import ChatOpenAI
-                import os as _os
-                _llm = ChatOpenAI(api_key=_os.environ.get("OPENAI_API_KEY",""), model="gpt-4o-mini", max_tokens=600)
-                llm_reply = _llm.invoke(llm_prompt).content
+            # Use the full provider chain: GitHub → Groq → NVIDIA → OpenAI → DeepSeek → Grok → Gemini → OpenRouter
+            from src.utils.llm import get_llm as _get_llm
+            _llm = _get_llm(max_tokens=600)
+            llm_reply = _llm.invoke(llm_prompt).content
         except Exception:
             pass
 
