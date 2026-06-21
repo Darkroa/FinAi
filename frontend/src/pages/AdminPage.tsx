@@ -26,9 +26,9 @@ import {
   Server, ShoppingBag, Package, DollarSign, X, Star, ChevronDown, Clock, Monitor, Download,
   BarChart2, ThumbsUp, ThumbsDown,
 } from 'lucide-react'
-import { adminGetUserActivity, adminClearUserActivity } from '../lib/api'
+import { adminGetUserActivity, adminClearUserActivity, getWhatsAppEvStatus, getWhatsAppQR } from '../lib/api'
 
-type Tab = 'users' | 'transactions' | 'notifications' | 'wallet-config' | 'api-users' | 'support' | 'health' | 'subscriptions' | 'visitors' | 'bonuses' | 'referrals' | 'ads' | 'products' | 'testimonials' | 'activity' | 'platform-stats'
+type Tab = 'users' | 'transactions' | 'notifications' | 'wallet-config' | 'api-users' | 'support' | 'health' | 'subscriptions' | 'visitors' | 'bonuses' | 'referrals' | 'ads' | 'products' | 'testimonials' | 'activity' | 'platform-stats' | 'whatsapp-bot'
 
 interface VpsPlan { id: number; name: string; price: number; specs: string; start_date?: string; end_date?: string; roi_percent?: number; description?: string }
 interface AssetProduct { id: number; name: string; price: number; icon: string; start_date?: string; end_date?: string; roi_percent?: number; description?: string }
@@ -110,6 +110,11 @@ export default function AdminPage() {
   const [statsLoading, setStatsLoading] = useState(false)
   // Chat feedback stats
   const [feedbackStats, setFeedbackStats] = useState<{ likes: number; dislikes: number; total: number } | null>(null)
+  // WhatsApp Bot
+  const [evStatus, setEvStatus] = useState<any>(null)
+  const [evQr, setEvQr] = useState<any>(null)
+  const [evStatusLoading, setEvStatusLoading] = useState(false)
+  const [evQrLoading, setEvQrLoading] = useState(false)
 
   // Notification form
   const [notifTitle, setNotifTitle] = useState('')
@@ -213,6 +218,14 @@ export default function AdminPage() {
         if (fbRes?.data) setFeedbackStats(fbRes.data)
       } catch { toast.error('Failed to load platform stats') }
       finally { setStatsLoading(false) }
+    }
+    if (t === 'whatsapp-bot') {
+      setEvStatusLoading(true)
+      try {
+        const res = await getWhatsAppEvStatus()
+        setEvStatus(res.data)
+      } catch { setEvStatus(null) }
+      finally { setEvStatusLoading(false) }
     }
   }
 
@@ -329,6 +342,7 @@ export default function AdminPage() {
     { id: 'ads', label: 'Ads', icon: Megaphone },
     { id: 'testimonials', label: 'Reviews', icon: Star },
     { id: 'activity', label: 'Activity Log', icon: Clock },
+    { id: 'whatsapp-bot', label: 'WhatsApp Bot', icon: MessageSquare },
   ] as const
 
   const inp = 'w-full bg-[#0b0e11] border border-[#2b3139] rounded-xl px-3 py-2 text-sm text-[#eaecef] placeholder-[#4a5568] focus:outline-none focus:border-[#f0b90b] transition'
@@ -2651,6 +2665,142 @@ export default function AdminPage() {
               <p className="text-sm text-[#848e9c]">Click Refresh to load platform statistics</p>
             </div>
           )}
+        </div>
+      )}
+
+      {/* ── WhatsApp Bot Tab ── */}
+      {tab === 'whatsapp-bot' && (
+        <div className="space-y-5">
+          {/* Header */}
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="w-8 h-8 rounded-lg bg-[#25d366]/10 flex items-center justify-center">
+                <MessageSquare size={16} className="text-[#25d366]" />
+              </div>
+              <div>
+                <h2 className="text-sm font-semibold text-[#eaecef]">WhatsApp Bot</h2>
+                <p className="text-[10px] text-[#848e9c]">Evolution API v2 — Instance: FinAiEvobots</p>
+              </div>
+            </div>
+            <button
+              onClick={async () => {
+                setEvStatusLoading(true)
+                try { const res = await getWhatsAppEvStatus(); setEvStatus(res.data) }
+                catch { setEvStatus(null) }
+                finally { setEvStatusLoading(false) }
+              }}
+              disabled={evStatusLoading}
+              className="flex items-center gap-2 px-4 py-2 rounded-xl bg-[#2b3139] hover:bg-[#363c45] text-[#eaecef] text-xs font-medium transition disabled:opacity-50"
+            >
+              <Activity size={12} className={evStatusLoading ? 'animate-spin' : ''} />
+              {evStatusLoading ? 'Checking…' : 'Refresh Status'}
+            </button>
+          </div>
+
+          {/* Status Card */}
+          <div className="bg-[#161a1e] border border-[#2b3139] rounded-2xl p-5">
+            <p className="text-[10px] font-semibold text-[#848e9c] uppercase tracking-wide mb-4">Instance Status</p>
+            {evStatusLoading ? (
+              <div className="py-8 text-center text-xs text-[#848e9c]">Loading…</div>
+            ) : evStatus ? (
+              <div className="space-y-3">
+                {[
+                  { label: 'Instance', value: evStatus.instance ?? evStatus.instanceName ?? 'FinAiEvobots' },
+                  { label: 'State', value: evStatus.state ?? evStatus.connectionStatus ?? '—' },
+                  { label: 'Phone', value: evStatus.ownerJid?.split('@')[0] ?? evStatus.profileName ?? '—' },
+                  { label: 'Profile Name', value: evStatus.profileName ?? evStatus.name ?? '—' },
+                ].map(row => (
+                  <div key={row.label} className="flex justify-between items-center py-2 border-b border-[#2b3139]/50">
+                    <span className="text-xs text-[#848e9c]">{row.label}</span>
+                    <span className={`text-xs font-mono font-semibold ${
+                      String(row.value).toLowerCase().includes('open') || String(row.value).toLowerCase() === 'connected'
+                        ? 'text-[#0ecb81]'
+                        : String(row.value) === '—' ? 'text-[#4a5568]' : 'text-[#eaecef]'
+                    }`}>{String(row.value)}</span>
+                  </div>
+                ))}
+                <div className="flex items-center gap-2 mt-3">
+                  <span className={`w-2 h-2 rounded-full ${
+                    (evStatus.state ?? evStatus.connectionStatus ?? '').toLowerCase().includes('open') ||
+                    (evStatus.state ?? evStatus.connectionStatus ?? '').toLowerCase() === 'connected'
+                      ? 'bg-[#0ecb81] animate-pulse' : 'bg-[#f6465d]'
+                  }`} />
+                  <span className="text-xs text-[#848e9c]">
+                    {(evStatus.state ?? evStatus.connectionStatus ?? '').toLowerCase().includes('open') ||
+                     (evStatus.state ?? evStatus.connectionStatus ?? '').toLowerCase() === 'connected'
+                      ? 'Bot is connected and running'
+                      : 'Bot is not connected — scan QR code to connect'}
+                  </span>
+                </div>
+              </div>
+            ) : (
+              <div className="py-8 text-center text-xs text-[#848e9c]">
+                No status data. Click Refresh Status to check the bot.
+              </div>
+            )}
+          </div>
+
+          {/* QR Code Card */}
+          <div className="bg-[#161a1e] border border-[#2b3139] rounded-2xl p-5">
+            <div className="flex items-center justify-between mb-4">
+              <p className="text-[10px] font-semibold text-[#848e9c] uppercase tracking-wide">QR Code</p>
+              <button
+                onClick={async () => {
+                  setEvQrLoading(true)
+                  try { const res = await getWhatsAppQR(); setEvQr(res.data) }
+                  catch { setEvQr({ error: 'Failed to fetch QR code' }) }
+                  finally { setEvQrLoading(false) }
+                }}
+                disabled={evQrLoading}
+                className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-[#25d366]/10 hover:bg-[#25d366]/20 text-[#25d366] text-xs font-medium transition disabled:opacity-50"
+              >
+                <Download size={11} className={evQrLoading ? 'animate-spin' : ''} />
+                {evQrLoading ? 'Generating…' : 'Get QR Code'}
+              </button>
+            </div>
+            {evQr ? (
+              evQr.error ? (
+                <div className="py-6 text-center text-xs text-[#f6465d]">{evQr.error}</div>
+              ) : evQr.qrcode || evQr.base64 ? (
+                <div className="flex flex-col items-center gap-4">
+                  <img
+                    src={evQr.qrcode ?? evQr.base64}
+                    alt="WhatsApp QR Code"
+                    className="w-56 h-56 rounded-xl border border-[#2b3139] bg-white p-2"
+                  />
+                  <p className="text-[10px] text-[#848e9c] text-center">
+                    Open WhatsApp → Settings → Linked Devices → Link a Device, then scan this code.
+                  </p>
+                </div>
+              ) : (
+                <div className="py-6 text-center text-xs text-[#0ecb81]">
+                  Bot already connected — no QR code needed.
+                </div>
+              )
+            ) : (
+              <div className="py-8 text-center text-xs text-[#848e9c]">
+                Click Get QR Code to link your WhatsApp number to the bot.
+              </div>
+            )}
+          </div>
+
+          {/* Config Summary */}
+          <div className="bg-[#161a1e] border border-[#2b3139] rounded-2xl p-5">
+            <p className="text-[10px] font-semibold text-[#848e9c] uppercase tracking-wide mb-4">Bot Configuration</p>
+            <div className="space-y-2">
+              {[
+                { label: 'Evolution API URL', value: 'http://localhost:8080' },
+                { label: 'Instance Name', value: 'FinAiEvobots' },
+                { label: 'API Key', value: '••••••••••••' },
+                { label: 'Webhook', value: '/api/users/whatsapp-webhook' },
+              ].map(row => (
+                <div key={row.label} className="flex justify-between items-center py-2 border-b border-[#2b3139]/50">
+                  <span className="text-xs text-[#848e9c]">{row.label}</span>
+                  <span className="text-xs font-mono text-[#eaecef]">{row.value}</span>
+                </div>
+              ))}
+            </div>
+          </div>
         </div>
       )}
 

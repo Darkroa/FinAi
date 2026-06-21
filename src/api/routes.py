@@ -2757,7 +2757,7 @@ async def get_open_positions(current_user=Depends(get_current_user), db: Session
             remaining_buys.append((b, rem))
         elif sold_qty > 0:
             sold_tickers[b.ticker] = sold_qty - (b.qty or 0.0)
-    open_buys_filtered = remaining_buys if remaining_buys else [(b, b.qty or 0.0) for b in open_buys]
+    open_buys_filtered = remaining_buys
     from src.trading.trade_bot import _fetch_live_price
     result = []
     for t, effective_qty in open_buys_filtered:

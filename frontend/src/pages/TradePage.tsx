@@ -670,21 +670,7 @@ export default function TradePage() {
       ])
       const trades: TradeRecord[] = tradesRes.status === 'fulfilled' ? (tradesRes.value.data?.trades ?? []) : []
       setHistory(trades)
-      let positions: OpenPosition[] = posRes.status === 'fulfilled' ? (posRes.value.data?.positions ?? []) : []
-      if (positions.length === 0 && trades.length > 0) {
-        const posMap: Record<string, { qty: number; totalCost: number; trade: TradeRecord }> = {}
-        for (const t of [...trades].reverse()) {
-          const sym = t.ticker ?? ''; if (!sym) continue
-          if (!posMap[sym]) posMap[sym] = { qty: 0, totalCost: 0, trade: t }
-          if (t.action?.toUpperCase() === 'BUY') { posMap[sym].totalCost += (t.price??0)*(t.qty??0); posMap[sym].qty += t.qty??0 }
-          else { posMap[sym].qty -= t.qty??0; if (posMap[sym].qty < 0) posMap[sym].qty = 0 }
-        }
-        positions = Object.entries(posMap).filter(([,p]) => p.qty > 0.000001).map(([sym,p]) => {
-          const avg = p.totalCost / p.qty
-          const cur = FALLBACKS[sym.replace('-', '/')]?.price ?? avg
-          return { id: p.trade.id, ticker: sym, price: avg, qty: p.qty, exchange: p.trade.exchange, created_at: p.trade.created_at, current_price: cur, unrealized_pnl: (cur-avg)*p.qty } as OpenPosition
-        })
-      }
+      const positions: OpenPosition[] = posRes.status === 'fulfilled' ? (posRes.value.data?.positions ?? []) : []
       setOpenPos(positions)
     } catch { /* silently ignore */ }
   }, [])
