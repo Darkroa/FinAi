@@ -198,7 +198,11 @@ export const saveWebhookSettings = (data: {
   whatsapp_number?: string
 }) => api.post('/users/save-webhook', data)
 
-// WhatsApp — generate code (user sends code to +14155238886 on WhatsApp)
+// WhatsApp — Evolution API QR connection
+export const getWhatsAppQR     = () => api.get('/users/whatsapp-qr')
+export const getWhatsAppEvStatus = () => api.get('/users/whatsapp-ev-status')
+
+// WhatsApp — generate link code (Twilio fallback: user texts code to +14155238886)
 export const generateWhatsAppCode = () =>
   api.post('/users/whatsapp-generate-code')
 export const disconnectTelegram = () =>
@@ -206,7 +210,7 @@ export const disconnectTelegram = () =>
 export const disconnectWhatsApp = () =>
   api.post('/users/disconnect-whatsapp')
 
-// WhatsApp phone verification (legacy, kept for compat)
+// WhatsApp phone OTP verification (Twilio fallback)
 export const sendWhatsAppCode = (phone: string) =>
   api.post('/users/send-whatsapp-code', { phone })
 export const verifyWhatsApp = (code: string) =>

@@ -437,7 +437,7 @@ export default function FinApiPage() {
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
                   <MessageCircle size={12} className="text-[#25D366]" />
-                  <span className="text-xs font-semibold text-[#eaecef]">WhatsApp (Twilio)</span>
+                  <span className="text-xs font-semibold text-[#eaecef]">WhatsApp</span>
                 </div>
                 {waVerified && (
                   <span className="flex items-center gap-1 text-[10px] text-[#0ecb81] bg-[#0ecb81]/10 border border-[#0ecb81]/20 px-2 py-0.5 rounded-full">

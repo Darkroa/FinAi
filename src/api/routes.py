@@ -3404,6 +3404,32 @@ async def telegram_webhook(request: Request, db: Session = Depends(get_db)):
     return {"ok": True}
 
 
+# ===================== WhatsApp: Evolution API QR + status =====================
+
+@router.get("/users/whatsapp-qr")
+async def get_whatsapp_qr(current_user=Depends(get_current_user)):
+    """
+    Return the QR code for the Evolution API WhatsApp instance.
+    Scan this once (admin side) to activate the FinAi WhatsApp sender.
+    """
+    from src.notifications.whatsapp_provider import evolution_qr, evolution_status
+    status = evolution_status()
+    # If already connected, return connected state instead of QR
+    if status.get("state") == "open":
+        return {"connected": True, "state": "open", "instance": status.get("instance")}
+    qr = evolution_qr()
+    if "error" in qr:
+        raise HTTPException(status_code=503, detail=qr["error"])
+    return {"connected": False, "state": "qr_ready", **qr}
+
+
+@router.get("/users/whatsapp-ev-status")
+async def get_whatsapp_ev_status(current_user=Depends(get_current_user)):
+    """Return the current connection state of the Evolution API instance."""
+    from src.notifications.whatsapp_provider import evolution_status
+    return evolution_status()
+
+
 # ===================== WhatsApp Twilio Webhook =====================
 # In-memory WhatsApp link codes: code → {user_id, phone}
 _whatsapp_link_codes: dict = {}

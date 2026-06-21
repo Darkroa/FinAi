@@ -15,6 +15,8 @@ try:
 except ImportError:
     _HAS_TWILIO = False
 
+from src.notifications.whatsapp_provider import send_whatsapp as _wa_send
+
 try:
     from telegram import Bot as TelegramBot
     _HAS_TELEGRAM = True
@@ -121,13 +123,9 @@ class Notifier:
         self._send_email(message, subject)
 
     def _send_whatsapp(self, message: str):
-        if self.twilio_client and self.whatsapp_to:
+        if self.whatsapp_to:
             try:
-                self.twilio_client.messages.create(
-                    from_=self.whatsapp_from,
-                    body=message,
-                    to=f"whatsapp:{self.whatsapp_to}"
-                )
+                _wa_send(self.whatsapp_to, message)
             except Exception as e:
                 logger.error(f"WhatsApp failed: {e}")
 

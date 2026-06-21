@@ -6,6 +6,10 @@
     "module": "esnext",
     "types": ["vite/client"],
     "skipLibCheck": true,
+    "baseUrl": ".",
+    "paths": {
+      "lucide-react": ["./node_modules/lucide-react/dist/lucide-react"]
+    },
     
 
     /* Bundler mode */
