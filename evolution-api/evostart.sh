@@ -33,9 +33,13 @@ npm run db:deploy
 #──────────────────────────────────────────────Run Evolution Server ──────────
 
 
-# Development with hot reload
-npm run dev:server
-
-# Production build and run
+echo "→ Building production app ..."
 npm run build
+
+echo "→ Starting production server ..."
 npm run start:prod
+
+
+
+
+
