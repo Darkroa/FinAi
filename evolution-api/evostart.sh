@@ -43,7 +43,7 @@ echo "→ Evolution API v${EVO_VERSION} is ready"
 cd "$EVO_DIR"
 
 echo "→ Installing dependencies..."
-npm ci
+npm install 
 
 echo "→ Building evolution ..."
 npm run build
