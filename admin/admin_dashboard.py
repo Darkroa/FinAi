@@ -136,7 +136,7 @@ with st.sidebar:
     st.markdown('<div style="font-size:18px;font-weight:800;color:#f0b90b;padding:8px 0 20px;">⚙️ FinAi Admin</div>', unsafe_allow_html=True)
     nav = st.radio(
         "",
-        ["Overview", "Users", "Transactions", "Events", "System"],
+        ["Overview", "Users", "Transactions", "Events", "System", "WhatsApp Bot"],
         label_visibility="collapsed",
     )
     st.markdown("---")
@@ -387,3 +387,110 @@ elif nav == "System":
                 st.json(r.json())
             except Exception as e:
                 st.error(f"Failed: {e}")
+
+
+# ─────────────────────────── WHATSAPP BOT ────────────────────────────
+elif nav == "WhatsApp Bot":
+    st.markdown('<div class="section-header">WhatsApp Bot — Evolution API</div>', unsafe_allow_html=True)
+
+    # ── Connection Status ──────────────────────────────────────────────
+    st.markdown("#### Connection Status")
+    col_stat, col_refresh = st.columns([4, 1])
+    with col_refresh:
+        refresh_status = st.button("🔄 Refresh", key="refresh_ev_status", use_container_width=True)
+
+    try:
+        r_status = requests.get(f"{API_BASE}/users/whatsapp-ev-status", headers=headers, timeout=10)
+        if r_status.status_code == 200:
+            status_data = r_status.json()
+            state = status_data.get("state", "unknown")
+            instance = status_data.get("instance", os.getenv("EVOLUTION_INSTANCE", "—"))
+
+            state_color = {
+                "open": "#0ecb81",
+                "connecting": "#f0b90b",
+                "qr": "#f0b90b",
+                "close": "#f6465d",
+                "not_configured": "#848e9c",
+                "error": "#f6465d",
+            }.get(state, "#848e9c")
+
+            state_label = {
+                "open": "Connected ✅",
+                "connecting": "Connecting… ⏳",
+                "qr": "Waiting for QR scan 📷",
+                "close": "Disconnected ❌",
+                "not_configured": "Not Configured ⚙️",
+                "error": "Error ⚠️",
+            }.get(state, state.capitalize())
+
+            st.markdown(f"""
+            <div class="admin-card">
+                <div style="display:flex;justify-content:space-between;align-items:center;">
+                    <div>
+                        <div style="font-size:20px;font-weight:800;color:{state_color};">{state_label}</div>
+                        <div style="font-size:13px;color:#848e9c;margin-top:4px;">Instance: <b>{instance}</b></div>
+                    </div>
+                    <div style="font-size:38px;">{
+                        "✅" if state == "open" else
+                        "⏳" if state in ("connecting", "qr") else
+                        "❌" if state == "close" else "⚙️"
+                    }</div>
+                </div>
+                {"<div style='margin-top:10px;font-size:12px;color:#f6465d;'>" + status_data.get("detail","") + "</div>" if status_data.get("detail") else ""}
+            </div>
+            """, unsafe_allow_html=True)
+        else:
+            st.error(f"Status check failed ({r_status.status_code}): {r_status.text[:200]}")
+    except Exception as e:
+        st.error(f"Could not reach Evolution API status endpoint: {e}")
+
+    st.markdown("---")
+
+    # ── QR Code ───────────────────────────────────────────────────────
+    st.markdown("#### Connect via QR Code")
+    st.caption("Scan this QR code with the WhatsApp account you want to use as the bot.")
+
+    if st.button("📷 Generate / Refresh QR Code", use_container_width=True):
+        with st.spinner("Fetching QR code from Evolution API…"):
+            try:
+                r_qr = requests.get(f"{API_BASE}/users/whatsapp-qr", headers=headers, timeout=20)
+                if r_qr.status_code == 200:
+                    qr_data = r_qr.json()
+                    if "error" in qr_data:
+                        st.error(f"Evolution API error: {qr_data['error']}")
+                    else:
+                        b64 = qr_data.get("base64", "")
+                        code = qr_data.get("code", "")
+                        qr_status = qr_data.get("status", "")
+
+                        if b64:
+                            img_src = b64 if b64.startswith("data:") else f"data:image/png;base64,{b64}"
+                            st.markdown(f"""
+                            <div style="display:flex;flex-direction:column;align-items:center;gap:16px;padding:24px;">
+                                <img src="{img_src}"
+                                     style="width:260px;height:260px;border-radius:12px;border:3px solid #f0b90b;background:#fff;padding:8px;" />
+                                {"<div style='font-family:monospace;font-size:13px;color:#848e9c;word-break:break-all;text-align:center;max-width:280px;'>Pairing code: <b style=color:#eaecef;>" + code + "</b></div>" if code else ""}
+                                <div style='font-size:12px;color:#0ecb81;'>Status: {qr_status}</div>
+                            </div>
+                            """, unsafe_allow_html=True)
+                            st.info("Open WhatsApp on your phone → Linked Devices → Link a Device, then scan the QR above.")
+                        else:
+                            st.warning("QR code image not returned — the instance may already be connected.")
+                            st.json(qr_data)
+                else:
+                    st.error(f"QR endpoint returned {r_qr.status_code}: {r_qr.text[:300]}")
+            except Exception as ex:
+                st.error(f"Failed to fetch QR code: {ex}")
+
+    st.markdown("---")
+    st.markdown("#### Configuration")
+    ev_url = os.getenv("EVOLUTION_API_URL", "Not set")
+    ev_inst = os.getenv("EVOLUTION_INSTANCE", "Not set")
+    st.markdown(f"""
+    <div class="admin-card" style="font-size:13px;color:#848e9c;">
+        <div><b style="color:#eaecef;">API URL:</b> {ev_url}</div>
+        <div style="margin-top:6px;"><b style="color:#eaecef;">Instance:</b> {ev_inst}</div>
+        <div style="margin-top:6px;"><b style="color:#eaecef;">API Key:</b> {"✅ Configured" if os.getenv("EVOLUTION_API_KEY") else "❌ Not set"}</div>
+    </div>
+    """, unsafe_allow_html=True)
