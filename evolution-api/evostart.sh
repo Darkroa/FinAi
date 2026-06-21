@@ -1,9 +1,19 @@
 #!/bin/bash
 set -e
 
-echo "=== FinAi Production Build ==="
+echo "=== Evolution Api Build========="
 
 cd /home/runner/workspace
 
-# ── Frontend ──────────────────────────────────────────────────────────────────
-echo "→ Installing frontend dependencies..."
+# ── Evolution ──────────────────────────────────────────────────────────────────
+echo "→ Installing evolution-api dependencies..."
+cd /home/runner/workspace/evolution-api
+npm install 
+
+echo "→ Building EvoApi..."
+npm run build
+echo "→ Frontend built to frontend/dist"
+
+cd /home/runner/workspace
+
+# ── Python requirements ───────────────────────────────────────────────────────
