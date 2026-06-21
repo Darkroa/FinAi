@@ -19,10 +19,23 @@ echo "→ EvoApi built to /dist"
 
 #───────────────────────────────────────────────Evolution db───────────────
 
-export DATABASE_PROVIDER=
+echo "→ Running dbPrisma Migration ..."
 
-# Generate Prisma client
+export DATABASE_PROVIDER="${DATABASE_PROVIDER:-postgresql}"
+
+echo "→ Generate Prisma client ..."
 npm run db:generate
 
-# Deploy migrations
+echo "→ Deploy migrations ..."
 npm run db:deploy
+
+
+#──────────────────────────────────────────────Run Evolution Server ──────────
+
+
+# Development with hot reload
+npm run dev:server
+
+# Production build and run
+npm run build
+npm run start:prod
