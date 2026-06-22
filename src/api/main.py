@@ -43,9 +43,26 @@ app.include_router(router, prefix="/api")
 
 # ===================== Static Frontend Serving =====================
 FRONTEND_DIST = Path(__file__).parent.parent.parent / "frontend" / "dist"
+FINAPP_DIST = Path(__file__).parent.parent.parent / "finapp" / "dist"
 
 app.mount("/uploads", StaticFiles(directory=str(UPLOADS_DIR)), name="uploads")
 
+# ── Finapp (Expo web static export) served at /app ────────────────
+if FINAPP_DIST.exists():
+    app.mount("/app", StaticFiles(directory=str(FINAPP_DIST), html=True), name="finapp")
+
+    @app.get("/app", include_in_schema=False)
+    async def serve_finapp_root():
+        return FileResponse(str(FINAPP_DIST / "index.html"))
+
+    @app.get("/app/{full_path:path}", include_in_schema=False)
+    async def serve_finapp_spa(full_path: str):
+        candidate = FINAPP_DIST / full_path
+        if candidate.exists() and candidate.is_file():
+            return FileResponse(str(candidate))
+        return FileResponse(str(FINAPP_DIST / "index.html"))
+
+# ── React dashboard served at / ───────────────────────────────────
 if FRONTEND_DIST.exists():
     app.mount("/assets", StaticFiles(directory=str(FRONTEND_DIST / "assets")), name="assets")
 
@@ -71,7 +88,7 @@ if FRONTEND_DIST.exists():
 
     @app.get("/{full_path:path}")
     async def serve_spa(full_path: str):
-        if full_path.startswith(("api/", "docs", "redoc", "openapi.json", "metrics", "assets/")):
+        if full_path.startswith(("api/", "docs", "redoc", "openapi.json", "metrics", "assets/", "app/")):
             from fastapi import HTTPException
             raise HTTPException(status_code=404)
         index = FRONTEND_DIST / "index.html"
@@ -88,7 +105,8 @@ else:
             "status": "healthy",
             "docs": "/docs",
             "metrics": "/metrics",
-            "api_prefix": "/api"
+            "api_prefix": "/api",
+            "mobile_app": "/app"
         }
 
 
