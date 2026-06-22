@@ -40,13 +40,15 @@ localPort = 5001
 
 [[ports]]
 localPort = 8000
-externalPort = 8000
 
 [[ports]]
 localPort = 8050
 
 [[ports]]
 localPort = 8080
+
+[[ports]]
+localPort = 8081
 
 [userenv]
 
