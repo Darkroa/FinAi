@@ -44,6 +44,7 @@ export default function AdminPage() {
   const [tickets, setTickets] = useState<any[]>([])
   const [selectedTicket, setSelectedTicket] = useState<any>(null)
   const [healthData, setHealthData] = useState<any>(null)
+  const [healthLastRefresh, setHealthLastRefresh] = useState<Date | null>(null)
   const [loading, setLoading] = useState(true)
   const [healthLoading, setHealthLoading] = useState(false)
   const [subscriptions, setSubscriptions] = useState<any[]>([])
@@ -250,9 +251,16 @@ export default function AdminPage() {
     try {
       const res = await adminHealthCheck()
       setHealthData(res.data)
+      setHealthLastRefresh(new Date())
     } catch { toast.error('Health check failed') }
     finally { setHealthLoading(false) }
   }
+
+  useEffect(() => {
+    if (tab !== 'health') return
+    const interval = setInterval(runHealthCheck, 30000)
+    return () => clearInterval(interval)
+  }, [tab])
 
   const approve = async (txId: number) => {
     try {
@@ -2243,36 +2251,111 @@ export default function AdminPage() {
       {/* HEALTH */}
       {tab === 'health' && (
         <div className="space-y-4">
-          <div className="flex items-center gap-3">
-            <h2 className="text-sm font-semibold text-[#eaecef]">API Health Monitor</h2>
+          {/* Header */}
+          <div className="flex items-center justify-between">
+            <div>
+              <h2 className="text-sm font-semibold text-[#eaecef] flex items-center gap-2">
+                <Server size={14} className="text-[#f0b90b]" /> System Health Monitor
+              </h2>
+              {healthLastRefresh && (
+                <p className="text-xs text-[#848e9c] mt-0.5">
+                  Last checked {healthLastRefresh.toLocaleTimeString()} · auto-refreshes every 30s
+                </p>
+              )}
+            </div>
             <button onClick={runHealthCheck} disabled={healthLoading}
-              className="flex items-center gap-1.5 text-xs text-[#f0b90b] hover:text-[#d4a30a] transition">
+              className="flex items-center gap-1.5 text-xs bg-[#2b3139] hover:bg-[#363d47] text-[#eaecef] px-3 py-1.5 rounded-lg transition disabled:opacity-50">
               <RefreshCw size={12} className={healthLoading ? 'animate-spin' : ''} /> Refresh
             </button>
           </div>
-          {healthLoading && <div className="py-8 text-center text-[#848e9c]">Running health checks...</div>}
-          {healthData && (
-            <>
-              <div className={`flex items-center gap-2 px-4 py-3 rounded-xl border ${healthData.overall === 'healthy' ? 'bg-[#0ecb81]/5 border-[#0ecb81]/20' : 'bg-[#f0b90b]/5 border-[#f0b90b]/20'}`}>
-                <Activity size={14} className={healthData.overall === 'healthy' ? 'text-[#0ecb81]' : 'text-[#f0b90b]'} />
-                <span className="text-sm font-medium text-[#eaecef]">Overall: <span className={`capitalize ${healthData.overall === 'healthy' ? 'text-[#0ecb81]' : 'text-[#f0b90b]'}`}>{healthData.overall}</span></span>
-                <span className="text-xs text-[#848e9c] ml-auto">{new Date(healthData.timestamp).toLocaleTimeString()}</span>
-              </div>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                {Object.entries(healthData.checks || {}).map(([name, check]: [string, any]) => (
-                  <div key={name} className={`bg-[#161a1e] border rounded-xl p-4 ${check.status === 'healthy' ? 'border-[#0ecb81]/20' : check.status === 'error' ? 'border-[#f6465d]/20' : 'border-[#f0b90b]/20'}`}>
-                    <div className="flex items-center justify-between mb-2">
-                      <p className="text-sm font-medium text-[#eaecef] capitalize">{name}</p>
-                      <span className={`text-xs px-2 py-0.5 rounded-full capitalize ${check.status === 'healthy' ? 'bg-[#0ecb81]/10 text-[#0ecb81]' : check.status === 'error' ? 'bg-[#f6465d]/10 text-[#f6465d]' : 'bg-[#f0b90b]/10 text-[#f0b90b]'}`}>{check.status}</span>
-                    </div>
-                    {check.latency_ms !== undefined && <p className="text-xs text-[#848e9c]">Latency: {check.latency_ms}ms</p>}
-                    {check.workers !== undefined && <p className="text-xs text-[#848e9c]">Workers: {check.workers}</p>}
-                    {check.error && <p className="text-xs text-[#f6465d] truncate">{check.error}</p>}
-                  </div>
-                ))}
-              </div>
-            </>
+
+          {/* Loading skeleton */}
+          {healthLoading && !healthData && (
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+              {[...Array(3)].map((_, i) => (
+                <div key={i} className="h-20 rounded-xl bg-[#161a1e] border border-[#2b3139] animate-pulse" />
+              ))}
+            </div>
           )}
+
+          {healthData && (() => {
+            const checks = healthData.checks || {}
+            const entries = Object.entries(checks) as [string, any][]
+            const healthyCount = entries.filter(([, c]) => c.status === 'healthy').length
+            const total = entries.length
+            const SERVICE_META: Record<string, { label: string; emoji: string }> = {
+              database:     { label: 'PostgreSQL',    emoji: '🗄️' },
+              supabase_env: { label: 'Supabase',      emoji: '☁️' },
+              celery:       { label: 'Celery Worker', emoji: '⚙️' },
+              coingecko:    { label: 'CoinGecko',     emoji: '🦎' },
+              binance:      { label: 'Binance API',   emoji: '🔶' },
+            }
+            return (
+              <>
+                {/* Summary stats */}
+                <div className="grid grid-cols-3 gap-3">
+                  {[
+                    { label: 'Healthy', value: healthyCount, color: 'text-[#0ecb81]', bg: 'bg-[#0ecb81]/5 border-[#0ecb81]/20' },
+                    { label: 'Issues',  value: total - healthyCount, color: total - healthyCount > 0 ? 'text-[#f6465d]' : 'text-[#848e9c]', bg: 'bg-[#161a1e] border-[#2b3139]' },
+                    { label: 'Total',   value: total, color: 'text-[#f0b90b]', bg: 'bg-[#f0b90b]/5 border-[#f0b90b]/20' },
+                  ].map(s => (
+                    <div key={s.label} className={`rounded-xl border p-3 ${s.bg}`}>
+                      <div className={`text-2xl font-bold ${s.color}`}>{s.value}</div>
+                      <div className="text-xs text-[#848e9c] mt-0.5">{s.label}</div>
+                    </div>
+                  ))}
+                </div>
+
+                {/* Overall banner */}
+                <div className={`flex items-center gap-3 px-4 py-3 rounded-xl border ${healthData.overall === 'healthy' ? 'bg-[#0ecb81]/5 border-[#0ecb81]/20' : 'bg-[#f0b90b]/5 border-[#f0b90b]/20'}`}>
+                  <Activity size={14} className={healthData.overall === 'healthy' ? 'text-[#0ecb81]' : 'text-[#f0b90b]'} />
+                  <span className="text-sm font-medium text-[#eaecef]">
+                    System <span className={`capitalize font-semibold ${healthData.overall === 'healthy' ? 'text-[#0ecb81]' : 'text-[#f0b90b]'}`}>{healthData.overall}</span>
+                  </span>
+                  <span className="text-xs text-[#848e9c] ml-auto">
+                    {new Date(healthData.timestamp).toLocaleString()}
+                  </span>
+                </div>
+
+                {/* Service cards */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  {entries.map(([name, check]) => {
+                    const meta = SERVICE_META[name] ?? { label: name.replace(/_/g, ' '), emoji: '🔧' }
+                    const isHealthy = check.status === 'healthy'
+                    const isError   = check.status === 'error'
+                    const extras = Object.entries(check).filter(([k]) => !['status', 'error'].includes(k))
+                    return (
+                      <div key={name} className={`bg-[#161a1e] border rounded-xl p-4 ${isHealthy ? 'border-[#0ecb81]/20' : isError ? 'border-[#f6465d]/20' : 'border-[#f0b90b]/20'}`}>
+                        <div className="flex items-center justify-between mb-3">
+                          <div className="flex items-center gap-2">
+                            <span className="text-lg leading-none">{meta.emoji}</span>
+                            <span className="text-sm font-medium text-[#eaecef] capitalize">{meta.label}</span>
+                          </div>
+                          <span className={`text-xs px-2 py-0.5 rounded-full font-medium flex items-center gap-1 ${isHealthy ? 'bg-[#0ecb81]/10 text-[#0ecb81]' : isError ? 'bg-[#f6465d]/10 text-[#f6465d]' : 'bg-[#f0b90b]/10 text-[#f0b90b]'}`}>
+                            <span className={`w-1.5 h-1.5 rounded-full ${isHealthy ? 'bg-[#0ecb81]' : isError ? 'bg-[#f6465d]' : 'bg-[#f0b90b]'}`} />
+                            {check.status}
+                          </span>
+                        </div>
+                        {check.error && (
+                          <p className="text-xs text-[#f6465d] font-mono bg-[#f6465d]/5 rounded-lg px-2.5 py-1.5 mb-2 break-all">{check.error}</p>
+                        )}
+                        {extras.length > 0 && (
+                          <div className="space-y-1">
+                            {extras.map(([k, v]) => (
+                              <div key={k} className="flex items-center justify-between text-xs">
+                                <span className="text-[#848e9c] capitalize">{k.replace(/_/g, ' ')}</span>
+                                <span className="text-[#eaecef] font-mono">{String(v)}</span>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    )
+                  })}
+                </div>
+              </>
+            )
+          })()}
         </div>
       )}
 
