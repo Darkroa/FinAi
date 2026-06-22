@@ -294,6 +294,8 @@ export const finEventStart = (data: {
 export const finEventStop = (botName = 'default') => api.post(`/bots/finevent/stop?bot_name=${encodeURIComponent(botName)}`)
 export const finEventStatus = (botName = 'default') => api.get(`/bots/finevent/status?bot_name=${encodeURIComponent(botName)}`)
 export const finEventTrades = (limit = 50) => api.get(`/bots/finevent/trades?limit=${limit}`)
+export const finEventClosePosition = (botName: string, ticker: string) =>
+  api.post(`/bots/finevent/close-position?bot_name=${encodeURIComponent(botName)}&ticker=${encodeURIComponent(ticker)}`)
 
 // Referral
 export const getReferralStats = () => api.get('/referral/stats')

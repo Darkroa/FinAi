@@ -444,12 +444,76 @@ class FinEventBot:
                     pass
             _th.Thread(target=_send, daemon=True).start()
 
+    # ── Manual close ──────────────────────────────────────────────────────────
+
+    def close_position(self, ticker: str) -> dict:
+        """Manually close an open position for the given ticker."""
+        ticker = ticker.upper()
+        pos = self.open_positions.get(ticker)
+        if not pos:
+            return {"ok": False, "detail": f"No open position for {ticker}"}
+
+        try:
+            price = _fetch_live_price(ticker)
+        except Exception:
+            return {"ok": False, "detail": f"Could not fetch live price for {ticker}"}
+
+        side = pos.get("side", "long")
+        qty  = pos.get("qty", 0)
+        if side == "long":
+            pnl = round((price - pos["entry_price"]) * qty, 4)
+        else:
+            pnl = round((pos["entry_price"] - price) * qty, 4)
+        self.total_pnl = round(self.total_pnl + pnl, 4)
+        self.open_positions.pop(ticker)
+
+        action_label = "SELL" if side == "long" else "BUY"
+        with SessionLocal() as db:
+            log = TradeLog(
+                user_id  = self.user_id,
+                ticker   = ticker,
+                action   = action_label,
+                price    = price,
+                qty      = qty,
+                pnl      = pnl,
+                reason   = f"FinEventAI | Manual close {side.upper()} position",
+                paper    = self.paper,
+                exchange = "EventBot",
+            )
+            db.add(log)
+            db.commit()
+
+        self._notify(
+            ticker   = ticker,
+            action   = action_label,
+            price    = price,
+            qty      = qty,
+            reason   = f"Manual close {side.upper()} position",
+        )
+        return {"ok": True, "ticker": ticker, "pnl": pnl, "price": price}
+
     # ── Status ────────────────────────────────────────────────────────────────
 
     def get_status(self) -> dict:
+        # Enrich each open position with live price + unrealized PnL
+        enriched: dict = {}
+        for ticker, pos in self.open_positions.items():
+            entry = pos.get("entry_price", 0)
+            qty   = pos.get("qty", 0)
+            side  = pos.get("side", "long")
+            try:
+                current = _fetch_live_price(ticker)
+            except Exception:
+                current = entry
+            if side == "long":
+                upnl = round((current - entry) * qty, 4)
+            else:
+                upnl = round((entry - current) * qty, 4)
+            enriched[ticker] = {**pos, "current_price": current, "unrealized_pnl": upnl}
+
         return {
             "running":            self.running,
-            "open_positions":     self.open_positions,
+            "open_positions":     enriched,
             "paper":              self.paper,
             "min_impact_score":   self.min_impact_score,
             "tickers":            self.tickers,

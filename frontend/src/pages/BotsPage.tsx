@@ -3,7 +3,7 @@ import {
   getBotStatus, startBot, stopBot, closeBotPosition,
   getBotTrades, updateBotParams, getBotPnlHistory, listApiKeys,
   getSubscriptionLimits,
-  finEventStart, finEventStop, finEventTrades, finEventListBots,
+  finEventStart, finEventStop, finEventTrades, finEventListBots, finEventClosePosition,
   getMe,
 } from '../lib/api'
 import { useAuthStore } from '../store/authStore'
@@ -277,6 +277,19 @@ export default function BotsPage() {
       toast.success(`FinEventAI "${botName}" stopped`)
       await fetchFeStatus()
     } catch { toast.error('Failed to stop FinEventAI') } finally { setFeLoading(false) }
+  }
+
+  const handleFeClosePosition = async (botName: string, ticker: string) => {
+    setFeLoading(true)
+    try {
+      const res = await finEventClosePosition(botName, ticker)
+      const pnl  = res.data?.pnl ?? 0
+      const sign = pnl >= 0 ? '+' : ''
+      toast.success(`${ticker} closed — P&L: ${sign}$${Math.abs(pnl).toFixed(2)}`)
+      await fetchFeStatus()
+    } catch (err: any) {
+      toast.error(err?.response?.data?.detail || `Failed to close ${ticker} position`)
+    } finally { setFeLoading(false) }
   }
 
   const fetchData = useCallback(async () => {
@@ -1216,60 +1229,73 @@ export default function BotsPage() {
                       <span>Impact: <span className="text-[#eaecef] font-mono">≥{bot.min_impact_score ?? 7}</span></span>
                       <span>Capital: <span className="text-[#eaecef] font-mono">${(bot.capital_per_trade ?? 500).toFixed(0)}</span></span>
                     </div>
-                    {/* Open positions for this EventBot — FinBot-style position cards */}
+                    {/* Open positions for this EventBot */}
                     {Object.keys(bot.open_positions ?? {}).length > 0 && (
                       <div className="w-full mt-2 space-y-2">
                         {Object.entries(bot.open_positions as Record<string, {
-                          entry_price: number; qty: number; margin: number; opened_at: string;
-                          leverage?: number; take_profit_pct?: number; stop_loss_pct?: number;
-                          unrealized_pnl?: number; current_price?: number;
+                          side?: string; entry_price: number; qty: number; margin: number;
+                          opened_at: string; leverage?: number; take_profit_pct?: number;
+                          stop_loss_pct?: number; unrealized_pnl?: number; current_price?: number;
                         }>).map(([ticker, pos]) => {
-                          const lev = pos.leverage ?? bot.leverage ?? 10
-                          const tp  = pos.take_profit_pct ?? bot.take_profit_pct ?? 50
-                          const sl  = pos.stop_loss_pct  ?? bot.stop_loss_pct  ?? 30
-                          const upnl = pos.unrealized_pnl ?? 0
+                          const side   = pos.side ?? 'long'
+                          const isLong = side === 'long'
+                          const lev    = pos.leverage ?? bot.leverage ?? 10
+                          const tp     = pos.take_profit_pct ?? bot.take_profit_pct ?? 50
+                          const sl     = pos.stop_loss_pct   ?? bot.stop_loss_pct   ?? 30
+                          const upnl   = pos.unrealized_pnl  ?? 0
                           const margin = pos.margin ?? 0
+                          const curPx  = pos.current_price   ?? pos.entry_price ?? 0
                           return (
-                            <div key={ticker} className="bg-[#f0b90b]/5 border border-[#f0b90b]/20 rounded-xl px-3 py-2.5 space-y-1.5">
+                            <div key={ticker} className={`border rounded-xl px-3 py-2.5 space-y-1.5 ${isLong ? 'bg-[#0ecb81]/5 border-[#0ecb81]/20' : 'bg-[#f6465d]/5 border-[#f6465d]/20'}`}>
                               {/* Header row */}
                               <div className="flex items-center justify-between">
-                                <p className="text-[10px] text-[#f0b90b] font-semibold uppercase tracking-wide flex items-center gap-1">
-                                  <Target size={9} /> Open Position
-                                </p>
                                 <div className="flex items-center gap-1.5">
-                                  <span className="text-[10px] font-mono font-bold text-[#f0b90b] bg-[#f0b90b]/10 px-1.5 py-0.5 rounded">{ticker}</span>
+                                  <Target size={9} className={isLong ? 'text-[#0ecb81]' : 'text-[#f6465d]'} />
+                                  <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded uppercase ${isLong ? 'bg-[#0ecb81]/15 text-[#0ecb81]' : 'bg-[#f6465d]/15 text-[#f6465d]'}`}>
+                                    {isLong ? '▲ LONG' : '▼ SHORT'}
+                                  </span>
+                                  <span className="text-[10px] font-mono font-bold text-[#eaecef] bg-[#2b3139] px-1.5 py-0.5 rounded">{ticker}</span>
                                   <span className="text-[9px] font-bold text-[#848e9c] bg-[#2b3139] px-1.5 py-0.5 rounded">{lev}x</span>
                                 </div>
+                                {bot.running && (
+                                  <button
+                                    onClick={() => handleFeClosePosition(bot.bot_name, ticker)}
+                                    disabled={feLoading}
+                                    className="flex items-center gap-1 px-2 py-1 rounded-lg bg-[#f6465d]/10 hover:bg-[#f6465d]/25 border border-[#f6465d]/30 text-[#f6465d] text-[10px] font-bold transition disabled:opacity-50"
+                                  >
+                                    <Square size={8} /> Close
+                                  </button>
+                                )}
                               </div>
                               {/* Stats grid */}
                               <div className="grid grid-cols-2 gap-x-4 gap-y-0.5 text-[10px]">
                                 <div className="flex justify-between">
                                   <span className="text-[#848e9c]">Entry</span>
-                                  <span className="font-mono text-[#eaecef]">${(pos.entry_price ?? 0).toLocaleString(undefined, { maximumFractionDigits: 2 })}</span>
+                                  <span className="font-mono text-[#eaecef]">${(pos.entry_price ?? 0).toLocaleString(undefined, { maximumFractionDigits: 4 })}</span>
+                                </div>
+                                <div className="flex justify-between">
+                                  <span className="text-[#848e9c]">Current</span>
+                                  <span className="font-mono text-[#eaecef]">${curPx.toLocaleString(undefined, { maximumFractionDigits: 4 })}</span>
                                 </div>
                                 <div className="flex justify-between">
                                   <span className="text-[#848e9c]">Qty</span>
-                                  <span className="font-mono text-[#f0b90b]">{(pos.qty ?? 0).toFixed(6)}</span>
+                                  <span className="font-mono text-[#eaecef]">{(pos.qty ?? 0).toFixed(6)}</span>
                                 </div>
                                 <div className="flex justify-between">
                                   <span className="text-[#848e9c]">Margin</span>
                                   <span className="font-mono text-[#eaecef]">${margin.toFixed(2)}</span>
                                 </div>
                                 <div className="flex justify-between">
-                                  <span className="text-[#848e9c]">Leverage</span>
-                                  <span className="font-mono text-[#eaecef]">{lev}x</span>
-                                </div>
-                                <div className="flex justify-between">
-                                  <span className="text-[#0ecb81]">TP Target</span>
+                                  <span className="text-[#0ecb81]">TP</span>
                                   <span className="font-mono text-[#0ecb81]">+{tp}% (+${(margin * tp / 100).toFixed(2)})</span>
                                 </div>
                                 <div className="flex justify-between">
-                                  <span className="text-[#f6465d]">SL Target</span>
+                                  <span className="text-[#f6465d]">SL</span>
                                   <span className="font-mono text-[#f6465d]">-{sl}% (-${(margin * sl / 100).toFixed(2)})</span>
                                 </div>
                               </div>
-                              {/* Unrealized P&L bar */}
-                              <div className="flex items-center justify-between pt-1 border-t border-[#f0b90b]/10">
+                              {/* Unrealized P&L */}
+                              <div className="flex items-center justify-between pt-1 border-t border-white/5">
                                 <span className="text-[10px] text-[#848e9c]">Unrealized P&L</span>
                                 <span className={`text-sm font-bold font-mono ${upnl >= 0 ? 'text-[#0ecb81]' : 'text-[#f6465d]'}`}>
                                   {upnl >= 0 ? '+' : ''}${Math.abs(upnl).toFixed(2)}

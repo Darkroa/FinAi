@@ -5133,6 +5133,29 @@ async def list_fin_event_bots(current_user=Depends(get_current_user), db: Sessio
     }
 
 
+@router.post("/bots/finevent/close-position")
+async def close_fin_event_position(
+    bot_name: str = "default",
+    ticker: str = "",
+    current_user=Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    user = db.query(User).filter(User.email == current_user["email"]).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    if not ticker:
+        raise HTTPException(status_code=400, detail="ticker is required")
+    from src.trading.fin_event_bot import FinEventBotManager
+    mgr = FinEventBotManager.instance()
+    bot = mgr._bots.get(mgr._key(user.id, bot_name))
+    if not bot:
+        raise HTTPException(status_code=404, detail=f"No running FinEventAI bot '{bot_name}'")
+    result = bot.close_position(ticker)
+    if not result.get("ok"):
+        raise HTTPException(status_code=400, detail=result.get("detail", "Could not close position"))
+    return result
+
+
 @router.get("/bots/finevent/trades")
 async def get_fin_event_trades(
     limit: int = 50,
