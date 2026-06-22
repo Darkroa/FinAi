@@ -5,7 +5,7 @@ import {
   updateProfile, uploadPhoto, sendVerifyEmail, verifyEmail,
   submitKYC, getMe,
   changePassword, setTransferPin, requestDeleteAccount,
-  getReferralStats, setup2fa, disable2fa,
+  getReferralStats, setup2fa, disable2fa, updateLeverage,
 } from '../lib/api'
 import toast from 'react-hot-toast'
 import {
@@ -671,6 +671,120 @@ function PersonalTab({ user, setUser }: { user: UserProfile | null; setUser: (u:
           )}
         </div>
       </form>
+
+      {/* ── Trade Account Leverage ── */}
+      <TradeLeverageCard user={user} setUser={setUser} />
+
+    </div>
+  )
+}
+
+
+/* ─────────────────────────── TRADE LEVERAGE CARD ─────────────────── */
+const LEV_PRESETS = [1, 2, 5, 10, 25, 50, 100, 200]
+
+function TradeLeverageCard({ user, setUser }: { user: UserProfile | null; setUser: (u: any) => void }) {
+  const [tradeLev, setTradeLev] = useState<number>(user?.trade_leverage ?? 1)
+  const [botLev,   setBotLev]   = useState<number>(user?.bot_leverage   ?? 1)
+  const [saving,   setSaving]   = useState(false)
+
+  const handleSave = async () => {
+    setSaving(true)
+    try {
+      const res = await updateLeverage({ trade_leverage: tradeLev, bot_leverage: botLev })
+      setUser(res.data)
+      toast.success('Leverage settings saved')
+    } catch (err: any) {
+      toast.error(err?.response?.data?.detail || 'Failed to save leverage')
+    } finally { setSaving(false) }
+  }
+
+  const PresetRow = ({
+    label, value, onChange, hint,
+  }: { label: string; value: number; onChange: (v: number) => void; hint: string }) => (
+    <div className="space-y-2">
+      <div className="flex items-center justify-between">
+        <label className="text-xs font-medium text-[#848e9c]">{label}</label>
+        <span className="text-xs font-bold font-mono text-[#f0b90b]">{value}x</span>
+      </div>
+      <div className="flex flex-wrap gap-1.5">
+        {LEV_PRESETS.map(p => (
+          <button
+            key={p}
+            type="button"
+            onClick={() => onChange(p)}
+            className={`px-2.5 py-1 rounded-lg text-xs font-bold border transition ${
+              value === p
+                ? 'bg-[#f0b90b] border-[#f0b90b] text-black'
+                : 'bg-[#0b0e11] border-[#2b3139] text-[#848e9c] hover:border-[#f0b90b]/50 hover:text-[#eaecef]'
+            }`}
+          >
+            {p}x
+          </button>
+        ))}
+      </div>
+      <div className="flex items-center gap-2">
+        <input
+          type="number"
+          min={1}
+          max={200}
+          value={value}
+          onChange={e => {
+            const v = Math.max(1, Math.min(200, Number(e.target.value)))
+            onChange(v)
+          }}
+          className="w-24 bg-[#0b0e11] border border-[#2b3139] rounded-lg px-3 py-2 text-xs text-[#eaecef] focus:outline-none focus:border-[#f0b90b] transition font-mono"
+        />
+        <p className="text-[11px] text-[#4a5568]">{hint}</p>
+      </div>
+    </div>
+  )
+
+  return (
+    <div className="bg-[#161a1e] border border-[#2b3139] rounded-xl overflow-hidden">
+      <div className="flex items-center gap-2 px-4 py-3 border-b border-[#2b3139] bg-[#1a1f25]">
+        <TrendingUp size={13} className="text-[#f0b90b]" />
+        <span className="text-xs font-semibold text-[#eaecef]">Trade Account Leverage</span>
+        <span className="ml-auto text-[10px] px-2 py-0.5 rounded-full bg-[#f0b90b]/10 text-[#f0b90b]">Max 200×</span>
+      </div>
+      <div className="p-4 space-y-5">
+        <p className="text-[11px] text-[#848e9c] leading-relaxed">
+          Set the default leverage applied to your manual trades and FinBot. Higher leverage amplifies both gains and losses — use carefully.
+        </p>
+
+        <PresetRow
+          label="Trade Leverage (manual trades)"
+          value={tradeLev}
+          onChange={setTradeLev}
+          hint="Applied on the Trade page"
+        />
+
+        <PresetRow
+          label="Bot Leverage (FinBot default)"
+          value={botLev}
+          onChange={setBotLev}
+          hint="Default for new FinBot instances"
+        />
+
+        {/* Risk warning for high leverage */}
+        {(tradeLev >= 50 || botLev >= 50) && (
+          <div className="flex items-start gap-2 bg-[#f6465d]/5 border border-[#f6465d]/20 rounded-lg px-3 py-2.5">
+            <AlertCircle size={12} className="text-[#f6465d] flex-shrink-0 mt-0.5" />
+            <p className="text-[11px] text-[#f6465d] leading-relaxed">
+              High leverage (&ge;50×) significantly increases liquidation risk. Only use if you understand the risks.
+            </p>
+          </div>
+        )}
+
+        <button
+          type="button"
+          onClick={handleSave}
+          disabled={saving}
+          className="w-full bg-[#f0b90b] hover:bg-[#d4a30a] disabled:opacity-60 text-black font-bold py-2.5 rounded-lg text-sm transition"
+        >
+          {saving ? 'Saving…' : 'Save Leverage Settings'}
+        </button>
+      </div>
     </div>
   )
 }
