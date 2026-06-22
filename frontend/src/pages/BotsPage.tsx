@@ -93,16 +93,17 @@ const EMPTY_PARAMS = {
   route: '__balance__',
   initial_capital: 200,
   risk_per_trade_pct: 100,
-  max_drawdown_pct: 25,
+  max_drawdown_pct: 90,
   strategy: 'finlux' as 'sma' | 'finlux' | 'auto' | 'live',
-  take_profit_pct: 50,
-  stop_loss_pct: 30,
+  take_profit_pct: 500,
+  stop_loss_pct: 50,
   leverage: 200,
   sl_usdt: 100,
   direction: 'auto' as 'auto' | 'buy' | 'sell',
   bot_name: '',
   lot_size: 1,
   execution_cooldown: 40,
+  num_trades: 0,
 }
 
 // Mini live-price chart for a single bot
@@ -365,10 +366,12 @@ export default function BotsPage() {
         exchange_label:     usingBalance ? undefined : params.route,
         strategy:           params.strategy,
         take_profit_pct:    params.take_profit_pct,
+        stop_loss_pct:      params.stop_loss_pct,
         direction:          params.direction,
         bot_name:           params.bot_name || undefined,
         leverage:           params.leverage,
         sl_usdt:            params.sl_usdt,
+        num_trades:         params.num_trades,
       })
       setStatus(s => ({ ...s, running: true }))
       toast.success(res.data?.message || 'Bot started successfully')
@@ -702,10 +705,10 @@ export default function BotsPage() {
             {/* Take Profit */}
             <div>
               <label className="text-xs text-[#848e9c] mb-1.5 block">Take Profit (%)</label>
-              <input type="number" min={5} max={200} step={1} value={params.take_profit_pct}
-                onChange={e => setParams(p => ({ ...p, take_profit_pct: Math.min(200, Math.max(5, parseFloat(e.target.value) || 5)) }))}
+              <input type="number" min={5} max={1000} step={1} value={params.take_profit_pct}
+                onChange={e => setParams(p => ({ ...p, take_profit_pct: Math.min(1000, Math.max(5, parseFloat(e.target.value) || 5)) }))}
                 className="w-full bg-[#0b0e11] border border-[#2b3139] focus:border-[#0ecb81] rounded-xl px-3 py-2.5 text-sm font-mono text-[#0ecb81] focus:outline-none transition" />
-              <p className="text-[10px] text-[#4a5568] mt-1">Range: 5% – 200%</p>
+              <p className="text-[10px] text-[#4a5568] mt-1">Range: 5% – 1000%</p>
             </div>
 
             {/* Stop Loss */}
@@ -749,10 +752,21 @@ export default function BotsPage() {
               <label className="text-xs text-[#848e9c] mb-1.5 block">
                 Max Drawdown Stop (%)
               </label>
-              <input type="number" min={1} max={50} step={1} value={params.max_drawdown_pct}
-                onChange={e => setParams(p => ({ ...p, max_drawdown_pct: Math.min(50, Math.max(1, parseFloat(e.target.value) || 1)) }))}
+              <input type="number" min={1} max={100} step={1} value={params.max_drawdown_pct}
+                onChange={e => setParams(p => ({ ...p, max_drawdown_pct: Math.min(100, Math.max(1, parseFloat(e.target.value) || 1)) }))}
                 className="w-full bg-[#0b0e11] border border-[#2b3139] focus:border-[#f6465d] rounded-xl px-3 py-2.5 text-sm font-mono text-[#f6465d] focus:outline-none transition" />
-              <p className="text-[10px] text-[#4a5568] mt-1">Stop bot when portfolio drops <span className="text-[#f6465d]">{params.max_drawdown_pct}%</span> — Range: 1% – 50%</p>
+              <p className="text-[10px] text-[#4a5568] mt-1">Stop bot when portfolio drops <span className="text-[#f6465d]">{params.max_drawdown_pct}%</span> — Range: 1% – 100%</p>
+            </div>
+
+            {/* Number of Trades */}
+            <div>
+              <label className="text-xs text-[#848e9c] mb-1.5 block">
+                Number of Trades <span className="text-[#4a5568]">(0 = unlimited)</span>
+              </label>
+              <input type="number" min={0} max={10000} step={1} value={params.num_trades}
+                onChange={e => setParams(p => ({ ...p, num_trades: Math.max(0, parseInt(e.target.value) || 0) }))}
+                className="w-full bg-[#0b0e11] border border-[#2b3139] focus:border-[#f0b90b] rounded-xl px-3 py-2.5 text-sm font-mono text-[#eaecef] focus:outline-none transition" />
+              <p className="text-[10px] text-[#4a5568] mt-1">Bot stops after this many <span className="text-[#eaecef]">completed trades</span> or max drawdown — whichever comes first</p>
             </div>
 
             {/* Margin Calculator — card style */}

@@ -230,16 +230,17 @@ class BotStartRequestV2(BaseModel):
     initial_capital: float = 200.0
     balance_to_use: Optional[float] = None
     risk_per_trade_pct: float = 40.0
-    max_drawdown_pct: float = 10.0
+    max_drawdown_pct: float = 90.0
     exchange_label: Optional[str] = None
     strategy: str = "sma"
-    take_profit_pct: float = 4.0
+    take_profit_pct: float = 500.0
     direction: str = "auto"
     bot_name: Optional[str] = None
     leverage: float = 200.0
     sl_usdt: float = 100.0
     stop_loss_pct: float = 50.0
     lot_size: float = 1.0
+    num_trades: int = 0
 
 
 class BotClosePositionRequest(BaseModel):
@@ -2704,6 +2705,7 @@ async def jwt_start_bot(body: BotStartRequestV2, current_user=Depends(get_curren
         sl_usdt=body.sl_usdt,
         stop_loss_pct=body.stop_loss_pct,
         lot_size=body.lot_size,
+        num_trades=body.num_trades,
     )
     return {"status": "success", "message": result, "bot_status": manager.get_status()}
 

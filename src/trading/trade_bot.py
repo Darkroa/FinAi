@@ -168,17 +168,18 @@ class TradingBotInstance:
     FL_LENGTH  = 4
 
     def __init__(self, ticker: str, paper: bool = False, user_id: int = None,
-                 initial_capital: float = 1000.0, max_drawdown_pct: float = 9.0,
+                 initial_capital: float = 1000.0, max_drawdown_pct: float = 90.0,
                  risk_per_trade_pct: float = 40,
                  strategy: str = "sma",
-                 take_profit_pct: float = 4.0,
+                 take_profit_pct: float = 500.0,
                  direction: str = "auto",
                  bot_id: str = None,
                  bot_name: str = None,
                  leverage: float = 200.0,
                  sl_usdt: float = 100.0,
                  stop_loss_pct: float = 50.0,
-                 lot_size: float = 1.0):
+                 lot_size: float = 1.0,
+                 num_trades: int = 0):
         self.ticker           = ticker.upper()
         self.paper            = paper
         self.user_id          = user_id
@@ -213,6 +214,9 @@ class TradingBotInstance:
         self.lot_size         = max(0.01, float(lot_size) if lot_size is not None else 1.0)
         self.open_margin      = 0.0
         self.trail_high       = 0.0
+
+        self.num_trades       = max(0, int(num_trades))   # 0 = unlimited
+        self.completed_trades = 0                          # closed trade counter
 
         self.binance_api_key: Optional[str] = None
         self.binance_secret:  Optional[str] = None
@@ -308,6 +312,8 @@ class TradingBotInstance:
             "signal":               self.signal_state,
             "current_drawdown_pct": round(current_dd, 2),
             "total_trades":         len(self.trades),
+            "completed_trades":     self.completed_trades,
+            "num_trades":           self.num_trades,
             "price_chart":          price_chart,
             "entry_markers":        entry_markers,
             "exit_markers":         exit_markers,
@@ -503,6 +509,14 @@ class TradingBotInstance:
                     self.stop()
                     break
 
+                # Trade count limit guard
+                if self.num_trades > 0 and self.completed_trades >= self.num_trades:
+                    logger.info(f"✅ Trade limit ({self.num_trades}) reached for {self.ticker}. Stopping.")
+                    if self.position > 0:
+                        self._close_position(price, "TRADE_LIMIT_STOP")
+                    self.stop()
+                    break
+
                 # ── Risk management: pct-based SL/TP + trailing stop ───────
                 risk_closed = False
                 if self.position > 0:
@@ -667,6 +681,7 @@ class TradingBotInstance:
             self.entry_price = 0.0
             self.open_margin = 0.0
             self.trail_high  = 0.0
+            self.completed_trades += 1
         except Exception as e:
             logger.error(f"Failed to close {self.ticker}: {e}")
 
@@ -849,9 +864,9 @@ class UserBotManager:
     def start_bot(self, ticker: str, paper: bool = False,
                   initial_capital: float = 200.0,
                   risk_per_trade_pct: float = 40.0,
-                  max_drawdown_pct: float = 10.0,
+                  max_drawdown_pct: float = 90.0,
                   strategy: str = "sma",
-                  take_profit_pct: float = 4.0,
+                  take_profit_pct: float = 500.0,
                   direction: str = "auto",
                   bot_name: Optional[str] = None,
                   binance_api_key: Optional[str] = None,
@@ -859,7 +874,8 @@ class UserBotManager:
                   leverage: float = 200.0,
                   sl_usdt: float = 100.0,
                   stop_loss_pct: float = 50.0,
-                  lot_size: float = 1.0) -> str:
+                  lot_size: float = 1.0,
+                  num_trades: int = 0) -> str:
         # Derive a stable bot_id from the name, or generate a unique one
         if bot_name and bot_name.strip():
             bot_id = bot_name.strip().replace(" ", "_").lower()
@@ -885,6 +901,7 @@ class UserBotManager:
             sl_usdt=sl_usdt,
             stop_loss_pct=stop_loss_pct,
             lot_size=lot_size,
+            num_trades=num_trades,
         )
         if binance_api_key and binance_secret:
             bot.binance_api_key = binance_api_key
