@@ -60,6 +60,7 @@ export default function DashboardPage() {
   const [btcToggle] = useState<'BTC'>('BTC');
   const [todayPnl, setTodayPnl] = useState(0);
   const [realizedPnl, setRealizedPnl] = useState(0);
+  const [unrealizedPnl, setUnrealizedPnl] = useState(0);
   const [openPositions, setOpenPositions] = useState(0);
   const [manualOpenCount, setManualOpenCount] = useState(0);
   const [finBotOpenCount, setFinBotOpenCount] = useState(0);
@@ -141,6 +142,7 @@ export default function DashboardPage() {
         }
       } catch { /* silent */ }
       setManualOpenCount(manualOpen);
+      setUnrealizedPnl(totalUnrealized);
 
       setOpenPositions(finBotOpen + feOpen + manualOpen);
       setPortfolioValue(portfolioVal);
@@ -330,14 +332,14 @@ export default function DashboardPage() {
 
         <div className="w-px h-6 bg-[#2b3139]" />
 
-        {/* Realized P&L */}
+        {/* Unrealized P&L (live open positions) */}
         <div className="flex flex-col items-center gap-0.5">
           <div className="flex items-center gap-1">
             <DollarSign size={11} className="text-[#f0b90b]" />
-            <span className="text-[9px] text-[#848e9c]">Realized P&L</span>
+            <span className="text-[9px] text-[#848e9c]">Unrealized P&L</span>
           </div>
-          <p className={`text-xs font-bold font-mono ${realizedPnl >= 0 ? 'text-[#0ecb81]' : 'text-[#f6465d]'}`}>
-            {realizedPnl >= 0 ? '+' : ''}{fmtCompact(realizedPnl)}
+          <p className={`text-xs font-bold font-mono ${unrealizedPnl >= 0 ? 'text-[#0ecb81]' : 'text-[#f6465d]'}`}>
+            {unrealizedPnl >= 0 ? '+' : ''}{fmtCompact(unrealizedPnl)}
           </p>
         </div>
       </div>
@@ -364,10 +366,10 @@ export default function DashboardPage() {
             <div className="text-right">
               <p
                 className={`text-sm font-bold font-mono ${
-                  realizedPnl >= 0 ? 'text-[#0ecb81]' : 'text-[#f6465d]'
+                  unrealizedPnl >= 0 ? 'text-[#0ecb81]' : 'text-[#f6465d]'
                 }`}
               >
-                {realizedPnl >= 0 ? '+' : ''}{fmtCompact(realizedPnl)}
+                {unrealizedPnl >= 0 ? '+' : ''}{fmtCompact(unrealizedPnl)}
               </p>
               <button
                 onClick={() => navigate('/app/positions')}
