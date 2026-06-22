@@ -1,51 +1,75 @@
 #!/bin/bash
 set -euo pipefail
 
-# ====================== Kill existing processes ======================
+# ── Clean up stale processes ───────────────────────────────────────────────────
 echo "→ Cleaning up old processes..."
 fuser -k 8000/tcp 2>/dev/null || true
 fuser -k 5000/tcp 2>/dev/null || true
+fuser -k 8080/tcp 2>/dev/null || true
 pkill -f "vite" 2>/dev/null || true
 pkill -f "uvicorn" 2>/dev/null || true
-pkill -f "evolution-api" 2>/dev/null || true
+pkill -f "node.*dist/server" 2>/dev/null || true
 
+# ── Generate evolution-api/.env from runtime secrets ──────────────────────────
+echo "→ Writing evolution-api/.env..."
+cat > /home/runner/workspace/evolution-api/.env << ENVEOF
+SERVER_NAME=FinAiEvobots
+SERVER_TYPE=http
+SERVER_PORT=8080
+SERVER_URL=http://localhost:8080
+SERVER_DISABLE_DOCS=false
+SERVER_DISABLE_MANAGER=false
 
-# ====================== Start FastAPI Backend ======================
+CORS_ORIGIN=*
+CORS_METHODS=POST,GET,PUT,DELETE
+CORS_CREDENTIALS=true
+
+DATABASE_PROVIDER=postgresql
+DATABASE_CONNECTION_URI=${DATABASE_URL}
+DATABASE_CONNECTION_CLIENT_NAME=evolution
+
+DATABASE_SAVE_DATA_INSTANCE=true
+DATABASE_SAVE_DATA_NEW_MESSAGE=true
+DATABASE_SAVE_MESSAGE_UPDATE=true
+DATABASE_SAVE_DATA_CONTACTS=true
+DATABASE_SAVE_DATA_CHATS=true
+DATABASE_SAVE_DATA_HISTORIC=true
+DATABASE_SAVE_DATA_LABELS=true
+DATABASE_SAVE_IS_ON_WHATSAPP=true
+DATABASE_SAVE_IS_ON_WHATSAPP_DAYS=7
+DATABASE_DELETE_MESSAGE=false
+
+CACHE_REDIS_ENABLED=false
+CACHE_LOCAL_ENABLED=true
+CACHE_LOCAL_TTL=86400
+
+AUTHENTICATION_API_KEY=${EVOLUTION_API_KEY}
+AUTHENTICATION_EXPOSE_IN_FETCH_INSTANCES=false
+ENVEOF
+echo "✅ evolution-api/.env written"
+
+# ── FastAPI backend ────────────────────────────────────────────────────────────
 echo "→ Starting FastAPI backend on port 8000..."
-
 export PATH="/home/runner/workspace/.pythonlibs/bin:$PATH"
 export PYTHONPATH="/home/runner/workspace"
-
 cd /home/runner/workspace
-
 python3 -m uvicorn src.api.main:app --host 0.0.0.0 --port 8000 --reload &
 BACKEND_PID=$!
-echo "FastAPI Backend started (PID: $BACKEND_PID)"
+echo "Backend started (PID: $BACKEND_PID)"
 
-# Wait a bit for backend to initialize
-sleep 5
-
-# ====================== Start React Frontend (Vite) ======================
-echo "→ Starting React Frontend (Vite) on port 5000..."
-
-cd /home/runner/workspace/frontend
-
-echo "✅ All services started successfully!"
-exec ./node_modules/.bin/vite --port 5000 --host 0.0.0.0 2>&1
-
-# Give it time to start
 sleep 4
 
-
-# ====================== Start Evolution API (First) ======================
-echo "→ Starting Evolution API production server ..."
-
+# ── Evolution API ──────────────────────────────────────────────────────────────
+echo "→ Starting Evolution API on port 8080..."
 cd /home/runner/workspace/evolution-api
-
-echo "✅ Evolution API should be starting now (v${EVO_VERSION})"
-
-# Start Evolution API in background
 npm run start:prod &
 EVO_PID=$!
 echo "Evolution API started (PID: $EVO_PID)"
 
+sleep 2
+
+# ── React frontend (Vite) — foreground; keeps the workflow alive ───────────────
+echo "→ Starting React frontend (Vite) on port 5000..."
+cd /home/runner/workspace/frontend
+echo "✅ All services started"
+exec ./node_modules/.bin/vite --port 5000 --host 0.0.0.0

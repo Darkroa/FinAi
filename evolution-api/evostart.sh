@@ -1,74 +1,74 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-echo "=== Evolution API Build & Deploy ======="
+echo "=== Evolution API Setup (install + build + migrate) ==="
 
-# ========================== Evolution API Setup ==========================
-EVO_VERSION="2.3.7"
 EVO_DIR="/home/runner/workspace/evolution-api"
-
-echo "→ Setting up Evolution API v${EVO_VERSION}..."
-
-mkdir -p "$(dirname "$EVO_DIR")"
-
-if [ -d "$EVO_DIR/.git" ]; then
-    echo "   📂 Evolution API folder exists, checking version..."
-    cd "$EVO_DIR"
-    
-    git fetch --tags --force --quiet
-    
-    CURRENT_TAG=$(git describe --tags --exact-match 2>/dev/null || echo "unknown")
-    
-    if [ "$CURRENT_TAG" = "$EVO_VERSION" ]; then
-        echo "   ✅ Already at v${EVO_VERSION}"
-    else
-        echo "   ♻️  Switching to v${EVO_VERSION}..."
-        git checkout -q "$EVO_VERSION" 2>/dev/null || {
-            echo "   🔄 Fetching tag..."
-            git fetch origin tag "$EVO_VERSION" --no-tags
-            git checkout -q "$EVO_VERSION"
-        }
-        echo "   ✅ Successfully switched to v${EVO_VERSION}"
-    fi
-else
-    echo "   📦 Cloning Evolution API v${EVO_VERSION}..."
-    git clone --depth 1 --branch "$EVO_VERSION" \
-        https://github.com/EvolutionAPI/evolution-api.git "$EVO_DIR"
-    echo "   ✅ Clone completed"
-fi
-
-echo "→ Evolution API v${EVO_VERSION} is ready"
-
-# ====================== Dependencies & Build ======================
 cd "$EVO_DIR"
 
-echo "→ Installing dependencies..."
-npm install 
+# ── Generate .env from runtime secrets (needed for Prisma db:deploy) ──────────
+echo "→ Writing .env..."
+cat > "$EVO_DIR/.env" << ENVEOF
+SERVER_NAME=FinAiEvobots
+SERVER_TYPE=http
+SERVER_PORT=8080
+SERVER_URL=http://localhost:8080
+SERVER_DISABLE_DOCS=false
+SERVER_DISABLE_MANAGER=false
 
-echo "→ Building evolution ..."
-npm run build
+CORS_ORIGIN=*
+CORS_METHODS=POST,GET,PUT,DELETE
+CORS_CREDENTIALS=true
 
-echo "✅ Evolution API built successfully!"
+DATABASE_PROVIDER=postgresql
+DATABASE_CONNECTION_URI=${DATABASE_URL}
+DATABASE_CONNECTION_CLIENT_NAME=evolution
 
-# ====================== Database Migration ======================
-echo "→ Running dbPrisma Migration ..."
+DATABASE_SAVE_DATA_INSTANCE=true
+DATABASE_SAVE_DATA_NEW_MESSAGE=true
+DATABASE_SAVE_MESSAGE_UPDATE=true
+DATABASE_SAVE_DATA_CONTACTS=true
+DATABASE_SAVE_DATA_CHATS=true
+DATABASE_SAVE_DATA_HISTORIC=true
+DATABASE_SAVE_DATA_LABELS=true
+DATABASE_SAVE_IS_ON_WHATSAPP=true
+DATABASE_SAVE_IS_ON_WHATSAPP_DAYS=7
+DATABASE_DELETE_MESSAGE=false
 
-export DATABASE_PROVIDER="${DATABASE_PROVIDER:-postgresql}"
+CACHE_REDIS_ENABLED=false
+CACHE_LOCAL_ENABLED=true
+CACHE_LOCAL_TTL=86400
 
-echo "→ Generate Prisma client ..."
-npm run db:generate
+AUTHENTICATION_API_KEY=${EVOLUTION_API_KEY}
+AUTHENTICATION_EXPOSE_IN_FETCH_INSTANCES=false
+ENVEOF
+echo "✅ .env written"
 
-echo "→ Deploy migrations ..."
-npm run db:deploy || { echo "❌ Database migration failed"; exit 1; }
-
-echo "✅ Database migration completed"
-
-# ====================== Start Production Server ======================
-echo "→ Starting Evolution API production server ..."
-
-if npm run start:prod; then
-    echo "✅ Evolution API started successfully! (v${EVO_VERSION})"
+# ── npm install ────────────────────────────────────────────────────────────────
+if [ ! -d "$EVO_DIR/node_modules" ] || [ ! -f "$EVO_DIR/node_modules/.bin/prisma" ]; then
+    echo "→ Installing npm dependencies..."
+    npm install --legacy-peer-deps --ignore-scripts
+    echo "✅ npm install done"
 else
-    echo "❌ Evolution API failed to start!"
-    exit 1
+    echo "→ node_modules present, skipping npm install"
 fi
+
+# ── Generate Prisma client (must run before build) ────────────────────────────
+echo "→ Running Prisma generate..."
+node runWithProvider.js "npx prisma generate --schema ./prisma/DATABASE_PROVIDER-schema.prisma"
+echo "✅ Prisma client generated"
+
+# ── Build TypeScript → dist/ using tsup (skip tsc --noEmit type-check) ────────
+if [ ! -d "$EVO_DIR/dist" ] || [ ! -f "$EVO_DIR/dist/main.js" ]; then
+    echo "→ Building Evolution API with tsup..."
+    npx tsup
+    echo "✅ Build done"
+else
+    echo "→ dist/main.js present, skipping build"
+fi
+
+# ── Prisma: run migrations ─────────────────────────────────────────────────────
+echo "→ Running Prisma migrations..."
+node runWithProvider.js "rm -rf ./prisma/migrations && cp -r ./prisma/DATABASE_PROVIDER-migrations ./prisma/migrations && npx prisma migrate deploy --schema ./prisma/DATABASE_PROVIDER-schema.prisma"
+
+echo "✅ Evolution API setup complete (server not started — start.sh handles that)"

@@ -2,39 +2,27 @@
 set -e
 
 echo "=== FinAi Production Build ==="
-
 cd /home/runner/workspace
 
-# ── Frontend ──────────────────────────────────────────────────────────────────
-echo "→ Installing front🔚 dependencies..."
+# ── Python requirements ────────────────────────────────────────────────────────
+echo "→ Installing Python requirements..."
+pip install -r requirements.txt
+echo "✅ Python requirements installed"
+
+# ── Frontend ───────────────────────────────────────────────────────────────────
+echo "→ Installing frontend dependencies..."
 cd /home/runner/workspace/frontend
 npm install --legacy-peer-deps
 
 echo "→ Building frontend..."
 npm run build
-echo "→ Frontend built to frontend/dist"
+echo "✅ Frontend built"
 
-#── start evolution runner 
-echo "→ Running the Evo starter..."
+# ── Evolution API setup (install + build + migrate — no server start) ──────────
+echo "→ Setting up Evolution API..."
 cd /home/runner/workspace/evolution-api
-
-echo "→ Making evostart.sh executable..."
 chmod +x evostart.sh
-echo "→ Setting up Evo server..."
-exec bash evostart.sh 
+bash evostart.sh
 
-
-# ─────── Python requirements────────────
-cd /home/runner/workspace
-
-echo "→ Installing 🐍Python 🐍requirements..."
-pip install -r requirements.txt
-echo "→ Requirements installed done"
-
-echo "→ Making start.sh executable..."
-chmod +x start.sh
-
-echo "→ Starting FastAPI server..."
-exec bash start.sh
-
-
+echo ""
+echo "=== Build complete — run start.sh to launch all services ==="

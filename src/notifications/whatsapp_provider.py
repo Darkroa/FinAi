@@ -19,13 +19,13 @@ def _clean_phone(phone: str) -> str:
 # ──────────────────────────────────────────────────────────────────────────────
 
 def _ev_base() -> str:
-    return os.getenv("EVOLUTION_API_URL", "").rstrip("/")
+    return os.getenv("EVOLUTION_API_URL", "http://localhost:8080").rstrip("/")
 
 def _ev_key() -> str:
     return os.getenv("EVOLUTION_API_KEY", "")
 
 def _ev_instance() -> str:
-    return os.getenv("EVOLUTION_INSTANCE", "finai")
+    return os.getenv("EVOLUTION_INSTANCE", "FinAiEvobots")
 
 def _ev_headers() -> dict:
     return {"apikey": _ev_key(), "Content-Type": "application/json"}
