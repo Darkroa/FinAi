@@ -22,116 +22,147 @@ def send_daily_portfolio_summary():
 
 
 def check_stop_loss_take_profit():
-    """Auto-execute Stop Loss and Take Profit on open manual BUY positions."""
+    """Auto-close positions when Stop Loss or Take Profit price is hit.
+    Works correctly for both LONG and SHORT positions.
+    """
     try:
+        from datetime import datetime
         from src.database.session import SessionLocal
-        from src.database.models import TradeLog, User
+        from src.database.models import Position, TradeLog, User
         from src.trading.trade_bot import _fetch_live_price
 
         with SessionLocal() as db:
-            open_buys = (
-                db.query(TradeLog)
+            open_positions = (
+                db.query(Position)
                 .filter(
-                    TradeLog.action == "BUY",
-                    TradeLog.pnl == None,
-                    TradeLog.paper == False,
+                    Position.status == "open",
+                    # Only process positions that have at least one of SL / TP set
+                    (Position.stop_loss.isnot(None)) | (Position.take_profit.isnot(None)),
                 )
                 .all()
             )
-            if not open_buys:
+            if not open_positions:
                 return
 
             triggered = 0
-            for trade in open_buys:
-                # Only process trades that have SL or TP set
-                if trade.stop_loss is None and trade.take_profit is None:
-                    continue
+            for pos in open_positions:
                 try:
-                    current_price = _fetch_live_price(trade.ticker)
+                    current_price = _fetch_live_price(pos.ticker)
                 except Exception:
                     continue
 
+                entry_price = float(pos.entry_price or 0)
+                lot         = float(pos.lot_size or 1.0)
+                cs          = float(pos.contract_size or 1.0)
+                margin      = float(pos.margin or 0)
+
                 reason = None
-                if trade.stop_loss and current_price <= trade.stop_loss:
-                    reason = f"Stop Loss triggered @ ${current_price:.4f} (SL: ${trade.stop_loss:.4f})"
-                elif trade.take_profit and current_price >= trade.take_profit:
-                    reason = f"Take Profit triggered @ ${current_price:.4f} (TP: ${trade.take_profit:.4f})"
+                # SL/TP logic differs by side
+                if pos.side == "LONG":
+                    if pos.stop_loss is not None and current_price <= pos.stop_loss:
+                        reason = f"Stop Loss triggered @ ${current_price:.4f} (SL: ${pos.stop_loss:.4f})"
+                    elif pos.take_profit is not None and current_price >= pos.take_profit:
+                        reason = f"Take Profit triggered @ ${current_price:.4f} (TP: ${pos.take_profit:.4f})"
+                else:  # SHORT
+                    if pos.stop_loss is not None and current_price >= pos.stop_loss:
+                        reason = f"Stop Loss triggered @ ${current_price:.4f} (SL: ${pos.stop_loss:.4f})"
+                    elif pos.take_profit is not None and current_price <= pos.take_profit:
+                        reason = f"Take Profit triggered @ ${current_price:.4f} (TP: ${pos.take_profit:.4f})"
 
-                if reason:
-                    pnl = (current_price - (trade.price or 0)) * (trade.qty or 0)
-                    proceeds = (trade.qty or 0) * current_price
+                if not reason:
+                    continue
 
-                    # Credit proceeds to user wallet
-                    user = db.query(User).filter(User.id == trade.user_id).first()
-                    if user:
-                        user.balance_usdt = round((user.balance_usdt or 0) + proceeds, 8)
+                # Correct PnL formula per side
+                if pos.side == "SHORT":
+                    pnl = (entry_price - current_price) * lot * cs
+                else:
+                    pnl = (current_price - entry_price) * lot * cs
 
-                    # Mark BUY with P&L
-                    trade.pnl = round(pnl, 8)
+                proceeds      = max(margin + pnl, 0.0)
+                is_liquidated = (margin + pnl) <= 0
 
-                    # Log SELL side
-                    sell_log = TradeLog(
-                        user_id=trade.user_id,
-                        ticker=trade.ticker,
-                        action="SELL",
-                        price=current_price,
-                        qty=trade.qty,
-                        pnl=round(pnl, 8),
-                        reason=reason,
-                        paper=False,
-                        exchange=trade.exchange or "internal",
+                # Credit proceeds to user wallet
+                user = db.query(User).filter(User.id == pos.user_id).first()
+                if user:
+                    user.balance_usdt = round((user.balance_usdt or 0) + proceeds, 8)
+
+                # Mark position closed
+                pos.status       = "liquidated" if is_liquidated else "closed"
+                pos.close_price  = round(current_price, 8)
+                pos.realized_pnl = round(pnl, 8)
+                pos.closed_at    = datetime.utcnow()
+
+                # Log the closing leg in trade_logs for history
+                close_action = "SELL" if pos.side == "LONG" else "BUY"
+                close_log = TradeLog(
+                    user_id=pos.user_id,
+                    ticker=pos.ticker,
+                    action=close_action,
+                    price=current_price,
+                    qty=lot,
+                    pnl=round(pnl, 8),
+                    reason=reason,
+                    paper=False,
+                    exchange=pos.exchange or "internal",
+                    leverage=float(pos.leverage or 1),
+                    lot_size=lot,
+                    position_id=pos.id,
+                )
+                db.add(close_log)
+                db.flush()
+                pos.close_trade_id = close_log.id
+
+                triggered += 1
+                logger.info(
+                    f"⚡ Auto-closed position #{pos.id} {pos.side} {pos.ticker}: "
+                    f"{reason} | P&L: ${pnl:.2f}"
+                )
+
+                # Push notification
+                if user:
+                    prefs = dict(user.notification_preferences or {})
+                    tg_token  = prefs.get("telegram_bot_token")
+                    tg_chat_id = prefs.get("telegram_chat_id")
+                    msg = (
+                        f"⚡ FinAi Auto-Close Alert\n"
+                        f"{'🔴 LIQUIDATED' if is_liquidated else '✅ CLOSED'} "
+                        f"{pos.ticker} {pos.side}\n"
+                        f"{reason}\n"
+                        f"P&L: {'+'if pnl>=0 else ''}${pnl:.2f}\n"
+                        f"Proceeds: ${proceeds:.2f} USDT credited\n"
+                        f"Balance: ${user.balance_usdt:,.2f} USDT"
                     )
-                    db.add(sell_log)
-                    triggered += 1
-                    logger.info(f"⚡ Auto-closed trade #{trade.id}: {reason} | P&L: ${pnl:.2f}")
-
-                    # Send push notification to user via Telegram/WhatsApp
-                    if user:
-                        prefs = dict(user.notification_preferences or {})
-                        msg = (
-                            f"⚡ FinAi Auto-Close Alert\n"
-                            f"Ticker: {trade.ticker}\n"
-                            f"{reason}\n"
-                            f"P&L: {'+'if pnl>=0 else ''}${pnl:.2f}\n"
-                            f"Proceeds: ${proceeds:.2f} USDT credited"
-                        )
-                        # Telegram notification
-                        tg_token = prefs.get("telegram_bot_token")
-                        tg_chat_id = prefs.get("telegram_chat_id")
-                        if tg_token and tg_chat_id:
-                            try:
-                                import httpx as _hx
-                                import threading
-                                def _send_tg(tok, cid, text):
-                                    try:
-                                        import requests as _r
-                                        _r.post(f"https://api.telegram.org/bot{tok}/sendMessage",
-                                                json={"chat_id": cid, "text": text}, timeout=5)
-                                    except Exception:
-                                        pass
-                                threading.Thread(target=_send_tg, args=(tg_token, tg_chat_id, msg), daemon=True).start()
-                            except Exception:
-                                pass
-                        # WhatsApp notification
-                        wa_verified = prefs.get("whatsapp_verified")
-                        wa_phone = prefs.get("whatsapp_number")
-                        if wa_verified and wa_phone:
-                            try:
-                                import os, threading
-                                def _send_wa(phone, text):
-                                    try:
-                                        from twilio.rest import Client as _TC
-                                        tc = _TC(os.getenv("TWILIO_ACCOUNT_SID"), os.getenv("TWILIO_AUTH_TOKEN"))
-                                        tc.messages.create(
-                                            from_=f"whatsapp:{os.getenv('TWILIO_WHATSAPP_NUMBER','+14155238886')}",
-                                            body=text,
-                                            to=f"whatsapp:{phone}"
-                                        )
-                                    except Exception:
-                                        pass
-                                threading.Thread(target=_send_wa, args=(wa_phone, msg), daemon=True).start()
-                            except Exception:
-                                pass
+                    if tg_token and tg_chat_id:
+                        try:
+                            import threading
+                            def _send_tg(tok, cid, text):
+                                try:
+                                    import requests as _r
+                                    _r.post(f"https://api.telegram.org/bot{tok}/sendMessage",
+                                            json={"chat_id": cid, "text": text}, timeout=5)
+                                except Exception:
+                                    pass
+                            threading.Thread(target=_send_tg, args=(tg_token, tg_chat_id, msg), daemon=True).start()
+                        except Exception:
+                            pass
+                    wa_verified = prefs.get("whatsapp_verified")
+                    wa_phone    = prefs.get("whatsapp_number")
+                    if wa_verified and wa_phone:
+                        try:
+                            import os, threading
+                            def _send_wa(phone, text):
+                                try:
+                                    from twilio.rest import Client as _TC
+                                    tc = _TC(os.getenv("TWILIO_ACCOUNT_SID"), os.getenv("TWILIO_AUTH_TOKEN"))
+                                    tc.messages.create(
+                                        from_=f"whatsapp:{os.getenv('TWILIO_WHATSAPP_NUMBER','+14155238886')}",
+                                        body=text, to=f"whatsapp:{phone}"
+                                    )
+                                except Exception:
+                                    pass
+                            threading.Thread(target=_send_wa, args=(wa_phone, msg), daemon=True).start()
+                        except Exception:
+                            pass
 
             if triggered > 0:
                 db.commit()

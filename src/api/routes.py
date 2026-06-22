@@ -50,7 +50,7 @@ from src.auth.dependencies import get_current_user, require_admin
 from src.database.models import (
     User, APIKey, Transaction, UserMoney, Event,
     Notification, WalletConfig, SupportTicket, SupportMessage, TradeLog, PriceAlert,
-    SubscriptionRequest, Ad, Testimonial, UserActivityLog
+    SubscriptionRequest, Ad, Testimonial, UserActivityLog, Position
 )
 
 # ===================== Pydantic Schemas =====================
@@ -121,6 +121,9 @@ class ExchangeConnection(BaseModel):
     api_secret: str
     passphrase: Optional[str] = None
     label: Optional[str] = None
+    account_type: Optional[str] = None   # standard / raw_spread / pro / zero (Exness account types)
+    broker_type: Optional[str] = None    # forex / crypto / stock
+    contract_size: Optional[float] = None  # override: 100000 forex, 100 XAU, 1 crypto/stocks
 
 class AdminUpdateUser(BaseModel):
     user_id: int
@@ -185,16 +188,18 @@ class BotParamsUpdate(BaseModel):
 
 class TradeExecuteRequest(BaseModel):
     pair: str
-    side: str
+    side: str                              # "buy" = open LONG  |  "sell" = open SHORT
     order_type: str = "market"
     price: float
-    amount: float
-    paper: bool = True
+    amount: float                          # raw quantity sent to live broker via CCXT
+    paper: bool = False
     exchange_label: Optional[str] = None
-    stop_loss: Optional[float] = None
-    take_profit: Optional[float] = None
+    stop_loss: Optional[float] = None      # applies to both LONG and SHORT
+    take_profit: Optional[float] = None    # applies to both LONG and SHORT
     leverage: Optional[float] = 1.0
-    lot_size: Optional[float] = None
+    lot_size: Optional[float] = None       # authoritative position size in lots
+    contract_size: Optional[float] = None  # override auto-detection (100000 forex, 1 crypto)
+    close_position_id: Optional[int] = None  # if set → close this position instead of opening
 
 class NotificationPrefsUpdate(BaseModel):
     # Channel toggles
@@ -1287,15 +1292,24 @@ async def connect_exchange(data: ExchangeConnection, current_user=Depends(get_cu
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
     connections = list(user.exchange_connections or [])
-    # Remove existing connection for same exchange if any
-    connections = [c for c in connections if c.get("exchange") != data.exchange]
-    connections.append({
-        "exchange": data.exchange,
-        "api_key": data.api_key,
-        "api_secret": data.api_secret,
-        "passphrase": data.passphrase,
-        "label": data.label or data.exchange,
-    })
+    label = data.label or data.exchange
+    # Remove existing connection with same label (allows multiple exchanges of same type)
+    connections = [c for c in connections if c.get("label") != label]
+    conn_record: dict = {
+        "exchange":      data.exchange,
+        "api_key":       data.api_key,
+        "api_secret":    data.api_secret,
+        "label":         label,
+    }
+    if data.passphrase:
+        conn_record["passphrase"] = data.passphrase
+    if data.account_type:
+        conn_record["account_type"] = data.account_type
+    if data.broker_type:
+        conn_record["broker_type"] = data.broker_type
+    if data.contract_size is not None:
+        conn_record["contract_size"] = data.contract_size
+    connections.append(conn_record)
     user.exchange_connections = connections
     db.commit()
     return {"message": f"{data.exchange} connected successfully", "connections": len(connections)}
@@ -2656,20 +2670,23 @@ async def jwt_start_bot(body: BotStartRequestV2, current_user=Depends(get_curren
     # Always live — paper trading is disabled
     if (user.balance_usdt or 0) < capital:
         raise HTTPException(status_code=400, detail=f"Insufficient balance. Need ${capital:,.2f} USDT.")
-    # Find Binance credentials if user has a Binance connection
-    binance_api_key = None
-    binance_secret = None
+    # Resolve live exchange credentials — only from the explicitly selected exchange.
+    # We never silently fall back to a different exchange than the user chose.
+    binance_api_key: Optional[str] = None
+    binance_secret:  Optional[str] = None
     connections = user.exchange_connections or []
     if body.exchange_label:
-        conn = next((c for c in connections if c.get("label") == body.exchange_label or c.get("exchange") == body.exchange_label), None)
+        conn = next(
+            (c for c in connections
+             if c.get("label") == body.exchange_label or c.get("exchange") == body.exchange_label),
+            None,
+        )
         if conn and conn.get("exchange", "").lower() == "binance":
             binance_api_key = conn.get("api_key")
-            binance_secret = conn.get("api_secret")
-    else:
-        binance_conn = next((c for c in connections if c.get("exchange", "").lower() == "binance"), None)
-        if binance_conn:
-            binance_api_key = binance_conn.get("api_key")
-            binance_secret = binance_conn.get("api_secret")
+            binance_secret  = conn.get("api_secret")
+        # Non-Binance live exchange selected → bot runs with platform balance only.
+        # (CCXT integration for non-Binance brokers is a separate enhancement.)
+    # If no exchange_label → platform balance bot, no broker credentials.
     manager = get_user_bot_manager(user.email, user.id)
     result = manager.start_bot(
         ticker=body.ticker,
@@ -2719,134 +2736,212 @@ async def jwt_close_bot_position(body: BotClosePositionRequest, current_user=Dep
 
 @router.get("/trade/open-positions")
 async def get_open_positions(current_user=Depends(get_current_user), db: Session = Depends(get_db)):
-    """Return all open BUY positions (manual + paper trades with no closing SELL)."""
+    """Return all open positions from the Position table with live unrealized PnL."""
     user = db.query(User).filter(User.email == current_user["email"]).first()
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
-    # Get manual BUY trades (exclude FinEventAI bot trades)
-    open_buys = (
-        db.query(TradeLog)
-        .filter(
-            TradeLog.user_id == user.id,
-            TradeLog.action == "BUY",
-            TradeLog.pnl == None,
-            TradeLog.exchange != "EventBot",
-        )
-        .order_by(TradeLog.created_at.desc())
+
+    open_positions = (
+        db.query(Position)
+        .filter(Position.user_id == user.id, Position.status == "open")
+        .order_by(Position.opened_at.desc())
         .limit(50)
         .all()
     )
-    # Net out against SELL trades to find truly open positions
-    all_sells = (
-        db.query(TradeLog)
-        .filter(
-            TradeLog.user_id == user.id,
-            TradeLog.action == "SELL",
-        )
-        .all()
-    )
-    sold_tickers: dict = {}
-    for s in all_sells:
-        sold_tickers[s.ticker] = sold_tickers.get(s.ticker, 0.0) + (s.qty or 0.0)
-    remaining_buys = []
-    for b in open_buys:
-        sold_qty = sold_tickers.get(b.ticker, 0.0)
-        rem = (b.qty or 0.0) - sold_qty
-        if rem > 0:
-            sold_tickers[b.ticker] = 0.0
-            remaining_buys.append((b, rem))
-        elif sold_qty > 0:
-            sold_tickers[b.ticker] = sold_qty - (b.qty or 0.0)
-    open_buys_filtered = remaining_buys
+
     from src.trading.trade_bot import _fetch_live_price
     result = []
-    for t, effective_qty in open_buys_filtered:
-        entry_price = t.price or 0
-        lev = max(float(t.leverage or 1), 1.0)
+    for pos in open_positions:
+        lev           = max(float(pos.leverage or 1), 1.0)
+        cs            = float(pos.contract_size or 1.0)
+        lot           = float(pos.lot_size or 1.0)
+        entry_price   = float(pos.entry_price or 0)
+        margin        = float(pos.margin or (entry_price * lot * cs / lev))
+
         try:
-            current_price  = _fetch_live_price(t.ticker)
-            # PnL is on full notional position (not just margin)
-            unrealized_pnl = (current_price - entry_price) * effective_qty
-            # Margin at risk
-            margin         = (entry_price * effective_qty) / lev
-            # Return on margin (for display)
-            pnl_pct        = round(unrealized_pnl / margin * 100, 2) if margin > 0 else 0.0
+            current_price = _fetch_live_price(pos.ticker)
         except Exception:
-            current_price  = entry_price
-            unrealized_pnl = 0.0
-            pnl_pct        = 0.0
-            margin         = (entry_price * effective_qty) / lev
+            current_price = entry_price
+
+        # PnL formula differs by side
+        if pos.side == "SHORT":
+            unrealized_pnl = (entry_price - current_price) * lot * cs
+        else:
+            unrealized_pnl = (current_price - entry_price) * lot * cs
+
+        pnl_pct = round(unrealized_pnl / margin * 100, 2) if margin > 0 else 0.0
+
+        # Margin-call / liquidation check (losses exceed margin)
+        is_liquidated = unrealized_pnl <= -margin
+
         result.append({
-            "id":             t.id,
-            "ticker":         t.ticker,
-            "action":         t.action,
+            "id":             pos.id,
+            "ticker":         pos.ticker,
+            "side":           pos.side,
+            "action":         "BUY" if pos.side == "LONG" else "SELL",
             "price":          entry_price,
-            "qty":            effective_qty,
+            "qty":            lot,
+            "lot_size":       lot,
+            "contract_size":  cs,
             "leverage":       lev,
             "margin":         round(margin, 2),
-            "exchange":       t.exchange,
-            "paper":          t.paper,
-            "created_at":     t.created_at.isoformat() if t.created_at else None,
-            "current_price":  round(current_price, 4),
+            "exchange":       pos.exchange or "internal",
+            "exchange_label": pos.exchange_label,
+            "broker_order_id":pos.broker_order_id,
+            "broker_error":   pos.broker_error,
+            "stop_loss":      pos.stop_loss,
+            "take_profit":    pos.take_profit,
+            "paper":          False,
+            "created_at":     pos.opened_at.isoformat() if pos.opened_at else None,
+            "current_price":  round(current_price, 6),
             "unrealized_pnl": round(unrealized_pnl, 2),
             "pnl_pct":        pnl_pct,
+            "is_liquidated":  is_liquidated,
         })
     return {"positions": result}
 
 
-@router.post("/trade/close/{trade_id}")
-async def close_manual_trade(trade_id: int, current_user=Depends(get_current_user), db: Session = Depends(get_db)):
-    """Close an open BUY position at current market price."""
+@router.get("/trade/positions")
+async def get_all_positions(
+    status: Optional[str] = None,
+    limit: int = 50,
+    current_user=Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Return positions with optional status filter (open / closed / liquidated)."""
     user = db.query(User).filter(User.email == current_user["email"]).first()
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
-    trade = db.query(TradeLog).filter(
-        TradeLog.id == trade_id,
-        TradeLog.user_id == user.id,
-        TradeLog.action == "BUY",
-        TradeLog.pnl == None,
-    ).first()
-    if not trade:
-        raise HTTPException(status_code=404, detail="Open position not found")
-    from src.trading.trade_bot import _fetch_live_price
-    current_price = _fetch_live_price(trade.ticker)
-    entry_price   = trade.price or 0
-    qty           = trade.qty or 0
-    lev           = max(float(trade.leverage or 1), 1.0)
-    # PnL on full notional position
-    pnl           = (current_price - entry_price) * qty
-    # Return margin + pnl to wallet (margin was what was originally deducted)
-    margin        = (entry_price * qty) / lev
-    proceeds      = max(margin + pnl, 0.0)  # floor at 0 (liquidation)
 
-    # Credit proceeds back to wallet
+    q = db.query(Position).filter(Position.user_id == user.id)
+    if status:
+        q = q.filter(Position.status == status)
+    positions = q.order_by(Position.opened_at.desc()).limit(limit).all()
+
+    return {"positions": [
+        {
+            "id":             p.id,
+            "ticker":         p.ticker,
+            "side":           p.side,
+            "status":         p.status,
+            "lot_size":       p.lot_size,
+            "contract_size":  p.contract_size,
+            "entry_price":    p.entry_price,
+            "close_price":    p.close_price,
+            "leverage":       p.leverage,
+            "margin":         p.margin,
+            "realized_pnl":   p.realized_pnl,
+            "stop_loss":      p.stop_loss,
+            "take_profit":    p.take_profit,
+            "exchange":       p.exchange,
+            "exchange_label": p.exchange_label,
+            "broker_order_id":p.broker_order_id,
+            "broker_error":   p.broker_error,
+            "opened_at":      p.opened_at.isoformat() if p.opened_at else None,
+            "closed_at":      p.closed_at.isoformat() if p.closed_at else None,
+        }
+        for p in positions
+    ]}
+
+
+@router.post("/trade/close/{position_id}")
+async def close_manual_trade(position_id: int, current_user=Depends(get_current_user), db: Session = Depends(get_db)):
+    """Close an open position at current market price. Works for both LONG and SHORT."""
+    user = db.query(User).filter(User.email == current_user["email"]).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    pos = db.query(Position).filter(
+        Position.id == position_id,
+        Position.user_id == user.id,
+        Position.status == "open",
+    ).first()
+    if not pos:
+        raise HTTPException(status_code=404, detail="Open position not found")
+
+    from src.trading.trade_bot import _fetch_live_price
+    close_price = _fetch_live_price(pos.ticker)
+    entry_price = float(pos.entry_price or 0)
+    lot         = float(pos.lot_size or 1.0)
+    cs          = float(pos.contract_size or 1.0)
+    lev         = max(float(pos.leverage or 1), 1.0)
+    margin      = float(pos.margin)
+
+    # Correct PnL for each side
+    if pos.side == "SHORT":
+        pnl = (entry_price - close_price) * lot * cs
+    else:
+        pnl = (close_price - entry_price) * lot * cs
+
+    # Proceeds = margin returned + pnl; floored at 0 (full liquidation)
+    proceeds = max(margin + pnl, 0.0)
+    is_liquidated = (margin + pnl) <= 0
+
+    # Return proceeds to wallet
     user.balance_usdt = round((user.balance_usdt or 0) + proceeds, 8)
 
-    # Mark the original BUY trade with P&L
-    trade.pnl = round(pnl, 8)
+    # Mark position closed
+    pos.status       = "liquidated" if is_liquidated else "closed"
+    pos.close_price  = round(close_price, 8)
+    pos.realized_pnl = round(pnl, 8)
+    pos.closed_at    = datetime.utcnow()
 
-    # Log the SELL side
-    sell_log = TradeLog(
+    # Log the closing leg in trade_logs for history display
+    close_action = "SELL" if pos.side == "LONG" else "BUY"
+    close_log = TradeLog(
         user_id=user.id,
-        ticker=trade.ticker,
-        action="SELL",
-        price=current_price,
-        qty=trade.qty,
+        ticker=pos.ticker,
+        action=close_action,
+        price=close_price,
+        qty=lot,
         pnl=round(pnl, 8),
-        reason=f"manual close of trade #{trade_id}",
+        reason=f"close position #{position_id} ({'liquidated' if is_liquidated else 'manual'})",
         paper=False,
-        exchange=trade.exchange or "internal",
+        exchange=pos.exchange or "internal",
+        leverage=lev,
+        lot_size=lot,
+        stop_loss=None,
+        take_profit=None,
+        position_id=pos.id,
     )
-    db.add(sell_log)
+    db.add(close_log)
+    db.flush()
+    pos.close_trade_id = close_log.id
     db.commit()
-    db.refresh(sell_log)
+    db.refresh(close_log)
+
+    # Notify via Telegram / WhatsApp
+    try:
+        import os as _os, threading as _thr
+        _prefs  = dict(user.notification_preferences or {})
+        _tg_tok = _os.getenv("TELEGRAM_BOT_TOKEN")
+        _msg = (
+            f"{'🔴 LIQUIDATED' if is_liquidated else '✅ CLOSED'} {pos.ticker} {pos.side}\n"
+            f"Entry: ${entry_price:,.4f}  →  Close: ${close_price:,.4f}\n"
+            f"PnL: {'−' if pnl < 0 else '+'}${abs(pnl):,.2f}\n"
+            f"Balance: ${user.balance_usdt:,.2f} USDT"
+        )
+        if _prefs.get("telegram") and user.telegram_chat_id and _tg_tok:
+            def _tg(tok, cid, txt):
+                try:
+                    import requests as _r
+                    _r.post(f"https://api.telegram.org/bot{tok}/sendMessage",
+                            json={"chat_id": cid, "text": txt}, timeout=5)
+                except Exception:
+                    pass
+            _thr.Thread(target=_tg, args=(_tg_tok, user.telegram_chat_id, _msg), daemon=True).start()
+    except Exception:
+        pass
+
     return {
-        "status":        "closed",
-        "trade_id":      trade_id,
-        "close_price":   round(current_price, 4),
+        "status":        "liquidated" if is_liquidated else "closed",
+        "position_id":   position_id,
+        "side":          pos.side,
+        "close_price":   round(close_price, 6),
         "pnl":           round(pnl, 2),
         "proceeds":      round(proceeds, 2),
-        "new_balance":   user.balance_usdt,
+        "new_balance":   round(user.balance_usdt, 2),
+        "is_liquidated": is_liquidated,
     }
 
 
@@ -2916,104 +3011,243 @@ async def jwt_get_trades(limit: int = 20, current_user=Depends(get_current_user)
     return {"trades": merged[:limit]}
 
 
+def _resolve_contract_size(pair: str, conn: Optional[dict] = None) -> float:
+    """
+    Determine the contract size for a given instrument.
+    Priority: 1) explicit override on the exchange connection
+              2) instrument type detection from the pair name
+
+    Contract sizes (Exness standard):
+      Forex majors  (EURUSD, GBPUSD …) → 100,000 units
+      XAU/USD (Gold)                    → 100 troy oz
+      XAG/USD (Silver)                  → 5,000 troy oz
+      OIL / WTI                         → 1,000 barrels
+      Crypto (BTC, ETH …)               → 1 coin
+      Stocks (AAPL, TSLA …)             → 1 share
+    """
+    if conn and conn.get("contract_size"):
+        return float(conn["contract_size"])
+
+    p = pair.upper().replace("-", "/").replace("_", "/")
+    base = p.split("/")[0] if "/" in p else p
+
+    _CRYPTO = {"BTC","ETH","BNB","SOL","XRP","DOGE","ADA","AVAX","LINK","DOT",
+               "UNI","MATIC","LTC","XLM","TRX","EOS","ATOM","FTM","NEAR","OP"}
+    _STOCKS = {"AAPL","TSLA","NVDA","MSFT","SPY","GOOGL","AMZN","META","NFLX",
+               "BABA","UBER","AMD","INTC","JPM","BAC","WMT","DIS","V","MA"}
+
+    if base in _CRYPTO:  return 1.0
+    if base in _STOCKS:  return 1.0
+    if base == "XAU":    return 100.0       # Gold: 100 oz/lot
+    if base == "XAG":    return 5000.0      # Silver: 5000 oz/lot
+    if "OIL" in p or "WTI" in p: return 1000.0  # Oil: 1000 barrels/lot
+    # Default: standard forex lot
+    return 100_000.0
+
+
 @router.post("/trade/execute")
 async def execute_trade(body: TradeExecuteRequest, current_user=Depends(get_current_user), db: Session = Depends(get_db)):
+    """
+    Exness-style margin trade engine.
+
+    Opening a position (default):
+      • BUY  → opens a LONG position
+      • SELL → opens a SHORT position
+      • margin = (price × lot_size × contract_size) / leverage
+      • margin is deducted from balance immediately
+
+    Closing a position (pass close_position_id):
+      • PnL is calculated properly per side
+      • margin + pnl is returned to balance (floored at 0 for liquidation)
+
+    Live broker execution:
+      • If exchange_label is set, the order is also placed via CCXT
+      • broker_order_id is saved; broker_error is returned if the real order fails
+        (the internal position is still recorded so balance stays in sync)
+    """
     user = db.query(User).filter(User.email == current_user["email"]).first()
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
 
-    # Resolve exchange connection if label provided
-    conn = None
+    # ── Resolve exchange connection ──────────────────────────────────────────
+    conn: Optional[dict] = None
     if body.exchange_label:
         connections = user.exchange_connections or []
         conn = next((c for c in connections if c.get("label") == body.exchange_label), None)
         if not conn:
             raise HTTPException(status_code=400, detail=f"Exchange '{body.exchange_label}' not found in your connections.")
 
-    leverage   = max(float(body.leverage or 1), 1.0)
-    # lot_size is the authoritative quantity when provided; fall back to amount
-    effective_qty = float(body.lot_size) if (body.lot_size and float(body.lot_size) > 0) else body.amount
-    total_cost = round(body.price * effective_qty, 8)
-    # Margin = notional / leverage (what's actually deducted from balance)
-    margin_cost = round(total_cost / leverage, 8)
+    # ── Instrument sizing ────────────────────────────────────────────────────
+    leverage      = max(float(body.leverage or 1), 1.0)
+    lot_size      = float(body.lot_size) if (body.lot_size and float(body.lot_size) > 0) else body.amount
+    contract_size = float(body.contract_size) if body.contract_size else _resolve_contract_size(body.pair, conn)
+    notional      = round(body.price * lot_size * contract_size, 8)
+    margin        = round(notional / leverage, 8)
 
-    if body.side == "buy":
-        if (user.balance_usdt or 0) < margin_cost:
-            raise HTTPException(status_code=400, detail=f"Insufficient balance. Need ${margin_cost:,.2f} USDT margin ({leverage}x leverage).")
-        user.balance_usdt = round((user.balance_usdt or 0) - margin_cost, 8)
-    elif body.side == "sell":
-        user.balance_usdt = round((user.balance_usdt or 0) + margin_cost, 8)
-    else:
-        raise HTTPException(status_code=400, detail="side must be 'buy' or 'sell'")
-
-    # Normalize ticker: BTC/USDT → BTC-USD (compatible with price lookup maps)
+    # Normalize ticker for DB: BTC/USDT → BTC-USD
     ticker = body.pair.replace("/", "-").replace("_", "-")
     ticker = ticker.replace("-USDT", "-USD").replace("-usdt", "-USD")
-    exchange_name = conn.get("exchange", "live") if conn else "internal"
+    exchange_name = conn.get("exchange", "live").lower() if conn else "internal"
 
-    log = TradeLog(
+    # ── CLOSE PATH — close an existing position ──────────────────────────────
+    if body.close_position_id:
+        pos = db.query(Position).filter(
+            Position.id == body.close_position_id,
+            Position.user_id == user.id,
+            Position.status == "open",
+        ).first()
+        if not pos:
+            raise HTTPException(status_code=404, detail="Open position not found")
+
+        close_price = body.price
+        e_price     = float(pos.entry_price or 0)
+        p_lot       = float(pos.lot_size or 1.0)
+        p_cs        = float(pos.contract_size or 1.0)
+        p_margin    = float(pos.margin)
+
+        if pos.side == "SHORT":
+            pnl = (e_price - close_price) * p_lot * p_cs
+        else:
+            pnl = (close_price - e_price) * p_lot * p_cs
+
+        proceeds      = max(p_margin + pnl, 0.0)
+        is_liquidated = (p_margin + pnl) <= 0
+
+        user.balance_usdt = round((user.balance_usdt or 0) + proceeds, 8)
+        pos.status        = "liquidated" if is_liquidated else "closed"
+        pos.close_price   = round(close_price, 8)
+        pos.realized_pnl  = round(pnl, 8)
+        pos.closed_at     = datetime.utcnow()
+
+        close_action = "SELL" if pos.side == "LONG" else "BUY"
+        close_log = TradeLog(
+            user_id=user.id, ticker=pos.ticker,
+            action=close_action, price=close_price, qty=p_lot,
+            pnl=round(pnl, 8),
+            reason=f"close position #{body.close_position_id}",
+            paper=False, exchange=pos.exchange or "internal",
+            leverage=float(pos.leverage or 1),
+            lot_size=p_lot, position_id=pos.id,
+        )
+        db.add(close_log)
+        db.flush()
+        pos.close_trade_id = close_log.id
+        db.commit()
+        return {
+            "status":        "liquidated" if is_liquidated else "closed",
+            "position_id":   pos.id,
+            "pnl":           round(pnl, 2),
+            "proceeds":      round(proceeds, 2),
+            "trade": {"new_balance": round(user.balance_usdt, 2)},
+        }
+
+    # ── OPEN PATH — open a new position ─────────────────────────────────────
+    side_upper = body.side.upper()
+    if side_upper not in ("BUY", "SELL"):
+        raise HTTPException(status_code=400, detail="side must be 'buy' or 'sell'")
+
+    pos_side = "LONG" if side_upper == "BUY" else "SHORT"
+
+    # Margin check — always deduct margin when opening
+    if (user.balance_usdt or 0) < margin:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Insufficient balance. Need ${margin:,.2f} USDT margin "
+                   f"({leverage}x leverage, {lot_size} lot × {contract_size} contract size)."
+        )
+    user.balance_usdt = round((user.balance_usdt or 0) - margin, 8)
+
+    # ── Create opening TradeLog ──────────────────────────────────────────────
+    open_log = TradeLog(
         user_id=user.id,
         ticker=ticker,
-        action=body.side.upper(),
+        action=side_upper,
         price=body.price,
-        qty=effective_qty,
+        qty=lot_size,
         pnl=None,
-        reason=f"{body.order_type} order via trading terminal ({exchange_name})",
+        reason=f"{body.order_type} {pos_side} via trading terminal ({exchange_name})",
         paper=False,
         exchange=exchange_name,
-        stop_loss=body.stop_loss if body.side == "buy" else None,
-        take_profit=body.take_profit if body.side == "buy" else None,
-        leverage=body.leverage or 1.0,
-        lot_size=body.lot_size,
+        stop_loss=body.stop_loss,
+        take_profit=body.take_profit,
+        leverage=leverage,
+        lot_size=lot_size,
     )
-    db.add(log)
-    db.commit()
-    db.refresh(log)
+    db.add(open_log)
+    db.flush()
 
-    exchange_result = None
-    exchange_error = None
+    # ── Create Position record ───────────────────────────────────────────────
+    position = Position(
+        user_id=user.id,
+        ticker=ticker,
+        side=pos_side,
+        status="open",
+        lot_size=lot_size,
+        contract_size=contract_size,
+        entry_price=body.price,
+        leverage=leverage,
+        margin=margin,
+        stop_loss=body.stop_loss,
+        take_profit=body.take_profit,
+        exchange=exchange_name,
+        exchange_label=body.exchange_label,
+        open_trade_id=open_log.id,
+    )
+    db.add(position)
+    db.flush()
+    open_log.position_id = position.id
 
-    # If a live exchange API key is selected, also place the real order there
+    # ── Live broker execution via CCXT ───────────────────────────────────────
+    broker_order_id: Optional[str] = None
+    exchange_error:  Optional[str] = None
+
     if conn:
         api_key_val = conn.get("api_key", "")
-        secret_val = conn.get("api_secret", "")
-        passphrase = conn.get("passphrase", "")
+        secret_val  = conn.get("api_secret", "")
+        passphrase  = conn.get("passphrase", "")
         exchange_id = conn.get("exchange", "").lower()
         try:
-            import ccxt
-            ex_class = getattr(ccxt, exchange_id, None)
+            import ccxt as _ccxt
+            ex_class = getattr(_ccxt, exchange_id, None)
             if ex_class is None:
-                raise ValueError(f"Exchange '{exchange_id}' not supported by ccxt")
+                raise ValueError(f"Exchange '{exchange_id}' is not supported (not in CCXT). "
+                                 f"For MetaTrader brokers (Exness, IC Markets, etc.) use platform balance.")
             creds: dict = {"apiKey": api_key_val, "secret": secret_val}
             if passphrase:
                 creds["password"] = passphrase
-            exchange_obj = ex_class(creds)
-            side_str = body.side.lower()
+            ex_obj = ex_class(creds)
+            ccxt_side = body.side.lower()
+            # Use body.amount for CCXT (raw units), lot_size for internal margin
             if body.order_type == "market":
-                order = exchange_obj.create_market_order(body.pair, side_str, body.amount)
+                order = ex_obj.create_market_order(body.pair, ccxt_side, body.amount)
             else:
-                order = exchange_obj.create_limit_order(body.pair, side_str, body.amount, body.price)
-            exchange_result = {"order_id": str(order.get("id", "")), "status": order.get("status", "submitted")}
-            log.exchange = exchange_id
-            db.commit()
-        except Exception as e:
-            exchange_error = str(e)
-            logger.warning(f"Exchange order failed for {user.email} on {exchange_id}: {e}")
+                order = ex_obj.create_limit_order(body.pair, ccxt_side, body.amount, body.price)
+            broker_order_id = str(order.get("id", ""))
+            position.broker_order_id = broker_order_id
+            open_log.exchange = exchange_id
+        except Exception as exc:
+            exchange_error = str(exc)
+            position.broker_error = exchange_error
+            logger.warning(f"Live broker order failed for {user.email} on {exchange_id}: {exc}")
 
-    # ── Trade notification via Telegram / WhatsApp ──────────────────
+    db.commit()
+    db.refresh(open_log)
+
+    # ── Trade notification via Telegram / WhatsApp ──────────────────────────
     try:
         import os as _os, threading as _thr
-        _prefs = dict(user.notification_preferences or {})
+        _prefs    = dict(user.notification_preferences or {})
         _tg_token = _os.getenv("TELEGRAM_BOT_TOKEN")
+        _dir      = "🟢 BUY (LONG)" if pos_side == "LONG" else "🔴 SELL (SHORT)"
         _msg = (
-            f"{'🟢 BUY' if body.side == 'buy' else '🔴 SELL'} {body.pair}\n"
-            f"Price: ${body.price:,.4f}\n"
-            f"Qty: {body.amount}\n"
-            f"Total: ${total_cost:,.2f} USDT\n"
+            f"{_dir} {body.pair}\n"
+            f"Price:    ${body.price:,.4f}\n"
+            f"Lot:      {lot_size} × {contract_size:,.0f} = {notional:,.2f}\n"
+            f"Leverage: {leverage}x\n"
+            f"Margin:   ${margin:,.2f} USDT\n"
             f"Exchange: {exchange_name}\n"
-            f"Balance: ${user.balance_usdt:,.2f} USDT"
+            f"Balance:  ${user.balance_usdt:,.2f} USDT"
         )
-        # Telegram — user personal chat
         if _prefs.get("telegram") and user.telegram_chat_id and _tg_token:
             def _tg(tok, cid, txt):
                 try:
@@ -3023,7 +3257,6 @@ async def execute_trade(body: TradeExecuteRequest, current_user=Depends(get_curr
                 except Exception:
                     pass
             _thr.Thread(target=_tg, args=(_tg_token, user.telegram_chat_id, _msg), daemon=True).start()
-        # WhatsApp — user verified number
         _wa_prefs = _prefs.get("whatsapp_verified") or user.whatsapp_connected
         _wa_phone = _prefs.get("whatsapp_number") or user.whatsapp_number
         if _prefs.get("whatsapp") and _wa_prefs and _wa_phone:
@@ -3042,24 +3275,27 @@ async def execute_trade(body: TradeExecuteRequest, current_user=Depends(get_curr
         pass
 
     return {
-        "status": "executed",
-        "routed_via": exchange_name,
+        "status":      "executed",
+        "routed_via":  exchange_name,
+        "position_id": position.id,
         "trade": {
-            "id": log.id,
-            "ticker": log.ticker,
-            "action": log.action,
-            "price": log.price,
-            "qty": log.qty,
-            "total_usdt": total_cost,
-            "new_balance": user.balance_usdt,
-            "exchange": log.exchange,
-            "stop_loss": log.stop_loss,
-            "take_profit": log.take_profit,
-            "leverage": log.leverage,
-            "lot_size": log.lot_size,
-            "created_at": log.created_at.isoformat() if log.created_at else None,
+            "id":          open_log.id,
+            "ticker":      open_log.ticker,
+            "side":        pos_side,
+            "action":      open_log.action,
+            "price":       open_log.price,
+            "lot_size":    lot_size,
+            "contract_size": contract_size,
+            "notional":    round(notional, 2),
+            "margin":      round(margin, 2),
+            "leverage":    leverage,
+            "new_balance": round(user.balance_usdt, 2),
+            "exchange":    open_log.exchange,
+            "stop_loss":   open_log.stop_loss,
+            "take_profit": open_log.take_profit,
+            "broker_order_id": broker_order_id,
+            "created_at":  open_log.created_at.isoformat() if open_log.created_at else None,
         },
-        "exchange_result": exchange_result,
         "exchange_error": exchange_error,
     }
 

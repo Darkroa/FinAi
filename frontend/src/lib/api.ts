@@ -165,8 +165,11 @@ export const updateBotParams = (data: {
   preferred_tickers?: string[]
 }) => api.post('/bots/update-params', data)
 
-export const getOpenPositions = () => api.get('/trade/open-positions')
-export const closeManualTrade = (trade_id: number) => api.post(`/trade/close/${trade_id}`)
+export const getOpenPositions  = () => api.get('/trade/open-positions')
+export const getAllPositions    = (status?: string, limit = 50) =>
+  api.get(`/trade/positions${status ? `?status=${status}` : ''}${status ? '&' : '?'}limit=${limit}`)
+export const closePosition     = (position_id: number) => api.post(`/trade/close/${position_id}`)
+export const closeManualTrade  = (position_id: number) => api.post(`/trade/close/${position_id}`)
 
 // Trade execution
 export const executeTrade = (data: {
@@ -181,6 +184,8 @@ export const executeTrade = (data: {
   take_profit?: number
   leverage?: number
   lot_size?: number
+  contract_size?: number
+  close_position_id?: number
 }) => api.post('/trade/execute', data)
 
 // Security — change password / PIN / delete request
@@ -253,7 +258,7 @@ export const requestSubscription = (data: {
   auto_renew: boolean
 }) => api.post('/subscribe', data)
 
-// Trade execute with SL/TP/leverage
+// Trade execute with SL/TP/leverage (alias — same endpoint)
 export const executeTradeAdvanced = (data: {
   pair: string
   side: string
@@ -266,6 +271,8 @@ export const executeTradeAdvanced = (data: {
   take_profit?: number | null
   leverage?: number
   lot_size?: number | null
+  contract_size?: number | null
+  close_position_id?: number | null
 }) => api.post('/trade/execute', data)
 
 // Visitor tracking beacon

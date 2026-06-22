@@ -10,7 +10,7 @@ import {
 } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { useAuthStore } from '../store/authStore'
-import { executeTrade, getBotTrades, getOpenPositions    } from '../lib/api'
+import { executeTrade, getBotTrades, getOpenPositions } from '../lib/api'
 
 const PAIRS = [
   'BTC/USDT', 'ETH/USDT', 'BNB/USDT', 'SOL/USDT',
@@ -167,7 +167,30 @@ function makeOrderBook(base: number) {
 
 interface ExchangeConn { exchange: string; label: string; api_key_masked: string }
 interface TradeRecord  { id: number; ticker: string; action: string; price: number; qty: number; pnl: number | null; exchange: string; paper: boolean; created_at: string }
-interface OpenPosition { id: number; ticker: string; price: number; qty: number; exchange: string; created_at: string; current_price: number; unrealized_pnl: number; leverage?: number; pnl_pct?: number; side?: string; action?: string }
+interface OpenPosition {
+  id: number
+  ticker: string
+  side: string         // "LONG" | "SHORT"
+  action: string       // "BUY" | "SELL"
+  price: number
+  qty: number
+  lot_size: number
+  contract_size: number
+  leverage: number
+  margin: number
+  exchange: string
+  exchange_label?: string
+  broker_order_id?: string
+  broker_error?: string
+  stop_loss?: number
+  take_profit?: number
+  paper: boolean
+  created_at: string
+  current_price: number
+  unrealized_pnl: number
+  pnl_pct: number
+  is_liquidated?: boolean
+}
 
 // ── FinChat panel ─────────────────────────────────────────────────────────────
 // ── FinChatPanel types ────────────────────────────────────────────────────────

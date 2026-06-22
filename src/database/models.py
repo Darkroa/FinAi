@@ -267,7 +267,55 @@ class TradeLog(Base):
     leverage = Column(Float, nullable=True, default=1.0)
     lot_size = Column(Float, nullable=True)
     is_event_bot = Column(Boolean, default=False, nullable=True)
+    position_id = Column(Integer, ForeignKey("positions.id"), nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
+
+
+class Position(Base):
+    """
+    Proper position tracking — Exness-style margin model.
+
+    Lifecycle:
+      OPEN  → margin deducted from balance, status='open'
+      CLOSE → realized_pnl calculated, margin + pnl credited back, status='closed'
+      LIQD  → margin lost (pnl <= -margin), status='liquidated'
+
+    Margin formula (universal):
+      margin = (entry_price × lot_size × contract_size) / leverage
+
+    PnL formula:
+      LONG:  pnl = (close_price - entry_price) × lot_size × contract_size
+      SHORT: pnl = (entry_price - close_price) × lot_size × contract_size
+    """
+    __tablename__ = "positions"
+
+    id               = Column(Integer, primary_key=True, index=True)
+    user_id          = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    ticker           = Column(String(30), nullable=False, index=True)
+    side             = Column(String(10), nullable=False)           # LONG / SHORT
+    status           = Column(String(20), default="open", index=True)  # open / closed / liquidated
+
+    lot_size         = Column(Float, nullable=False)                # e.g. 0.01, 1.0
+    contract_size    = Column(Float, default=1.0)                   # 100000=forex, 100=XAU, 1=crypto/stocks
+    entry_price      = Column(Float, nullable=False)
+    close_price      = Column(Float, nullable=True)
+
+    leverage         = Column(Float, default=1.0)
+    margin           = Column(Float, nullable=False)                # locked margin at open
+    realized_pnl     = Column(Float, nullable=True)                 # set when closed
+    stop_loss        = Column(Float, nullable=True)                 # valid for both LONG and SHORT
+    take_profit      = Column(Float, nullable=True)
+
+    exchange         = Column(String(50),  nullable=True)           # normalised exchange id
+    exchange_label   = Column(String(100), nullable=True)           # user-facing label
+    broker_order_id  = Column(String(200), nullable=True)           # real broker order id
+    broker_error     = Column(Text, nullable=True)                  # error if live order failed
+
+    open_trade_id    = Column(Integer, nullable=True)               # TradeLog id for the open leg
+    close_trade_id   = Column(Integer, nullable=True)               # TradeLog id for the close leg
+
+    opened_at        = Column(DateTime, default=datetime.utcnow)
+    closed_at        = Column(DateTime, nullable=True)
 
 
 class Notification(Base):

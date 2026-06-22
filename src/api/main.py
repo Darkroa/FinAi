@@ -252,6 +252,35 @@ async def startup_event():
                 )""",
                 "CREATE INDEX IF NOT EXISTS idx_chat_feedback_hash ON chat_feedback(message_hash)",
                 "CREATE INDEX IF NOT EXISTS idx_chat_feedback_user ON chat_feedback(user_id)",
+                # Exness-style position tracking
+                """CREATE TABLE IF NOT EXISTS positions (
+                    id               SERIAL PRIMARY KEY,
+                    user_id          INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+                    ticker           VARCHAR(30) NOT NULL,
+                    side             VARCHAR(10) NOT NULL,
+                    status           VARCHAR(20) NOT NULL DEFAULT 'open',
+                    lot_size         FLOAT NOT NULL,
+                    contract_size    FLOAT NOT NULL DEFAULT 1.0,
+                    entry_price      FLOAT NOT NULL,
+                    close_price      FLOAT,
+                    leverage         FLOAT NOT NULL DEFAULT 1.0,
+                    margin           FLOAT NOT NULL,
+                    realized_pnl     FLOAT,
+                    stop_loss        FLOAT,
+                    take_profit      FLOAT,
+                    exchange         VARCHAR(50),
+                    exchange_label   VARCHAR(100),
+                    broker_order_id  VARCHAR(200),
+                    broker_error     TEXT,
+                    open_trade_id    INTEGER,
+                    close_trade_id   INTEGER,
+                    opened_at        TIMESTAMP DEFAULT NOW(),
+                    closed_at        TIMESTAMP
+                )""",
+                "CREATE INDEX IF NOT EXISTS idx_positions_user_status ON positions(user_id, status)",
+                "CREATE INDEX IF NOT EXISTS idx_positions_user_ticker ON positions(user_id, ticker)",
+                # Link trade_logs → positions
+                "ALTER TABLE trade_logs ADD COLUMN IF NOT EXISTS position_id INTEGER REFERENCES positions(id)",
             ]:
                 _conn.execute(_text(stmt))
             _conn.commit()
