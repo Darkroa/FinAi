@@ -44,8 +44,24 @@ app.include_router(router, prefix="/api")
 # ===================== Static Frontend Serving =====================
 FRONTEND_DIST = Path(__file__).parent.parent.parent / "frontend" / "dist"
 FINAPP_DIST = Path(__file__).parent.parent.parent / "finapp" / "dist"
+SERVER_DIST = Path(__file__).parent.parent.parent / "server" / "dist"
 
 app.mount("/uploads", StaticFiles(directory=str(UPLOADS_DIR)), name="uploads")
+
+# ── Server admin panel served at /server ──────────────────────────
+if SERVER_DIST.exists():
+    app.mount("/server/assets", StaticFiles(directory=str(SERVER_DIST / "assets")), name="server_assets")
+
+    @app.get("/server", include_in_schema=False)
+    async def serve_server_root():
+        return FileResponse(str(SERVER_DIST / "index.html"))
+
+    @app.get("/server/{full_path:path}", include_in_schema=False)
+    async def serve_server_spa(full_path: str):
+        candidate = SERVER_DIST / full_path
+        if candidate.exists() and candidate.is_file():
+            return FileResponse(str(candidate))
+        return FileResponse(str(SERVER_DIST / "index.html"))
 
 # ── Finapp (Expo web static export) served at /app ────────────────
 if FINAPP_DIST.exists():

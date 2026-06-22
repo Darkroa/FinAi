@@ -2136,7 +2136,7 @@ async def llm_status(current_user=Depends(get_current_user)):
     }
 
 
-@router.get("/admin/health")
+@router.get("/admin/health", dependencies=[Depends(require_admin)])
 async def admin_health_check(db: Session = Depends(get_db)):
     import time
     checks = {}
