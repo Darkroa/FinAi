@@ -33,7 +33,14 @@ except Exception as _e:
     logger.warning(f"NewsFetcher unavailable: {_e}")
     news_fetcher = None
 
-chat_history = []
+# Per-user chat history — keyed by user_email to prevent cross-user leakage
+_user_chat_histories: dict = {}
+
+def _get_history(user_email: str) -> list:
+    key = user_email or "_anon_"
+    if key not in _user_chat_histories:
+        _user_chat_histories[key] = []
+    return _user_chat_histories[key]
 
 
 # ── Tool functions ────────────────────────────────────────────────────────────
@@ -339,28 +346,28 @@ def chat_with_agent(
     Only falls back to the local engine when ALL cloud providers fail.
     """
     import os
-    global chat_history
     from src.utils.local_llm import local_chat
     from src.utils.llm import _PROVIDERS
     from langchain_openai import ChatOpenAI
 
+    # Use per-user history to prevent cross-user leakage
+    user_history = _get_history(user_email)
+
     # Build messages (same for every provider attempt)
     tool_descriptions = "\n".join([f"- {t.name}: {t.description}" for t in tools])
 
-    auto_context = ""
-    try:
-        # Always inject the full live snapshot: datetime + crypto + FX + indexes + commodities
-        auto_context = build_full_context()
-    except Exception:
+    # Use caller-supplied market_context if provided; only auto-build full context otherwise
+    if market_context:
+        combined_context = market_context
+    else:
         try:
-            auto_context = get_datetime_context()
+            combined_context = build_full_context()
         except Exception:
-            pass
+            try:
+                combined_context = get_datetime_context()
+            except Exception:
+                combined_context = ""
 
-    # Merge auto-fetched context with any caller-supplied context (deduplicate)
-    combined_context = auto_context if auto_context else market_context
-    if auto_context and market_context and market_context not in auto_context:
-        combined_context = f"{auto_context}\n\n{market_context}"
     market_block = f"\n\n{combined_context}\n" if combined_context else ""
 
     system_content = (
@@ -373,7 +380,7 @@ def chat_with_agent(
     )
 
     messages = [{"role": "system", "content": system_content}]
-    for h in chat_history[-10:]:
+    for h in user_history[-10:]:
         messages.append(h)
     messages.append({"role": "user", "content": message})
 
@@ -409,8 +416,11 @@ def chat_with_agent(
                         reply = final.content
                         break
 
-            chat_history.append({"role": "user",      "content": message})
-            chat_history.append({"role": "assistant",  "content": reply})
+            user_history.append({"role": "user",      "content": message})
+            user_history.append({"role": "assistant",  "content": reply})
+            # Trim to last 40 messages (20 turns) per user
+            if len(user_history) > 40:
+                _user_chat_histories[user_email or "_anon_"] = user_history[-40:]
             logger.debug(f"Fin responded via [{name.upper()}] ({model_id})")
             return reply
 
@@ -423,8 +433,8 @@ def chat_with_agent(
     logger.warning(f"Fin: all cloud providers failed (last: {last_error}) → Local Intelligence Engine")
     try:
         reply = local_chat(message, user_email)
-        chat_history.append({"role": "user",     "content": message})
-        chat_history.append({"role": "assistant", "content": reply})
+        user_history.append({"role": "user",     "content": message})
+        user_history.append({"role": "assistant", "content": reply})
         return reply
     except Exception as e:
         logger.error(f"Local fallback also failed: {e}")

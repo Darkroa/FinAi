@@ -64,7 +64,7 @@ class FinEventBot:
         self.total_pnl       = 0.0
         self.started_at      = None
         self.events_generated = 0
-        # key: ticker → {entry_price, qty, margin, opened_at}
+        # key: ticker → {side: "long"|"short", entry_price, qty, margin, opened_at}
         self.open_positions: Dict[str, dict] = {}
 
     # ── Control ──────────────────────────────────────────────────────────────
@@ -126,7 +126,9 @@ class FinEventBot:
             return
 
         with SessionLocal() as db:
-            cutoff = now - timedelta(hours=24)
+            # Only process events created after bot started (prevents re-firing on restart)
+            startup_cutoff = self.started_at or now
+            cutoff = max(now - timedelta(hours=1), startup_cutoff)
             events = (
                 db.query(Event)
                 .filter(
@@ -150,7 +152,11 @@ class FinEventBot:
                     continue
 
                 affected      = [t.upper() for t in (ev.tickers_affected or [])]
-                trade_tickers = [t for t in self.tickers if t in affected] or self.tickers[:1]
+                # Only trade tickers that match the event — never fall back to an unrelated ticker
+                trade_tickers = [t for t in self.tickers if t in affected]
+                if not trade_tickers:
+                    self._processed_ids.add(ev.id)
+                    continue
 
                 for ticker in trade_tickers[:2]:
                     if self._trades_today >= self.max_trades_per_day:
@@ -321,19 +327,40 @@ class FinEventBot:
                 f"Impact {event.impact_score}/10 | {event.sentiment}"
             )
 
-            # ── Track open position ───────────────────────────────────────
+            # ── Track open position (supports both long and short) ───────
             pnl_value = None
+            existing  = self.open_positions.get(ticker)
+
             if action == "BUY":
-                self.open_positions[ticker] = {
-                    "entry_price": price,
-                    "qty":         qty,
-                    "margin":      self.capital_per_trade,
-                    "opened_at":   datetime.utcnow().isoformat(),
-                }
-            elif action == "SELL" and ticker in self.open_positions:
-                op = self.open_positions.pop(ticker)
-                pnl_value = round((price - op["entry_price"]) * op["qty"], 4)
-                self.total_pnl = round(self.total_pnl + pnl_value, 4)
+                if existing and existing.get("side") == "short":
+                    # Close existing short on bullish event
+                    pnl_value = round((existing["entry_price"] - price) * existing["qty"], 4)
+                    self.total_pnl = round(self.total_pnl + pnl_value, 4)
+                    self.open_positions.pop(ticker)
+                elif not existing:
+                    # Open new long position
+                    self.open_positions[ticker] = {
+                        "side":        "long",
+                        "entry_price": price,
+                        "qty":         qty,
+                        "margin":      self.capital_per_trade,
+                        "opened_at":   datetime.utcnow().isoformat(),
+                    }
+            elif action == "SELL":
+                if existing and existing.get("side") == "long":
+                    # Close existing long on bearish event
+                    pnl_value = round((price - existing["entry_price"]) * existing["qty"], 4)
+                    self.total_pnl = round(self.total_pnl + pnl_value, 4)
+                    self.open_positions.pop(ticker)
+                elif not existing:
+                    # Open new short position
+                    self.open_positions[ticker] = {
+                        "side":        "short",
+                        "entry_price": price,
+                        "qty":         qty,
+                        "margin":      self.capital_per_trade,
+                        "opened_at":   datetime.utcnow().isoformat(),
+                    }
 
             log = TradeLog(
                 user_id      = self.user_id,
@@ -343,7 +370,7 @@ class FinEventBot:
                 qty          = qty,
                 pnl          = pnl_value,
                 reason       = reason,
-                paper        = True,        # always paper — own execution, no balance touch
+                paper        = self.paper,
                 exchange     = "EventBot",
             )
             log.is_event_bot = True  # excluded from manual open positions list
