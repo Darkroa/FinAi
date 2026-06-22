@@ -52,7 +52,7 @@ CORS_ORIGIN=*
 CORS_METHODS=POST,GET,PUT,DELETE
 CORS_CREDENTIALS=true
 DATABASE_PROVIDER=postgresql
-DATABASE_CONNECTION_URI=${DATABASE_URL}
+DATABASE_CONNECTION_URI=${DATABASE_URL:-}
 DATABASE_CONNECTION_CLIENT_NAME=evolution
 DATABASE_SAVE_DATA_INSTANCE=true
 DATABASE_SAVE_DATA_NEW_MESSAGE=true
@@ -67,7 +67,7 @@ DATABASE_DELETE_MESSAGE=false
 CACHE_REDIS_ENABLED=false
 CACHE_LOCAL_ENABLED=true
 CACHE_LOCAL_TTL=86400
-AUTHENTICATION_API_KEY=${EVOLUTION_API_KEY}
+AUTHENTICATION_API_KEY=${EVOLUTION_API_KEY:-}
 AUTHENTICATION_EXPOSE_IN_FETCH_INSTANCES=false
 ENVEOF
 echo "✅ evolution-api/.env written"
@@ -99,13 +99,17 @@ for PID_DIR in /proc/[0-9]*; do
 done
 
 if [ "$EVO_RUNNING" -eq 0 ]; then
-    echo "→ Starting Evolution API on port 8080..."
-    cd /home/runner/workspace/evolution-api
-    npm run start:prod &
-    EVO_PID=$!
-    echo "$EVO_PID" > "$PIDFILE_DIR/evolution.pid"
-    echo "Evolution API started (PID: $EVO_PID)"
-    sleep 3
+    if [ -f /home/runner/workspace/evolution-api/dist/main.js ]; then
+        echo "→ Starting Evolution API on port 8080..."
+        cd /home/runner/workspace/evolution-api
+        npm run start:prod &
+        EVO_PID=$!
+        echo "$EVO_PID" > "$PIDFILE_DIR/evolution.pid"
+        echo "Evolution API started (PID: $EVO_PID)"
+        sleep 3
+    else
+        echo "⚠️  Evolution API not built (dist/main.js missing) — skipping. Run 'npm run build' in evolution-api/ to enable."
+    fi
 fi
 
 # ── React frontend (Vite) ──────────────────────────────────────────────────────
