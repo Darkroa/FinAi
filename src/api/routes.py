@@ -4,7 +4,7 @@ from fastapi import (
     WebSocket, WebSocketDisconnect
 )
 from datetime import datetime, timedelta
-import random, string, base64, io, os
+import random, string, base64, io, os, re
 from dotenv import load_dotenv
 load_dotenv()
 
