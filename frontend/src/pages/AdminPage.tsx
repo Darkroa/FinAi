@@ -26,7 +26,7 @@ import {
   Server, ShoppingBag, Package, DollarSign, X, Star, ChevronDown, Clock, Monitor, Download,
   BarChart2, ThumbsUp, ThumbsDown,
 } from 'lucide-react'
-import { adminGetUserActivity, adminClearUserActivity, getWhatsAppEvStatus, getWhatsAppQR } from '../lib/api'
+import { adminGetUserActivity, adminClearUserActivity, getWhatsAppEvStatus, getWhatsAppQR, adminGetEvolutionConfig, adminSaveEvolutionConfig } from '../lib/api'
 
 type Tab = 'users' | 'transactions' | 'notifications' | 'wallet-config' | 'api-users' | 'support' | 'health' | 'subscriptions' | 'visitors' | 'bonuses' | 'referrals' | 'ads' | 'products' | 'testimonials' | 'activity' | 'platform-stats' | 'whatsapp-bot'
 
@@ -116,6 +116,14 @@ export default function AdminPage() {
   const [evQr, setEvQr] = useState<any>(null)
   const [evStatusLoading, setEvStatusLoading] = useState(false)
   const [evQrLoading, setEvQrLoading] = useState(false)
+  const [evoCfg, setEvoCfg] = useState<{ api_url: string; api_key: string; instance: string }>({
+    api_url: 'http://localhost:8080', api_key: '', instance: 'FinAiEvobots',
+  })
+  const [evoCfgHint, setEvoCfgHint] = useState('')
+  const [evoCfgKeySet, setEvoCfgKeySet] = useState(false)
+  const [evoCfgSaving, setEvoCfgSaving] = useState(false)
+  const [evoCfgSource, setEvoCfgSource] = useState<'db' | 'env' | 'none'>('none')
+  const [showEvoKey, setShowEvoKey] = useState(false)
 
   // Notification form
   const [notifTitle, setNotifTitle] = useState('')
@@ -223,8 +231,19 @@ export default function AdminPage() {
     if (t === 'whatsapp-bot') {
       setEvStatusLoading(true)
       try {
-        const res = await getWhatsAppEvStatus()
-        setEvStatus(res.data)
+        const [statusRes, cfgRes] = await Promise.allSettled([
+          getWhatsAppEvStatus(),
+          adminGetEvolutionConfig(),
+        ])
+        if (statusRes.status === 'fulfilled') setEvStatus(statusRes.value.data)
+        else setEvStatus(null)
+        if (cfgRes.status === 'fulfilled') {
+          const c = cfgRes.value.data
+          setEvoCfg({ api_url: c.api_url ?? 'http://localhost:8080', api_key: '', instance: c.instance ?? 'FinAiEvobots' })
+          setEvoCfgHint(c.api_key_hint ?? '')
+          setEvoCfgKeySet(!!c.api_key_set)
+          setEvoCfgSource(c.source ?? 'none')
+        }
       } catch { setEvStatus(null) }
       finally { setEvStatusLoading(false) }
     }
@@ -2867,35 +2886,141 @@ export default function AdminPage() {
             )}
           </div>
 
+          {/* Config Form */}
+          <div className="bg-[#161a1e] border border-[#2b3139] rounded-2xl p-5">
+            <div className="flex items-center justify-between mb-4">
+              <div>
+                <p className="text-[10px] font-semibold text-[#848e9c] uppercase tracking-wide">Configure Evolution API</p>
+                <p className="text-[10px] text-[#4a5568] mt-0.5">
+                  Saved to database — persists across restarts.
+                  {evoCfgSource === 'db' && <span className="ml-1 text-[#0ecb81]">✓ Loaded from DB</span>}
+                  {evoCfgSource === 'env' && <span className="ml-1 text-[#f0b90b]">⚡ From env secret</span>}
+                  {evoCfgSource === 'none' && <span className="ml-1 text-[#f6465d]">✗ Not configured</span>}
+                </p>
+              </div>
+              <Key size={14} className="text-[#f0b90b]" />
+            </div>
+
+            <div className="space-y-4">
+              {/* API URL */}
+              <div>
+                <label className="text-[10px] font-medium text-[#848e9c] block mb-1.5">
+                  Evolution API URL
+                </label>
+                <input
+                  type="text"
+                  value={evoCfg.api_url}
+                  onChange={e => setEvoCfg(p => ({ ...p, api_url: e.target.value }))}
+                  placeholder="http://localhost:8080"
+                  className="w-full bg-[#0b0e11] border border-[#2b3139] rounded-xl px-3 py-2.5 text-sm text-[#eaecef] font-mono focus:outline-none focus:border-[#f0b90b] transition"
+                />
+                <p className="text-[10px] text-[#4a5568] mt-1">Where your Evolution API server is running</p>
+              </div>
+
+              {/* Instance Name */}
+              <div>
+                <label className="text-[10px] font-medium text-[#848e9c] block mb-1.5">
+                  Instance Name
+                </label>
+                <input
+                  type="text"
+                  value={evoCfg.instance}
+                  onChange={e => setEvoCfg(p => ({ ...p, instance: e.target.value }))}
+                  placeholder="FinAiEvobots"
+                  className="w-full bg-[#0b0e11] border border-[#2b3139] rounded-xl px-3 py-2.5 text-sm text-[#eaecef] font-mono focus:outline-none focus:border-[#f0b90b] transition"
+                />
+              </div>
+
+              {/* API Key */}
+              <div>
+                <label className="text-[10px] font-medium text-[#848e9c] block mb-1.5">
+                  API Key
+                  {evoCfgKeySet && (
+                    <span className="ml-2 text-[#0ecb81]">
+                      ✓ Set — current: <span className="font-mono">{evoCfgHint || '••••••'}</span>
+                    </span>
+                  )}
+                </label>
+                <div className="relative">
+                  <input
+                    type={showEvoKey ? 'text' : 'password'}
+                    value={evoCfg.api_key}
+                    onChange={e => setEvoCfg(p => ({ ...p, api_key: e.target.value }))}
+                    placeholder={evoCfgKeySet ? 'Enter new key to replace existing…' : 'Paste your Evolution API key…'}
+                    className="w-full bg-[#0b0e11] border border-[#2b3139] rounded-xl px-3 py-2.5 pr-10 text-sm text-[#eaecef] font-mono focus:outline-none focus:border-[#f0b90b] transition"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowEvoKey(v => !v)}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-[#4a5568] hover:text-[#848e9c] transition"
+                  >
+                    {showEvoKey ? <Eye size={13} /> : <Eye size={13} className="opacity-50" />}
+                  </button>
+                </div>
+                <p className="text-[10px] text-[#4a5568] mt-1">
+                  Same key as <span className="font-mono">AUTHENTICATION_API_KEY</span> in your Evolution API server config
+                </p>
+              </div>
+
+              <button
+                onClick={async () => {
+                  if (!evoCfg.api_key && !evoCfgKeySet) {
+                    toast.error('Please enter an API key')
+                    return
+                  }
+                  setEvoCfgSaving(true)
+                  try {
+                    const payload: { api_url?: string; api_key?: string; instance?: string } = {
+                      api_url: evoCfg.api_url,
+                      instance: evoCfg.instance,
+                    }
+                    if (evoCfg.api_key.trim()) payload.api_key = evoCfg.api_key
+                    await adminSaveEvolutionConfig(payload)
+                    toast.success('Evolution API config saved and applied ✓')
+                    setEvoCfg(p => ({ ...p, api_key: '' }))
+                    setEvoCfgKeySet(true)
+                    setEvoCfgSource('db')
+                    // Re-fetch status with new config
+                    const statusRes = await getWhatsAppEvStatus()
+                    setEvStatus(statusRes.data)
+                  } catch {
+                    toast.error('Failed to save Evolution API config')
+                  } finally {
+                    setEvoCfgSaving(false)
+                  }
+                }}
+                disabled={evoCfgSaving}
+                className="flex items-center gap-2 bg-[#f0b90b] hover:bg-[#d4a30a] disabled:opacity-60 text-black font-semibold px-5 py-2.5 rounded-xl text-sm transition w-full sm:w-auto"
+              >
+                <Save size={13} />
+                {evoCfgSaving ? 'Saving…' : 'Save & Apply Config'}
+              </button>
+            </div>
+          </div>
+
           {/* Config Summary */}
           <div className="bg-[#161a1e] border border-[#2b3139] rounded-2xl p-5">
             <div className="flex items-center justify-between mb-4">
-              <p className="text-[10px] font-semibold text-[#848e9c] uppercase tracking-wide">Bot Configuration</p>
-              <span className="text-[9px] text-[#848e9c] bg-[#2b3139] px-2 py-0.5 rounded-full">Only API key is a secret</span>
+              <p className="text-[10px] font-semibold text-[#848e9c] uppercase tracking-wide">Active Configuration</p>
+              <span className="text-[9px] text-[#848e9c] bg-[#2b3139] px-2 py-0.5 rounded-full">read-only</span>
             </div>
             <div className="space-y-2">
               {[
-                { label: 'API URL',       value: evStatus?.api_url ?? 'http://localhost:8080', secret: false },
-                { label: 'Instance Name', value: evStatus?.instanceName ?? 'FinAiEvobots',     secret: false },
-                { label: 'API Key',       value: evStatus?.api_key_set ? '✓ Set' : '✗ Missing — add EVOLUTION_API_KEY secret', secret: true },
-                { label: 'Webhook Path',  value: '/api/users/whatsapp-webhook',                secret: false },
+                { label: 'API URL',       value: evStatus?.api_url ?? evoCfg.api_url, secret: false },
+                { label: 'Instance Name', value: evStatus?.instanceName ?? evoCfg.instance, secret: false },
+                { label: 'API Key',       value: evoCfgKeySet ? `✓ Set  ${evoCfgHint}` : '✗ Missing — enter key above', secret: true },
+                { label: 'Webhook Path',  value: '/api/users/whatsapp-webhook', secret: false },
               ].map(row => (
                 <div key={row.label} className="flex justify-between items-center py-2 border-b border-[#2b3139]/50 gap-3">
-                  <div>
-                    <p className="text-xs text-[#848e9c]">{row.label}</p>
-                    {row.secret && <p className="text-[9px] font-mono text-[#4a5568] mt-0.5">$EVOLUTION_API_KEY</p>}
-                  </div>
-                  <span className={`text-xs font-mono text-right shrink-0 ${
+                  <p className="text-xs text-[#848e9c] shrink-0">{row.label}</p>
+                  <span className={`text-xs font-mono text-right ${
                     row.secret
-                      ? evStatus?.api_key_set ? 'text-[#0ecb81]' : 'text-[#f6465d]'
+                      ? evoCfgKeySet ? 'text-[#0ecb81]' : 'text-[#f6465d]'
                       : 'text-[#eaecef]'
                   }`}>{row.value}</span>
                 </div>
               ))}
             </div>
-            <p className="text-[9px] text-[#4a5568] mt-4">
-              URL and instance are hardcoded defaults. Only <span className="font-mono">EVOLUTION_API_KEY</span> must be set as a Replit secret.
-            </p>
           </div>
         </div>
       )}

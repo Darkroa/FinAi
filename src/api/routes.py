@@ -3668,6 +3668,69 @@ async def get_whatsapp_ev_status(current_user=Depends(get_current_user)):
     return evolution_status()
 
 
+class EvolutionConfigUpdate(BaseModel):
+    api_url: Optional[str] = None
+    api_key: Optional[str] = None
+    instance: Optional[str] = None
+
+
+@router.get("/admin/evolution-config", dependencies=[Depends(require_admin)])
+async def admin_get_evolution_config(db: Session = Depends(get_db)):
+    """Return current Evolution API config (api_key masked, never exposed)."""
+    def _cfg(key: str):
+        row = db.query(WalletConfig).filter(WalletConfig.key == key).first()
+        return row.value if row and row.value else None
+
+    db_url  = _cfg("evo_api_url")
+    db_inst = _cfg("evo_instance")
+    db_key  = _cfg("evo_api_key")
+
+    actual_key = db_key or os.getenv("EVOLUTION_API_KEY", "")
+    return {
+        "api_url":      db_url  or os.getenv("EVOLUTION_API_URL",  "http://localhost:8080"),
+        "instance":     db_inst or os.getenv("EVOLUTION_INSTANCE", "FinAiEvobots"),
+        "api_key_set":  bool(actual_key),
+        "api_key_hint": (actual_key[:6] + "•••••") if actual_key else "",
+        "source":       "db" if db_key else ("env" if os.getenv("EVOLUTION_API_KEY") else "none"),
+    }
+
+
+@router.post("/admin/evolution-config", dependencies=[Depends(require_admin)])
+async def admin_save_evolution_config(
+    data: EvolutionConfigUpdate,
+    current_user=Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Persist Evolution API config to WalletConfig and hot-apply to os.environ."""
+    uid = current_user["id"] if isinstance(current_user, dict) else current_user.id
+
+    def _upsert(key: str, value: str, label: str):
+        row = db.query(WalletConfig).filter(WalletConfig.key == key).first()
+        if row:
+            row.value = value
+            row.updated_by = uid
+        else:
+            db.add(WalletConfig(key=key, value=value, label=label, updated_by=uid))
+
+    if data.api_url is not None:
+        cleaned = data.api_url.strip().rstrip("/")
+        _upsert("evo_api_url", cleaned, "Evolution API URL")
+        os.environ["EVOLUTION_API_URL"] = cleaned
+
+    if data.api_key is not None and data.api_key.strip():
+        cleaned_key = data.api_key.strip()
+        _upsert("evo_api_key", cleaned_key, "Evolution API Key")
+        os.environ["EVOLUTION_API_KEY"] = cleaned_key
+
+    if data.instance is not None:
+        cleaned_inst = data.instance.strip()
+        _upsert("evo_instance", cleaned_inst, "Evolution Instance Name")
+        os.environ["EVOLUTION_INSTANCE"] = cleaned_inst
+
+    db.commit()
+    return {"ok": True, "message": "Evolution API config saved and applied immediately."}
+
+
 # ===================== WhatsApp Twilio Webhook =====================
 # In-memory WhatsApp link codes: code → {user_id, phone}
 _whatsapp_link_codes: dict = {}

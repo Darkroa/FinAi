@@ -390,6 +390,27 @@ async def startup_event():
     except Exception as _prod_err:
         logger.warning(f"Product seed skipped: {_prod_err}")
 
+    # ── Load Evolution API config from WalletConfig into os.environ ─────────────
+    try:
+        from src.database.session import SessionLocal as _SL_EVO
+        from src.database.models import WalletConfig as _WC_EVO
+        with _SL_EVO() as _ev_db:
+            for _ev_db_key, _ev_env_key in [
+                ("evo_api_url",  "EVOLUTION_API_URL"),
+                ("evo_api_key",  "EVOLUTION_API_KEY"),
+                ("evo_instance", "EVOLUTION_INSTANCE"),
+            ]:
+                _ev_row = _ev_db.query(_WC_EVO).filter(_WC_EVO.key == _ev_db_key).first()
+                if _ev_row and _ev_row.value:
+                    os.environ[_ev_env_key] = _ev_row.value
+            _has_evo = bool(os.environ.get("EVOLUTION_API_KEY"))
+            if _has_evo:
+                logger.success("✅ Evolution API config loaded from database")
+            else:
+                logger.info("ℹ️  EVOLUTION_API_KEY not set — WhatsApp via Evolution disabled")
+    except Exception as _ev_err:
+        logger.warning(f"Evolution API config load skipped: {_ev_err}")
+
     # Scheduler + Telegram webhook run in background so startup finishes fast
     asyncio.create_task(_deferred_init())
     logger.success("🚀 FinAi API started — background init in progress")
