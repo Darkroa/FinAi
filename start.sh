@@ -39,6 +39,12 @@ kill_by_cmdline "vite --port 5000"
 sleep 3
 echo "✅ Old processes cleared"
 
+# ── Ensure EVOLUTION_API_KEY has a stable default so both services agree ──────
+if [ -z "${EVOLUTION_API_KEY:-}" ]; then
+    export EVOLUTION_API_KEY="finai-evo-default-key-2024"
+    echo "ℹ️  EVOLUTION_API_KEY not set — using built-in default key"
+fi
+
 # ── Generate evolution-api/.env from runtime secrets ──────────────────────────
 echo "→ Writing evolution-api/.env..."
 cat > /home/runner/workspace/evolution-api/.env << ENVEOF
