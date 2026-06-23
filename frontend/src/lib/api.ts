@@ -90,6 +90,8 @@ export const adminUpdateWalletConfig = (data: { key: string; value: string; labe
 export const adminGetEvolutionConfig = () => api.get('/admin/evolution-config')
 export const adminSaveEvolutionConfig = (data: { api_url?: string; api_key?: string; instance?: string }) =>
   api.post('/admin/evolution-config', data)
+export const adminTestEvolutionConnection = (phone: string) =>
+  api.post('/admin/evolution-test', { phone })
 export const adminGetApiKeyUsers = () => api.get('/admin/api-key-users')
 export const adminPushNotification = (payload: {
   title: string; message: string; target_all: boolean; target_user_id?: number | null

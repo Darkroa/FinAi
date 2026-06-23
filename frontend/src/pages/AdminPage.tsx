@@ -26,7 +26,7 @@ import {
   Server, ShoppingBag, Package, DollarSign, X, Star, ChevronDown, Clock, Monitor, Download,
   BarChart2, ThumbsUp, ThumbsDown,
 } from 'lucide-react'
-import { adminGetUserActivity, adminClearUserActivity, getWhatsAppEvStatus, getWhatsAppQR, adminGetEvolutionConfig, adminSaveEvolutionConfig } from '../lib/api'
+import { adminGetUserActivity, adminClearUserActivity, getWhatsAppEvStatus, getWhatsAppQR, adminGetEvolutionConfig, adminSaveEvolutionConfig, adminTestEvolutionConnection } from '../lib/api'
 
 type Tab = 'users' | 'transactions' | 'notifications' | 'wallet-config' | 'api-users' | 'support' | 'health' | 'subscriptions' | 'visitors' | 'bonuses' | 'referrals' | 'ads' | 'products' | 'testimonials' | 'activity' | 'platform-stats' | 'whatsapp-bot'
 
@@ -124,6 +124,9 @@ export default function AdminPage() {
   const [evoCfgSaving, setEvoCfgSaving] = useState(false)
   const [evoCfgSource, setEvoCfgSource] = useState<'db' | 'env' | 'none'>('none')
   const [showEvoKey, setShowEvoKey] = useState(false)
+  const [evoTestPhone, setEvoTestPhone] = useState('')
+  const [evoTesting, setEvoTesting] = useState(false)
+  const [evoTestResult, setEvoTestResult] = useState<{ ok: boolean; msg: string } | null>(null)
 
   // Notification form
   const [notifTitle, setNotifTitle] = useState('')
@@ -3021,6 +3024,69 @@ export default function AdminPage() {
                 </div>
               ))}
             </div>
+          </div>
+
+          {/* Test Connection */}
+          <div className="bg-[#161a1e] border border-[#2b3139] rounded-2xl p-5">
+            <div className="flex items-center gap-2 mb-4">
+              <Send size={14} className="text-[#0ecb81]" />
+              <div>
+                <p className="text-[10px] font-semibold text-[#848e9c] uppercase tracking-wide">Test Connection</p>
+                <p className="text-[10px] text-[#4a5568] mt-0.5">Send a test WhatsApp message to verify the API is working</p>
+              </div>
+            </div>
+
+            <div className="flex flex-col sm:flex-row gap-3">
+              <div className="flex-1">
+                <label className="text-[10px] font-medium text-[#848e9c] block mb-1.5">
+                  Phone number (with country code)
+                </label>
+                <input
+                  type="tel"
+                  value={evoTestPhone}
+                  onChange={e => { setEvoTestPhone(e.target.value); setEvoTestResult(null) }}
+                  placeholder="+1234567890"
+                  className="w-full bg-[#0b0e11] border border-[#2b3139] rounded-xl px-3 py-2.5 text-sm text-[#eaecef] font-mono focus:outline-none focus:border-[#0ecb81] transition"
+                />
+                <p className="text-[10px] text-[#4a5568] mt-1">Must be a number registered on WhatsApp</p>
+              </div>
+              <div className="flex items-end">
+                <button
+                  onClick={async () => {
+                    if (!evoTestPhone.trim()) { toast.error('Enter a phone number'); return }
+                    setEvoTesting(true)
+                    setEvoTestResult(null)
+                    try {
+                      const res = await adminTestEvolutionConnection(evoTestPhone.trim())
+                      setEvoTestResult({ ok: true, msg: res.data.message })
+                      toast.success('Test message sent ✓')
+                    } catch (err: any) {
+                      const detail = err?.response?.data?.detail ?? 'Failed to send test message'
+                      setEvoTestResult({ ok: false, msg: detail })
+                      toast.error(detail)
+                    } finally {
+                      setEvoTesting(false)
+                    }
+                  }}
+                  disabled={evoTesting || !evoTestPhone.trim()}
+                  className="flex items-center gap-2 bg-[#0ecb81] hover:bg-[#0ab36f] disabled:opacity-50 disabled:cursor-not-allowed text-black font-semibold px-5 py-2.5 rounded-xl text-sm transition whitespace-nowrap"
+                >
+                  <Send size={13} />
+                  {evoTesting ? 'Sending…' : 'Send Test'}
+                </button>
+              </div>
+            </div>
+
+            {evoTestResult && (
+              <div className={`mt-3 flex items-start gap-2 px-3 py-2.5 rounded-xl text-xs ${
+                evoTestResult.ok
+                  ? 'bg-[#0ecb81]/10 border border-[#0ecb81]/30 text-[#0ecb81]'
+                  : 'bg-[#f6465d]/10 border border-[#f6465d]/30 text-[#f6465d]'
+              }`}>
+                <span className="text-base leading-none">{evoTestResult.ok ? '✅' : '❌'}</span>
+                <span>{evoTestResult.msg}</span>
+              </div>
+            )}
           </div>
         </div>
       )}

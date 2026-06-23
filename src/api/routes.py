@@ -3731,6 +3731,37 @@ async def admin_save_evolution_config(
     return {"ok": True, "message": "Evolution API config saved and applied immediately."}
 
 
+class EvolutionTestRequest(BaseModel):
+    phone: str
+
+
+@router.post("/admin/evolution-test", dependencies=[Depends(require_admin)])
+async def admin_test_evolution(data: EvolutionTestRequest):
+    """Send a test WhatsApp message to verify the Evolution API connection."""
+    from src.notifications.whatsapp_provider import evolution_send, _ev_configured
+    if not _ev_configured():
+        raise HTTPException(
+            status_code=400,
+            detail="Evolution API is not configured. Please set the API URL, instance and API key first."
+        )
+    phone = data.phone.strip()
+    if not phone:
+        raise HTTPException(status_code=400, detail="Phone number is required.")
+
+    test_text = (
+        "✅ *FinAi WhatsApp Test*\n\n"
+        "This is a test message from your FinAi platform.\n"
+        "Your Evolution API connection is working correctly! 🎉"
+    )
+    ok = evolution_send(phone, test_text)
+    if ok:
+        return {"ok": True, "message": f"Test message sent to {phone}"}
+    raise HTTPException(
+        status_code=502,
+        detail="Evolution API returned an error. Check that the instance is connected and the phone number is on WhatsApp."
+    )
+
+
 # ===================== WhatsApp Twilio Webhook =====================
 # In-memory WhatsApp link codes: code → {user_id, phone}
 _whatsapp_link_codes: dict = {}
