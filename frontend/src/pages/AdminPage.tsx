@@ -26,7 +26,7 @@ import {
   Server, ShoppingBag, Package, DollarSign, X, Star, ChevronDown, Clock, Monitor, Download,
   BarChart2, ThumbsUp, ThumbsDown,
 } from 'lucide-react'
-import { adminGetUserActivity, adminClearUserActivity, getWhatsAppEvStatus, getWhatsAppQR, adminGetEvolutionConfig, adminSaveEvolutionConfig, adminTestEvolutionConnection } from '../lib/api'
+import { adminGetUserActivity, adminClearUserActivity, getWhatsAppEvStatus, getWhatsAppQR, adminGetEvolutionConfig, adminSaveEvolutionConfig, adminTestEvolutionConnection, adminGetWhatsAppPairingCode } from '../lib/api'
 
 type Tab = 'users' | 'transactions' | 'notifications' | 'wallet-config' | 'api-users' | 'support' | 'health' | 'subscriptions' | 'visitors' | 'bonuses' | 'referrals' | 'ads' | 'products' | 'testimonials' | 'activity' | 'platform-stats' | 'whatsapp-bot'
 
@@ -116,6 +116,10 @@ export default function AdminPage() {
   const [evQr, setEvQr] = useState<any>(null)
   const [evStatusLoading, setEvStatusLoading] = useState(false)
   const [evQrLoading, setEvQrLoading] = useState(false)
+  const [evLinkMode, setEvLinkMode] = useState<'qr' | 'phone'>('phone')
+  const [evPairingPhone, setEvPairingPhone] = useState('')
+  const [evPairingResult, setEvPairingResult] = useState<any>(null)
+  const [evPairingLoading, setEvPairingLoading] = useState(false)
   const [evoCfg, setEvoCfg] = useState<{ api_url: string; api_key: string; instance: string }>({
     api_url: 'http://localhost:8080', api_key: '', instance: 'FinAiEvobots',
   })
@@ -2845,57 +2849,129 @@ export default function AdminPage() {
             )}
           </div>
 
-          {/* QR Code Card */}
+          {/* Link Device Card */}
           <div className="bg-[#161a1e] border border-[#2b3139] rounded-2xl p-5">
-            <div className="flex items-center justify-between mb-4">
-              <p className="text-[10px] font-semibold text-[#848e9c] uppercase tracking-wide">QR Code</p>
+            <p className="text-[10px] font-semibold text-[#848e9c] uppercase tracking-wide mb-3">Link WhatsApp Device</p>
+
+            {/* Mode toggle */}
+            <div className="flex gap-1 mb-4 bg-[#0b0e11] rounded-lg p-1">
               <button
-                onClick={async () => {
-                  setEvQrLoading(true)
-                  setEvQr(null)
-                  try {
-                    const res = await getWhatsAppQR()
-                    setEvQr(res.data)
-                  } catch (err: any) {
-                    const detail = err?.response?.data?.detail ?? err?.message ?? 'Failed to fetch QR code'
-                    setEvQr({ error: detail })
-                  } finally {
-                    setEvQrLoading(false)
-                  }
-                }}
-                disabled={evQrLoading}
-                className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-[#25d366]/10 hover:bg-[#25d366]/20 text-[#25d366] text-xs font-medium transition disabled:opacity-50"
+                onClick={() => { setEvLinkMode('phone'); setEvPairingResult(null) }}
+                className={`flex-1 py-1.5 text-xs font-medium rounded-md transition ${evLinkMode === 'phone' ? 'bg-[#25d366] text-black' : 'text-[#848e9c] hover:text-[#eaecef]'}`}
               >
-                <Download size={11} className={evQrLoading ? 'animate-spin' : ''} />
-                {evQrLoading ? 'Generating…' : 'Get QR Code'}
+                📱 Phone Number (Recommended)
+              </button>
+              <button
+                onClick={() => { setEvLinkMode('qr'); setEvQr(null) }}
+                className={`flex-1 py-1.5 text-xs font-medium rounded-md transition ${evLinkMode === 'qr' ? 'bg-[#25d366] text-black' : 'text-[#848e9c] hover:text-[#eaecef]'}`}
+              >
+                QR Code
               </button>
             </div>
-            {evQr ? (
-              evQr.error ? (
-                <div className="py-4 px-3 rounded-xl bg-[#f6465d]/10 border border-[#f6465d]/30 text-xs text-[#f6465d] leading-relaxed break-words">
-                  <p className="font-semibold mb-1">❌ Could not get QR code</p>
-                  <p className="text-[11px]">{evQr.error}</p>
-                  <p className="text-[10px] text-[#848e9c] mt-2">Make sure your Evolution API server is running and the URL in the config above is correct.</p>
-                </div>
-              ) : evQr.qrcode || evQr.base64 ? (
-                <div className="flex flex-col items-center gap-4">
-                  <img
-                    src={evQr.qrcode ?? evQr.base64}
-                    alt="WhatsApp QR Code"
-                    className="w-56 h-56 rounded-xl border border-[#2b3139] bg-white p-2"
+
+            {evLinkMode === 'phone' ? (
+              <div className="space-y-3">
+                <p className="text-[11px] text-[#848e9c] leading-relaxed">
+                  Enter your WhatsApp number with country code. You'll get an 8-digit code to enter in WhatsApp → <b>Settings → Linked Devices → Link with phone number</b>.
+                </p>
+                <div className="flex gap-2">
+                  <input
+                    type="tel"
+                    value={evPairingPhone}
+                    onChange={e => setEvPairingPhone(e.target.value)}
+                    placeholder="e.g. 447911123456"
+                    className="flex-1 bg-[#0b0e11] border border-[#2b3139] rounded-lg px-3 py-2 text-xs text-[#eaecef] placeholder-[#4a5568] focus:outline-none focus:border-[#25d366]"
                   />
-                  <p className="text-[10px] text-[#848e9c] text-center">
-                    Open WhatsApp → Settings → Linked Devices → Link a Device, then scan this code.
-                  </p>
+                  <button
+                    onClick={async () => {
+                      if (!evPairingPhone.trim()) return
+                      setEvPairingLoading(true)
+                      setEvPairingResult(null)
+                      try {
+                        const res = await adminGetWhatsAppPairingCode(evPairingPhone.trim())
+                        setEvPairingResult(res.data)
+                      } catch (err: any) {
+                        const detail = err?.response?.data?.detail ?? err?.message ?? 'Failed'
+                        setEvPairingResult({ error: detail })
+                      } finally {
+                        setEvPairingLoading(false)
+                      }
+                    }}
+                    disabled={evPairingLoading || !evPairingPhone.trim()}
+                    className="px-4 py-2 rounded-lg bg-[#25d366]/10 hover:bg-[#25d366]/20 text-[#25d366] text-xs font-medium transition disabled:opacity-50 whitespace-nowrap"
+                  >
+                    {evPairingLoading ? 'Getting…' : 'Get Code'}
+                  </button>
                 </div>
-              ) : (
-                <div className="py-6 text-center text-xs text-[#0ecb81]">
-                  Bot already connected — no QR code needed.
-                </div>
-              )
+
+                {evPairingResult && (
+                  evPairingResult.error ? (
+                    <div className="py-3 px-3 rounded-xl bg-[#f6465d]/10 border border-[#f6465d]/30 text-xs text-[#f6465d] break-words">
+                      <p className="font-semibold mb-1">❌ Failed</p>
+                      <p className="text-[11px]">{evPairingResult.error}</p>
+                    </div>
+                  ) : (
+                    <div className="py-4 px-4 rounded-xl bg-[#25d366]/10 border border-[#25d366]/30 text-center space-y-2">
+                      <p className="text-[10px] text-[#848e9c] uppercase tracking-wide">Your Pairing Code</p>
+                      <p className="text-3xl font-bold tracking-[0.3em] text-[#25d366] font-mono">
+                        {evPairingResult.pairing_code?.substring(0, 4)}-{evPairingResult.pairing_code?.substring(4)}
+                      </p>
+                      <p className="text-[10px] text-[#848e9c]">
+                        Open WhatsApp → Settings → Linked Devices → Link a Device → Link with phone number, then enter this code.
+                      </p>
+                      <p className="text-[10px] text-[#f0b90b]">⚠️ Code expires in ~60 seconds</p>
+                    </div>
+                  )
+                )}
+              </div>
             ) : (
-              <div className="py-8 text-center text-xs text-[#848e9c]">
-                Click Get QR Code to link your WhatsApp number to the bot.
+              <div className="space-y-3">
+                <div className="flex justify-end">
+                  <button
+                    onClick={async () => {
+                      setEvQrLoading(true)
+                      setEvQr(null)
+                      try {
+                        const res = await getWhatsAppQR()
+                        setEvQr(res.data)
+                      } catch (err: any) {
+                        const detail = err?.response?.data?.detail ?? err?.message ?? 'Failed to fetch QR code'
+                        setEvQr({ error: detail })
+                      } finally {
+                        setEvQrLoading(false)
+                      }
+                    }}
+                    disabled={evQrLoading}
+                    className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-[#25d366]/10 hover:bg-[#25d366]/20 text-[#25d366] text-xs font-medium transition disabled:opacity-50"
+                  >
+                    <Download size={11} className={evQrLoading ? 'animate-spin' : ''} />
+                    {evQrLoading ? 'Generating…' : 'Get QR Code'}
+                  </button>
+                </div>
+                {evQr ? (
+                  evQr.error ? (
+                    <div className="py-4 px-3 rounded-xl bg-[#f6465d]/10 border border-[#f6465d]/30 text-xs text-[#f6465d] leading-relaxed break-words">
+                      <p className="font-semibold mb-1">❌ Could not get QR code</p>
+                      <p className="text-[11px]">{evQr.error}</p>
+                    </div>
+                  ) : evQr.qrcode || evQr.base64 ? (
+                    <div className="flex flex-col items-center gap-3">
+                      <img
+                        src={evQr.qrcode ?? evQr.base64}
+                        alt="WhatsApp QR Code"
+                        className="w-52 h-52 rounded-xl border border-[#2b3139] bg-white p-2"
+                      />
+                      <p className="text-[10px] text-[#848e9c] text-center">
+                        Open WhatsApp → Settings → Linked Devices → Link a Device, then scan.
+                      </p>
+                      <p className="text-[10px] text-[#f0b90b] text-center">⚠️ If scanning fails, use Phone Number mode instead.</p>
+                    </div>
+                  ) : (
+                    <div className="py-6 text-center text-xs text-[#0ecb81]">Bot already connected — no QR needed.</div>
+                  )
+                ) : (
+                  <div className="py-8 text-center text-xs text-[#848e9c]">Click Get QR Code to generate a scannable code.</div>
+                )}
               </div>
             )}
           </div>

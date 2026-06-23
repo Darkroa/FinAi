@@ -3735,6 +3735,87 @@ class EvolutionTestRequest(BaseModel):
     phone: str
 
 
+class WhatsAppPairingRequest(BaseModel):
+    phone: str  # e.g. "15551234567" — digits only, with country code
+
+
+@router.post("/admin/whatsapp-pairing-code", dependencies=[Depends(require_admin)])
+async def admin_whatsapp_pairing_code(data: WhatsAppPairingRequest):
+    """
+    Delete + recreate the Evolution instance with a phone number so Baileys
+    requests a pairing code. Returns the 8-digit code for the admin to enter
+    in WhatsApp → Linked Devices → Link with phone number.
+    """
+    import requests as _req
+    base     = os.getenv("EVOLUTION_API_URL", "http://localhost:8080").rstrip("/")
+    key      = os.getenv("EVOLUTION_API_KEY", "")
+    instance = os.getenv("EVOLUTION_INSTANCE", "FinAiEvobots")
+
+    if not key:
+        raise HTTPException(status_code=503, detail="Evolution API key not configured.")
+
+    headers = {"apikey": key, "Content-Type": "application/json"}
+    phone   = re.sub(r"\D", "", data.phone.strip())
+    if len(phone) < 7:
+        raise HTTPException(status_code=400, detail="Invalid phone number.")
+
+    # 1. Delete existing instance (ignore 404)
+    try:
+        _req.delete(f"{base}/instance/delete/{instance}", headers=headers, timeout=10)
+    except Exception:
+        pass
+
+    import time as _time
+    _time.sleep(1)
+
+    # 2. Recreate with phone number so Baileys generates a pairing code
+    try:
+        cr = _req.post(
+            f"{base}/instance/create",
+            headers=headers,
+            json={"instanceName": instance, "qrcode": True,
+                  "integration": "WHATSAPP-BAILEYS", "number": phone},
+            timeout=20,
+        )
+        if cr.status_code not in (200, 201):
+            raise HTTPException(status_code=502,
+                detail=f"Could not create instance ({cr.status_code}): {cr.text[:200]}")
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(status_code=503, detail=f"Evolution API unreachable: {exc}")
+
+    _time.sleep(2)
+
+    # 3. Connect — the response includes pairingCode when number is set
+    try:
+        conn = _req.get(
+            f"{base}/instance/connect/{instance}",
+            headers=headers,
+            timeout=20,
+        )
+        if conn.status_code != 200:
+            raise HTTPException(status_code=502,
+                detail=f"Connect failed ({conn.status_code}): {conn.text[:200]}")
+        d = conn.json()
+        pairing_code = d.get("pairingCode") or d.get("qrcode", {}).get("pairingCode", "")
+        base64_qr    = d.get("base64") or d.get("qrcode", {}).get("base64", "")
+        if not pairing_code:
+            raise HTTPException(status_code=502,
+                detail="Evolution API did not return a pairing code. "
+                       "Make sure the phone number is correct and not already linked.")
+        return {
+            "pairing_code": pairing_code,
+            "base64": base64_qr,
+            "phone": phone,
+            "instance": instance,
+        }
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(status_code=503, detail=str(exc))
+
+
 @router.post("/admin/evolution-test", dependencies=[Depends(require_admin)])
 async def admin_test_evolution(data: EvolutionTestRequest):
     """Send a test WhatsApp message to verify the Evolution API connection."""

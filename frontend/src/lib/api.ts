@@ -92,6 +92,8 @@ export const adminSaveEvolutionConfig = (data: { api_url?: string; api_key?: str
   api.post('/admin/evolution-config', data)
 export const adminTestEvolutionConnection = (phone: string) =>
   api.post('/admin/evolution-test', { phone })
+export const adminGetWhatsAppPairingCode = (phone: string) =>
+  api.post('/admin/whatsapp-pairing-code', { phone })
 export const adminGetApiKeyUsers = () => api.get('/admin/api-key-users')
 export const adminPushNotification = (payload: {
   title: string; message: string; target_all: boolean; target_user_id?: number | null
