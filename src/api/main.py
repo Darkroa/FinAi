@@ -390,19 +390,43 @@ async def startup_event():
     except Exception as _prod_err:
         logger.warning(f"Product seed skipped: {_prod_err}")
 
-    # ── Load Evolution API config from WalletConfig into os.environ ─────────────
+    # ── Load Evolution API config — env var (start.sh) wins, syncs to DB ────────
+    # Priority: if the env var is already set (written by start.sh / Replit secrets),
+    # it is the source of truth (it matches what the Evolution API process started with).
+    # We write it back to the DB so the admin UI stays in sync.
+    # Only fall back to the DB value when no env var is present.
     try:
         from src.database.session import SessionLocal as _SL_EVO
         from src.database.models import WalletConfig as _WC_EVO
         with _SL_EVO() as _ev_db:
-            for _ev_db_key, _ev_env_key in [
-                ("evo_api_url",  "EVOLUTION_API_URL"),
-                ("evo_api_key",  "EVOLUTION_API_KEY"),
-                ("evo_instance", "EVOLUTION_INSTANCE"),
-            ]:
-                _ev_row = _ev_db.query(_WC_EVO).filter(_WC_EVO.key == _ev_db_key).first()
-                if _ev_row and _ev_row.value:
-                    os.environ[_ev_env_key] = _ev_row.value
+            _EVO_MAP = [
+                ("evo_api_url",  "EVOLUTION_API_URL",  "Evolution API URL"),
+                ("evo_api_key",  "EVOLUTION_API_KEY",  "Evolution API Key"),
+                ("evo_instance", "EVOLUTION_INSTANCE", "Evolution Instance Name"),
+            ]
+            _changed = False
+            for _ev_db_key, _ev_env_key, _ev_label in _EVO_MAP:
+                _env_val = os.environ.get(_ev_env_key, "").strip()
+                _ev_row  = _ev_db.query(_WC_EVO).filter(_WC_EVO.key == _ev_db_key).first()
+                _db_val  = (_ev_row.value or "").strip() if _ev_row else ""
+
+                if _env_val:
+                    # Env var is set (start.sh / secrets) — it must match the running
+                    # Evolution API process, so sync it into the DB as well.
+                    if _db_val != _env_val:
+                        if _ev_row:
+                            _ev_row.value = _env_val
+                        else:
+                            _ev_db.add(_WC_EVO(key=_ev_db_key, value=_env_val,
+                                               label=_ev_label, updated_by=None))
+                        _changed = True
+                elif _db_val:
+                    # No env var — fall back to DB value.
+                    os.environ[_ev_env_key] = _db_val
+
+            if _changed:
+                _ev_db.commit()
+
             _has_evo = bool(os.environ.get("EVOLUTION_API_KEY"))
             if _has_evo:
                 logger.success("✅ Evolution API config loaded from database")
