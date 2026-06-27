@@ -256,7 +256,7 @@ export default function BotsPage() {
   // Fast poll (5 s) while bots are running, slow poll (30 s) when idle
   useEffect(() => {
     const hasRunning = feBots.some(b => b.running)
-    const interval = hasRunning ? 5_000 : 30_000
+    const interval = hasRunning ? 2_000 : 30_000
     const id = setInterval(fetchFeStatus, interval)
     return () => clearInterval(id)
   }, [fetchFeStatus, feBots.some(b => b.running)])
