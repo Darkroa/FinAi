@@ -1689,39 +1689,53 @@ export default function BotsPage() {
             <span className="text-xs text-[#848e9c]">{feTrades.length} event trades</span>
           </div>
           <div className="divide-y divide-[#2b3139]/50">
-            {feTrades.slice(0, 12).map((t, i) => (
-              <div key={(t.id ?? '') + i} className="px-4 py-3.5 flex items-start gap-3 hover:bg-[#1e2329] transition">
-                <div className={`w-9 h-9 rounded-full border flex items-center justify-center flex-shrink-0 ${t.action === 'BUY' ? 'bg-[#0ecb81]/10 border-[#0ecb81]/20' : 'bg-[#f6465d]/10 border-[#f6465d]/20'}`}>
-                  {t.action === 'BUY' ? <TrendingUp size={14} className="text-[#0ecb81]" /> : <TrendingDown size={14} className="text-[#f6465d]" />}
-                </div>
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center justify-between gap-2">
-                    <p className="text-sm font-semibold text-[#eaecef] flex items-center gap-1.5">
-                      <span className="font-mono text-[#f0b90b]">{t.ticker}</span>
-                      <span className={`text-[10px] px-1.5 py-0.5 rounded font-bold ${t.action === 'BUY' ? 'bg-[#0ecb81]/10 text-[#0ecb81]' : 'bg-[#f6465d]/10 text-[#f6465d]'}`}>{t.action}</span>
-                      <span className="text-[10px] px-1.5 py-0.5 rounded bg-[#f0b90b]/10 text-[#f0b90b] font-medium">EventBot</span>
-                    </p>
-                    <p className={`text-sm font-bold font-mono ${t.action === 'BUY' ? 'text-[#0ecb81]' : 'text-[#f6465d]'}`}>
-                      ${(t.price ?? 0) < 1 ? Number(t.price).toFixed(5) : fmt(Number(t.price))}
-                    </p>
+            {(() => {
+              // Build set of tickers that are genuinely open right now across all running bots
+              const liveOpenTickers = new Set<string>(
+                feBots.flatMap(b => Object.keys(b.open_positions ?? {}))
+              )
+              return feTrades.slice(0, 12).map((t, i) => {
+                // A trade with pnl=null is an opening entry — only "Open" if ticker still live
+                const isEntryTrade = t.pnl == null
+                const isStillOpen  = isEntryTrade && liveOpenTickers.has(t.ticker)
+                return (
+                  <div key={(t.id ?? '') + i} className="px-4 py-3.5 flex items-start gap-3 hover:bg-[#1e2329] transition">
+                    <div className={`w-9 h-9 rounded-full border flex items-center justify-center flex-shrink-0 ${t.action === 'BUY' ? 'bg-[#0ecb81]/10 border-[#0ecb81]/20' : 'bg-[#f6465d]/10 border-[#f6465d]/20'}`}>
+                      {t.action === 'BUY' ? <TrendingUp size={14} className="text-[#0ecb81]" /> : <TrendingDown size={14} className="text-[#f6465d]" />}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center justify-between gap-2">
+                        <p className="text-sm font-semibold text-[#eaecef] flex items-center gap-1.5">
+                          <span className="font-mono text-[#f0b90b]">{t.ticker}</span>
+                          <span className={`text-[10px] px-1.5 py-0.5 rounded font-bold ${t.action === 'BUY' ? 'bg-[#0ecb81]/10 text-[#0ecb81]' : 'bg-[#f6465d]/10 text-[#f6465d]'}`}>{t.action}</span>
+                          <span className="text-[10px] px-1.5 py-0.5 rounded bg-[#f0b90b]/10 text-[#f0b90b] font-medium">EventBot</span>
+                        </p>
+                        <p className={`text-sm font-bold font-mono ${t.action === 'BUY' ? 'text-[#0ecb81]' : 'text-[#f6465d]'}`}>
+                          ${(t.price ?? 0) < 1 ? Number(t.price).toFixed(5) : fmt(Number(t.price))}
+                        </p>
+                      </div>
+                      <div className="flex items-center justify-between gap-2 mt-1">
+                        <p className="text-[10px] text-[#848e9c]">
+                          Qty: <span className="font-mono">{Number(t.qty ?? 0).toFixed(6)}</span>
+                          {' · '}{t.created_at ? new Date(t.created_at).toLocaleDateString() : '—'}
+                        </p>
+                        {t.pnl != null
+                          ? <span className={`text-[10px] px-2 py-0.5 rounded-full font-medium ${t.pnl >= 0 ? 'bg-[#0ecb81]/10 text-[#0ecb81]' : 'bg-[#f6465d]/10 text-[#f6465d]'}`}>{t.pnl >= 0 ? '+' : ''}${fmt(t.pnl)}</span>
+                          : isStillOpen
+                            ? <span className="text-[10px] px-2 py-0.5 rounded-full bg-[#f0b90b]/10 text-[#f0b90b] font-medium animate-pulse">Open</span>
+                            : <span className="text-[10px] px-2 py-0.5 rounded-full bg-[#848e9c]/10 text-[#848e9c] font-medium">Closed</span>
+                        }
+                      </div>
+                      {t.reason && (
+                        <p className="text-[10px] text-[#4a5568] mt-1 truncate">
+                          {(t.reason ?? '').replace('FinEventAI | ', '').replace(/_/g, ' ')}
+                        </p>
+                      )}
+                    </div>
                   </div>
-                  <div className="flex items-center justify-between gap-2 mt-1">
-                    <p className="text-[10px] text-[#848e9c]">
-                      Qty: <span className="font-mono">{Number(t.qty ?? 0).toFixed(6)}</span>
-                      {' · '}{t.created_at ? new Date(t.created_at).toLocaleDateString() : '—'}
-                    </p>
-                    {t.pnl != null
-                      ? <span className={`text-[10px] px-2 py-0.5 rounded-full font-medium ${t.pnl >= 0 ? 'bg-[#0ecb81]/10 text-[#0ecb81]' : 'bg-[#f6465d]/10 text-[#f6465d]'}`}>{t.pnl >= 0 ? '+' : ''}${fmt(t.pnl)}</span>
-                      : <span className="text-[10px] px-2 py-0.5 rounded-full bg-[#f0b90b]/10 text-[#f0b90b] font-medium">Open</span>}
-                  </div>
-                  {t.reason && (
-                    <p className="text-[10px] text-[#4a5568] mt-1 truncate">
-                      {(t.reason ?? '').replace('FinEventAI | ', '').replace(/_/g, ' ')}
-                    </p>
-                  )}
-                </div>
-              </div>
-            ))}
+                )
+              })
+            })()}
           </div>
           {feTrades.length > 12 && (
             <div className="px-4 py-3 border-t border-[#2b3139] flex justify-center">

@@ -1,7 +1,10 @@
 """
-Storage utility: upload images to Supabase Storage (bucket: Finstroage, folder: amen) when
-SUPABASE_URL + SUPABASE_KEY are configured, otherwise save to local
-/uploads/ folder and return a relative URL.
+Storage utility: upload images/files to cloud storage or local fallback.
+
+Priority order:
+  1. S3-compatible (boto3) — if SUPABASE_KEY_ID + SUPABASE_ACCESS_KEY + ENDPOINT_URL + REGION are set
+  2. Supabase Storage client — if SUPABASE_URL + SUPABASE_KEY are set
+  3. Local /uploads/ folder — always available as last resort
 """
 
 import os
@@ -10,18 +13,73 @@ import base64
 from pathlib import Path
 from loguru import logger
 
+# ── S3-compatible credentials (Supabase Storage S3 API or any S3-compatible) ──
+S3_KEY_ID     = os.getenv("SUPABASE_KEY_ID", "").strip()
+S3_ACCESS_KEY = os.getenv("SUPABASE_ACCESS_KEY", "").strip()
+S3_ENDPOINT   = os.getenv("ENDPOINT_URL", "").strip()
+S3_REGION     = os.getenv("REGION", "auto").strip()
+S3_BUCKET     = os.getenv("S3_BUCKET", "Finstroage").strip()
+
+# ── Supabase client credentials ────────────────────────────────────────────────
 SUPABASE_URL = os.getenv("SUPABASE_URL", "").strip()
 SUPABASE_KEY = os.getenv("SUPABASE_KEY", "").strip()
-BUCKET = "Finstroage"
-FOLDER = "amen"
+BUCKET       = os.getenv("STORAGE_BUCKET", "Finstroage")
+FOLDER       = os.getenv("STORAGE_FOLDER", "amen")
 
 LOCAL_UPLOADS_DIR = Path(__file__).parent.parent.parent / "uploads"
 LOCAL_UPLOADS_DIR.mkdir(parents=True, exist_ok=True)
 
 
+# ── Availability checks ────────────────────────────────────────────────────────
+
+def _s3_available() -> bool:
+    return bool(S3_KEY_ID and S3_ACCESS_KEY and S3_ENDPOINT)
+
+
 def _supabase_available() -> bool:
     return bool(SUPABASE_URL and SUPABASE_KEY)
 
+
+# ── S3-compatible upload (boto3) ───────────────────────────────────────────────
+
+def _upload_s3(content: bytes, fname: str, mime: str) -> str | None:
+    """Upload via boto3 S3-compatible API. Returns public URL or None on failure."""
+    try:
+        import boto3
+        from botocore.config import Config
+
+        s3 = boto3.client(
+            "s3",
+            region_name=S3_REGION or "auto",
+            endpoint_url=S3_ENDPOINT,
+            aws_access_key_id=S3_KEY_ID,
+            aws_secret_access_key=S3_ACCESS_KEY,
+            config=Config(signature_version="s3v4"),
+        )
+
+        key = f"{FOLDER}/{fname}"
+        s3.put_object(
+            Bucket=S3_BUCKET,
+            Key=key,
+            Body=content,
+            ContentType=mime,
+        )
+
+        # Build public URL
+        endpoint = S3_ENDPOINT.rstrip("/")
+        public_url = f"{endpoint}/{S3_BUCKET}/{key}"
+        logger.info(f"Uploaded via S3 API: {public_url}")
+        return public_url
+
+    except ImportError:
+        logger.warning("boto3 not installed — S3 upload unavailable")
+        return None
+    except Exception as exc:
+        logger.warning(f"S3 upload failed: {exc}")
+        return None
+
+
+# ── Supabase client upload ─────────────────────────────────────────────────────
 
 def _get_supabase_client():
     from supabase import create_client
@@ -29,7 +87,6 @@ def _get_supabase_client():
 
 
 def _ensure_bucket(client) -> bool:
-    """Create bucket if it does not exist. Returns True on success."""
     try:
         buckets = client.storage.list_buckets()
         names = [b.name for b in buckets]
@@ -42,32 +99,51 @@ def _ensure_bucket(client) -> bool:
         return False
 
 
+def _upload_supabase(content: bytes, fname: str, mime: str) -> str | None:
+    """Upload via Supabase client library. Returns public URL or None on failure."""
+    try:
+        client = _get_supabase_client()
+        if not _ensure_bucket(client):
+            return None
+        path = f"{FOLDER}/{fname}"
+        client.storage.from_(BUCKET).upload(
+            path=path,
+            file=content,
+            file_options={"content-type": mime, "upsert": "true"},
+        )
+        public_url = client.storage.from_(BUCKET).get_public_url(path)
+        logger.info(f"Uploaded to Supabase Storage: {public_url}")
+        return public_url
+    except Exception as exc:
+        logger.warning(f"Supabase client upload failed: {exc}")
+        return None
+
+
+# ── Public API ─────────────────────────────────────────────────────────────────
+
 def upload_image(content: bytes, mime: str = "image/jpeg", filename: str | None = None) -> str:
     """
     Upload raw image bytes. Returns a public URL string.
 
     Priority:
-      1. Supabase Storage bucket 'Finstroage', folder 'amen'  (if SUPABASE_URL + SUPABASE_KEY set)
-      2. Local /uploads/ folder                               (fallback)
+      1. S3-compatible (boto3) if SUPABASE_KEY_ID + SUPABASE_ACCESS_KEY + ENDPOINT_URL set
+      2. Supabase Storage client if SUPABASE_URL + SUPABASE_KEY set
+      3. Local /uploads/ folder (always available)
     """
-    ext = _ext_from_mime(mime)
+    ext  = _ext_from_mime(mime)
     fname = filename or f"{uuid.uuid4().hex}{ext}"
 
+    if _s3_available():
+        url = _upload_s3(content, fname, mime)
+        if url:
+            return url
+        logger.warning("S3 upload failed — trying Supabase client next")
+
     if _supabase_available():
-        try:
-            client = _get_supabase_client()
-            if _ensure_bucket(client):
-                path = f"{FOLDER}/{fname}"
-                client.storage.from_(BUCKET).upload(
-                    path=path,
-                    file=content,
-                    file_options={"content-type": mime, "upsert": "true"},
-                )
-                public_url = client.storage.from_(BUCKET).get_public_url(path)
-                logger.info(f"Uploaded to Supabase Storage: {public_url}")
-                return public_url
-        except Exception as exc:
-            logger.warning(f"Supabase upload failed, falling back to local: {exc}")
+        url = _upload_supabase(content, fname, mime)
+        if url:
+            return url
+        logger.warning("Supabase client upload failed — saving locally")
 
     return _save_local(content, fname)
 
@@ -97,11 +173,12 @@ def _save_local(content: bytes, fname: str) -> str:
 
 def _ext_from_mime(mime: str) -> str:
     mapping = {
-        "image/jpeg": ".jpg",
-        "image/jpg": ".jpg",
-        "image/png": ".png",
-        "image/gif": ".gif",
-        "image/webp": ".webp",
+        "image/jpeg":   ".jpg",
+        "image/jpg":    ".jpg",
+        "image/png":    ".png",
+        "image/gif":    ".gif",
+        "image/webp":   ".webp",
         "image/svg+xml": ".svg",
+        "application/pdf": ".pdf",
     }
     return mapping.get(mime.lower(), ".jpg")
