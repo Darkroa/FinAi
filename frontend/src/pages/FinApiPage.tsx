@@ -464,17 +464,6 @@ export default function FinApiPage() {
                 <div className="flex items-center gap-2">
                   <MessageCircle size={12} className="text-[#25D366]" />
                   <span className="text-xs font-semibold text-[#eaecef]">WhatsApp</span>
-                  {/* Provider badge — shown when Evolution is connected */}
-                  {waEvConnected === true && (
-                    <span className="text-[9px] bg-[#25D366]/15 border border-[#25D366]/25 text-[#25D366] px-1.5 py-0.5 rounded-full font-medium">
-                      Evolution API
-                    </span>
-                  )}
-                  {waEvConnected === false && (
-                    <span className="text-[9px] bg-[#848e9c]/10 border border-[#2b3139] text-[#848e9c] px-1.5 py-0.5 rounded-full font-medium">
-                      Twilio fallback
-                    </span>
-                  )}
                 </div>
                 {waVerified && (
                   <span className="flex items-center gap-1 text-[10px] text-[#0ecb81] bg-[#0ecb81]/10 border border-[#0ecb81]/20 px-2 py-0.5 rounded-full">
@@ -517,34 +506,13 @@ export default function FinApiPage() {
                       {waSending ? 'Sending…' : 'Send Code'}
                     </button>
                   </div>
-                  {/* Info about which provider will deliver */}
-                  <div className="flex items-start gap-2 bg-[#161a1e] border border-[#2b3139] rounded-lg px-3 py-2">
-                    <Wifi size={11} className={waEvConnected ? 'text-[#25D366] flex-shrink-0 mt-0.5' : 'text-[#848e9c] flex-shrink-0 mt-0.5'} />
-                    <p className="text-[10px] text-[#848e9c]">
-                      {waEvConnected
-                        ? 'Code will be sent from your linked FinAi WhatsApp number via Evolution API.'
-                        : `Code will be sent via Twilio WhatsApp (${waTwilioNum}). You may need to message that number first to receive messages.`}
-                    </p>
-                  </div>
                 </div>
               ) : (
                 /* Step 2 — enter OTP */
                 <div className="space-y-3">
-                  {/* Provider delivery confirmation */}
-                  <div className={`flex items-start gap-2 rounded-lg px-3 py-2.5 border ${
-                    waProvider === 'evolution'
-                      ? 'bg-[#25D366]/8 border-[#25D366]/20'
-                      : 'bg-[#f0b90b]/8 border-[#f0b90b]/20'
-                  }`}>
-                    <CheckCircle size={12} className={`flex-shrink-0 mt-0.5 ${waProvider === 'evolution' ? 'text-[#25D366]' : 'text-[#f0b90b]'}`} />
-                    <div>
-                      <p className="text-xs font-medium text-[#eaecef]">Code sent to {waPhoneInput}</p>
-                      <p className="text-[10px] text-[#848e9c]">
-                        {waProvider === 'evolution'
-                          ? 'Delivered via Evolution API (your FinAi WhatsApp)'
-                          : `Delivered via Twilio (${waTwilioNum})`}
-                      </p>
-                    </div>
+                  <div className="flex items-start gap-2 rounded-lg px-3 py-2.5 border bg-[#25D366]/8 border-[#25D366]/20">
+                    <CheckCircle size={12} className="flex-shrink-0 mt-0.5 text-[#25D366]" />
+                    <p className="text-xs font-medium text-[#eaecef]">Code sent to {waPhoneInput}</p>
                   </div>
                   <div className="flex gap-2">
                     <input
