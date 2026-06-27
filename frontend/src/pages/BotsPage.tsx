@@ -251,9 +251,15 @@ export default function BotsPage() {
 
   useEffect(() => {
     fetchFeStatus()
-    const id = setInterval(fetchFeStatus, 30_000)
-    return () => clearInterval(id)
   }, [fetchFeStatus])
+
+  // Fast poll (5 s) while bots are running, slow poll (30 s) when idle
+  useEffect(() => {
+    const hasRunning = feBots.some(b => b.running)
+    const interval = hasRunning ? 5_000 : 30_000
+    const id = setInterval(fetchFeStatus, interval)
+    return () => clearInterval(id)
+  }, [fetchFeStatus, feBots.some(b => b.running)])
 
   const handleFeStart = async () => {
     const botName = feParams.bot_name.trim() || `Bot ${feBots.length + 1}`
