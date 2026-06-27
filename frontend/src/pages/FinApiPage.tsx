@@ -5,12 +5,12 @@ import {
   createApiKey, listApiKeys, revokeApiKey,
   connectExchange, disconnectExchange, getMe,
   disconnectWhatsApp, disconnectTelegram, generateTelegramCode,
-  sendWhatsAppCode, verifyWhatsApp, getWhatsAppEvStatus,
+  sendWhatsAppCode, verifyWhatsApp,
 } from '../lib/api'
 import toast from 'react-hot-toast'
 import {
   Key, Plus, Trash2, Eye, EyeOff, Copy, AlertCircle, Send, MessageCircle,
-  Wifi, RefreshCw, CheckCircle, Zap, Lock, ChevronLeft,
+  RefreshCw, CheckCircle, Zap, Lock, ChevronLeft,
 } from 'lucide-react'
 
 interface ApiKey { id: number; key_name: string; purpose: string; api_key: string; is_active: boolean; created_at: string; last_used_at?: string }
@@ -58,18 +58,12 @@ export default function FinApiPage() {
   const [waSending, setWaSending]         = useState(false)
   const [waVerifying, setWaVerifying]     = useState(false)
   const [waCodeSent, setWaCodeSent]       = useState(false)
-  const [waProvider, setWaProvider]       = useState<'evolution' | 'twilio' | 'none' | null>(null)
-  const [waTwilioNum, setWaTwilioNum]     = useState('+14155238886')
-  const [waEvConnected, setWaEvConnected] = useState<boolean | null>(null)
 
   const selectedExch = EXCHANGES.find(e => e.id === selExchange)
   const connections  = (user?.exchange_connections as { exchange: string; label?: string; api_key_masked?: string }[]) || []
   const canCreateKey = user?.is_mail_verified && (user?.account_tier ?? 0) >= 1
 
-  useEffect(() => {
-    loadApiKeys()
-    getWhatsAppEvStatus().then(r => setWaEvConnected(r.data?.state === 'open')).catch(() => setWaEvConnected(false))
-  }, [])
+  useEffect(() => { loadApiKeys() }, [])
 
   const loadApiKeys = async () => {
     try {
@@ -154,8 +148,6 @@ export default function FinApiPage() {
     try {
       const res = await sendWhatsAppCode(phone)
       setWaCodeSent(true)
-      setWaProvider(res.data.provider)
-      setWaTwilioNum(res.data.twilio_number || '+14155238886')
       toast.success('Verification code sent to your WhatsApp!')
     } catch (err: unknown) {
       toast.error((err as { response?: { data?: { detail?: string } } }).response?.data?.detail || 'Failed to send code')

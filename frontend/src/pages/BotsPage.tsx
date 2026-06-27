@@ -765,10 +765,10 @@ export default function BotsPage() {
               <label className="text-xs text-[#848e9c] mb-1.5 block">
                 Max Drawdown Stop (%)
               </label>
-              <input type="number" min={1} max={100} step={1} value={params.max_drawdown_pct}
-                onChange={e => setParams(p => ({ ...p, max_drawdown_pct: Math.min(100, Math.max(1, parseFloat(e.target.value) || 1)) }))}
+              <input type="number" min={10} max={90} step={1} value={params.max_drawdown_pct}
+                onChange={e => setParams(p => ({ ...p, max_drawdown_pct: Math.min(90, Math.max(10, parseFloat(e.target.value) || 10)) }))}
                 className="w-full bg-[#0b0e11] border border-[#2b3139] focus:border-[#f6465d] rounded-xl px-3 py-2.5 text-sm font-mono text-[#f6465d] focus:outline-none transition" />
-              <p className="text-[10px] text-[#4a5568] mt-1">Stop bot when portfolio drops <span className="text-[#f6465d]">{params.max_drawdown_pct}%</span> — Range: 1% – 100%</p>
+              <p className="text-[10px] text-[#4a5568] mt-1">Stop bot when portfolio drops <span className="text-[#f6465d]">{params.max_drawdown_pct}%</span> — Range: 10% – 90%</p>
             </div>
 
             {/* Number of Trades */}
@@ -1001,8 +1001,8 @@ export default function BotsPage() {
                       </div>
                       <div>
                         <label className="text-[10px] text-[#848e9c] mb-1 block">Max Drawdown (%)</label>
-                        <input type="number" min={1} max={50} value={editParams.max_drawdown_pct}
-                          onChange={e => setEditParams(p => ({ ...p, max_drawdown_pct: Math.min(50, Math.max(1, parseFloat(e.target.value) || 1)) }))}
+                        <input type="number" min={10} max={90} value={editParams.max_drawdown_pct}
+                          onChange={e => setEditParams(p => ({ ...p, max_drawdown_pct: Math.min(90, Math.max(10, parseFloat(e.target.value) || 10)) }))}
                           className="w-full bg-[#161a1e] border border-[#2b3139] focus:border-[#f6465d] rounded-lg px-3 py-2 text-xs font-mono text-[#f6465d] focus:outline-none" />
                       </div>
                     </div>
