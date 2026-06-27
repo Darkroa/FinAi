@@ -2268,6 +2268,71 @@ async def admin_health_check(db: Session = Depends(get_db)):
     except Exception as e:
         checks["ai_providers"] = {"status": "error", "error": str(e)[:120]}
 
+    # ── Storage backend ────────────────────────────────────────────────────────
+    try:
+        from src.utils.storage import (
+            _s3_available, _supabase_available,
+            S3_KEY_ID, S3_ENDPOINT, S3_REGION, S3_BUCKET,
+            SUPABASE_URL, BUCKET, FOLDER,
+        )
+        s3_ok  = _s3_available()
+        sup_ok = _supabase_available()
+
+        if s3_ok:
+            active_backend = "s3_compatible"
+            backend_detail = {
+                "endpoint": S3_ENDPOINT,
+                "region":   S3_REGION or "auto",
+                "bucket":   S3_BUCKET,
+                "folder":   FOLDER,
+                "key_id":   f"{S3_KEY_ID[:6]}…" if S3_KEY_ID else "—",
+            }
+            # Quick reachability test
+            try:
+                import boto3
+                from botocore.config import Config
+                from src.utils.storage import S3_ACCESS_KEY
+                s3c = boto3.client(
+                    "s3",
+                    region_name=S3_REGION or "auto",
+                    endpoint_url=S3_ENDPOINT,
+                    aws_access_key_id=S3_KEY_ID,
+                    aws_secret_access_key=S3_ACCESS_KEY,
+                    config=Config(signature_version="s3v4"),
+                )
+                s3c.list_buckets()
+                reachable = True
+            except Exception:
+                reachable = False
+        elif sup_ok:
+            active_backend = "supabase_client"
+            backend_detail = {
+                "url":    f"{SUPABASE_URL[:30]}…" if len(SUPABASE_URL) > 30 else SUPABASE_URL,
+                "bucket": BUCKET,
+                "folder": FOLDER,
+            }
+            try:
+                from src.utils.storage import _get_supabase_client
+                _get_supabase_client().storage.list_buckets()
+                reachable = True
+            except Exception:
+                reachable = False
+        else:
+            active_backend = "local"
+            backend_detail = {"path": "/uploads/"}
+            reachable = True
+
+        checks["storage"] = {
+            "status":         "healthy" if reachable else "degraded",
+            "active_backend": active_backend,
+            "reachable":      reachable,
+            "s3_configured":  s3_ok,
+            "supabase_configured": sup_ok,
+            **backend_detail,
+        }
+    except Exception as e:
+        checks["storage"] = {"status": "error", "error": str(e)[:120]}
+
     overall = "healthy" if all(c["status"] == "healthy" for c in checks.values()) else "degraded"
     return {"overall": overall, "checks": checks, "timestamp": datetime.utcnow().isoformat()}
 

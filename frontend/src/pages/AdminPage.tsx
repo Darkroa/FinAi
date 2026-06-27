@@ -2316,6 +2316,7 @@ export default function AdminPage() {
               coingecko:    { label: 'CoinGecko',     emoji: '🦎' },
               binance:      { label: 'Binance API',   emoji: '🔶' },
               ai_providers: { label: 'AI Providers',  emoji: '🤖' },
+              storage:      { label: 'File Storage',  emoji: '🗂️' },
             }
             return (
               <>
@@ -2366,7 +2367,51 @@ export default function AdminPage() {
                         {check.error && (
                           <p className="text-xs text-[#f6465d] font-mono bg-[#f6465d]/5 rounded-lg px-2.5 py-1.5 mb-2 break-all">{check.error}</p>
                         )}
-                        {name === 'ai_providers' && check.providers ? (
+                        {name === 'storage' && check.active_backend ? (
+                          <div className="space-y-2">
+                            {/* Active backend badge */}
+                            <div className="flex items-center justify-between text-xs mb-1">
+                              <span className="text-[#848e9c]">Active backend</span>
+                              <span className={`px-2 py-0.5 rounded-full font-bold text-[10px] uppercase tracking-wide
+                                ${check.active_backend === 's3_compatible' ? 'bg-[#f0b90b]/10 text-[#f0b90b]'
+                                : check.active_backend === 'supabase_client' ? 'bg-[#3ecf8e]/10 text-[#3ecf8e]'
+                                : 'bg-[#848e9c]/10 text-[#848e9c]'}`}>
+                                {check.active_backend === 's3_compatible' ? '☁ S3 Compatible'
+                                 : check.active_backend === 'supabase_client' ? '⚡ Supabase Client'
+                                 : '💾 Local'}
+                              </span>
+                            </div>
+                            {/* Backend rows */}
+                            {[
+                              { label: 'S3 Compatible', configured: check.s3_configured },
+                              { label: 'Supabase Client', configured: check.supabase_configured },
+                              { label: 'Local Fallback', configured: true },
+                            ].map(b => (
+                              <div key={b.label} className={`flex items-center justify-between text-xs px-2 py-1 rounded-lg
+                                ${(b.label === 'S3 Compatible' && check.active_backend === 's3_compatible') ||
+                                  (b.label === 'Supabase Client' && check.active_backend === 'supabase_client') ||
+                                  (b.label === 'Local Fallback' && check.active_backend === 'local')
+                                  ? 'bg-[#f0b90b]/5 border border-[#f0b90b]/20' : 'bg-[#0b0e11]'}`}>
+                                <div className="flex items-center gap-1.5">
+                                  <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${b.configured ? 'bg-[#0ecb81]' : 'bg-[#2b3139]'}`} />
+                                  <span className={`font-medium ${b.configured ? 'text-[#eaecef]' : 'text-[#848e9c]'}`}>{b.label}</span>
+                                </div>
+                                <span className={`text-[10px] font-medium ${b.configured ? 'text-[#0ecb81]' : 'text-[#848e9c]'}`}>
+                                  {b.configured ? 'configured' : 'not set'}
+                                </span>
+                              </div>
+                            ))}
+                            {/* Detail rows */}
+                            {Object.entries(check)
+                              .filter(([k]) => !['status','active_backend','reachable','s3_configured','supabase_configured'].includes(k))
+                              .map(([k, v]) => (
+                                <div key={k} className="flex items-center justify-between text-xs">
+                                  <span className="text-[#848e9c] capitalize">{k.replace(/_/g, ' ')}</span>
+                                  <span className="text-[#eaecef] font-mono truncate max-w-[55%] text-right">{String(v)}</span>
+                                </div>
+                              ))}
+                          </div>
+                        ) : name === 'ai_providers' && check.providers ? (
                           <div className="space-y-1.5">
                             <div className="flex items-center justify-between text-xs mb-2">
                               <span className="text-[#848e9c]">Active</span>
