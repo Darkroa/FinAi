@@ -2315,6 +2315,7 @@ export default function AdminPage() {
               celery:       { label: 'Celery Worker', emoji: '⚙️' },
               coingecko:    { label: 'CoinGecko',     emoji: '🦎' },
               binance:      { label: 'Binance API',   emoji: '🔶' },
+              ai_providers: { label: 'AI Providers',  emoji: '🤖' },
             }
             return (
               <>
@@ -2365,7 +2366,24 @@ export default function AdminPage() {
                         {check.error && (
                           <p className="text-xs text-[#f6465d] font-mono bg-[#f6465d]/5 rounded-lg px-2.5 py-1.5 mb-2 break-all">{check.error}</p>
                         )}
-                        {extras.length > 0 && (
+                        {name === 'ai_providers' && check.providers ? (
+                          <div className="space-y-1.5">
+                            <div className="flex items-center justify-between text-xs mb-2">
+                              <span className="text-[#848e9c]">Active</span>
+                              <span className="text-[#f0b90b] font-semibold uppercase tracking-wide">{check.active_provider}</span>
+                            </div>
+                            {check.providers.map((p: any) => (
+                              <div key={p.name} className={`flex items-center justify-between text-xs px-2 py-1 rounded-lg ${p.active ? 'bg-[#f0b90b]/10 border border-[#f0b90b]/20' : 'bg-[#0b0e11]'}`}>
+                                <div className="flex items-center gap-1.5">
+                                  <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${p.key_set ? 'bg-[#0ecb81]' : 'bg-[#2b3139]'}`} />
+                                  <span className={`capitalize font-medium ${p.active ? 'text-[#f0b90b]' : p.key_set ? 'text-[#eaecef]' : 'text-[#848e9c]'}`}>{p.name}</span>
+                                  {p.active && <span className="text-[9px] bg-[#f0b90b]/20 text-[#f0b90b] px-1 rounded font-bold">ACTIVE</span>}
+                                </div>
+                                <span className="text-[#848e9c] font-mono text-[10px]">{p.model}</span>
+                              </div>
+                            ))}
+                          </div>
+                        ) : extras.length > 0 && (
                           <div className="space-y-1">
                             {extras.map(([k, v]) => (
                               <div key={k} className="flex items-center justify-between text-xs">

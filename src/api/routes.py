@@ -2213,6 +2213,29 @@ async def admin_health_check(db: Session = Depends(get_db)):
         except Exception as e:
             checks[name] = {"status": "error", "error": str(e)[:100]}
 
+    # ── AI Providers ──────────────────────────────────────────────────────────
+    try:
+        from src.utils.keymodel import _PROVIDERS
+        provider_statuses = []
+        active_provider = None
+        for name, env_key, model_id, base_url in _PROVIDERS:
+            has_key = bool(os.getenv(env_key))
+            entry = {"name": name, "model": model_id, "key_set": has_key}
+            if has_key and active_provider is None:
+                active_provider = name
+                entry["active"] = True
+            else:
+                entry["active"] = False
+            provider_statuses.append(entry)
+
+        checks["ai_providers"] = {
+            "status": "healthy" if active_provider else "degraded",
+            "active_provider": active_provider or "local_fallback",
+            "providers": provider_statuses,
+        }
+    except Exception as e:
+        checks["ai_providers"] = {"status": "error", "error": str(e)[:120]}
+
     overall = "healthy" if all(c["status"] == "healthy" for c in checks.values()) else "degraded"
     return {"overall": overall, "checks": checks, "timestamp": datetime.utcnow().isoformat()}
 
