@@ -314,6 +314,25 @@ class FinEventBot:
                 f"{ev.sentiment.upper()} | score={ev.impact_score} | {ev.title[:50]}"
             )
 
+    # ── Balance helpers ───────────────────────────────────────────────────────
+
+    def _update_user_balance(self, delta: float):
+        """Deduct (negative delta) or credit (positive delta) the user's platform balance."""
+        if not self.user_id:
+            return
+        try:
+            with SessionLocal() as db:
+                user = db.query(User).filter(User.id == self.user_id).first()
+                if user:
+                    user.balance_usdt = max(0.0, (user.balance_usdt or 0.0) + delta)
+                    db.commit()
+                    logger.debug(
+                        f"FinEventAI balance update: delta={delta:+.4f} → "
+                        f"new balance=${user.balance_usdt:,.4f}"
+                    )
+        except Exception as e:
+            logger.error(f"FinEventAI balance update failed: {e}")
+
     # ── Trade execution ───────────────────────────────────────────────────────
 
     def _execute_event_trade(self, db: Session, ticker: str, action: str, event):
@@ -336,6 +355,9 @@ class FinEventBot:
                     # Close existing short on bullish event
                     pnl_value = round((existing["entry_price"] - price) * existing["qty"], 4)
                     self.total_pnl = round(self.total_pnl + pnl_value, 4)
+                    margin = existing.get("margin", self.capital_per_trade)
+                    if not self.paper:
+                        self._update_user_balance(max(0.0, margin + pnl_value))
                     self.open_positions.pop(ticker)
                 elif not existing:
                     # Open new long position
@@ -346,11 +368,16 @@ class FinEventBot:
                         "margin":      self.capital_per_trade,
                         "opened_at":   datetime.utcnow().isoformat(),
                     }
+                    if not self.paper:
+                        self._update_user_balance(-self.capital_per_trade)
             elif action == "SELL":
                 if existing and existing.get("side") == "long":
                     # Close existing long on bearish event
                     pnl_value = round((price - existing["entry_price"]) * existing["qty"], 4)
                     self.total_pnl = round(self.total_pnl + pnl_value, 4)
+                    margin = existing.get("margin", self.capital_per_trade)
+                    if not self.paper:
+                        self._update_user_balance(max(0.0, margin + pnl_value))
                     self.open_positions.pop(ticker)
                 elif not existing:
                     # Open new short position
@@ -361,6 +388,8 @@ class FinEventBot:
                         "margin":      self.capital_per_trade,
                         "opened_at":   datetime.utcnow().isoformat(),
                     }
+                    if not self.paper:
+                        self._update_user_balance(-self.capital_per_trade)
 
             log = TradeLog(
                 user_id      = self.user_id,
@@ -458,14 +487,19 @@ class FinEventBot:
         except Exception:
             return {"ok": False, "detail": f"Could not fetch live price for {ticker}"}
 
-        side = pos.get("side", "long")
-        qty  = pos.get("qty", 0)
+        side   = pos.get("side", "long")
+        qty    = pos.get("qty", 0)
+        margin = pos.get("margin", self.capital_per_trade)
         if side == "long":
             pnl = round((price - pos["entry_price"]) * qty, 4)
         else:
             pnl = round((pos["entry_price"] - price) * qty, 4)
         self.total_pnl = round(self.total_pnl + pnl, 4)
         self.open_positions.pop(ticker)
+
+        # Credit margin + PnL back to user balance (live only)
+        if not self.paper:
+            self._update_user_balance(max(0.0, margin + pnl))
 
         action_label = "SELL" if side == "long" else "BUY"
         with SessionLocal() as db:
