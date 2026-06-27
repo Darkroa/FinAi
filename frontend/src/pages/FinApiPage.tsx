@@ -4,7 +4,8 @@ import { useAuthStore } from '../store/authStore'
 import {
   createApiKey, listApiKeys, revokeApiKey,
   connectExchange, disconnectExchange, getMe,
-  generateWhatsAppCode, disconnectWhatsApp, disconnectTelegram, generateTelegramCode,
+  disconnectWhatsApp, disconnectTelegram, generateTelegramCode,
+  sendWhatsAppCode, verifyWhatsApp, getWhatsAppEvStatus,
 } from '../lib/api'
 import toast from 'react-hot-toast'
 import {
@@ -52,14 +53,23 @@ export default function FinApiPage() {
 
   const waVerified = prefs.whatsapp_verified === true
   const waPhone    = (prefs.whatsapp_number as string) || ''
-  const [waGenCode, setWaGenCode]   = useState<string | null>(null)
-  const [waGenerating, setWaGenerating] = useState(false)
+  const [waPhoneInput, setWaPhoneInput]   = useState('')
+  const [waOtpInput, setWaOtpInput]       = useState('')
+  const [waSending, setWaSending]         = useState(false)
+  const [waVerifying, setWaVerifying]     = useState(false)
+  const [waCodeSent, setWaCodeSent]       = useState(false)
+  const [waProvider, setWaProvider]       = useState<'evolution' | 'twilio' | 'none' | null>(null)
+  const [waTwilioNum, setWaTwilioNum]     = useState('+14155238886')
+  const [waEvConnected, setWaEvConnected] = useState<boolean | null>(null)
 
   const selectedExch = EXCHANGES.find(e => e.id === selExchange)
   const connections  = (user?.exchange_connections as { exchange: string; label?: string; api_key_masked?: string }[]) || []
   const canCreateKey = user?.is_mail_verified && (user?.account_tier ?? 0) >= 1
 
-  useEffect(() => { loadApiKeys() }, [])
+  useEffect(() => {
+    loadApiKeys()
+    getWhatsAppEvStatus().then(r => setWaEvConnected(r.data?.state === 'open')).catch(() => setWaEvConnected(false))
+  }, [])
 
   const loadApiKeys = async () => {
     try {
@@ -137,15 +147,36 @@ export default function FinApiPage() {
     } catch { toast.error('Failed to disconnect') }
   }
 
-  const handleGenerateWaCode = async () => {
-    setWaGenerating(true)
+  const handleSendWaCode = async () => {
+    const phone = waPhoneInput.trim()
+    if (!phone) return toast.error('Enter your phone number with country code (e.g. +15551234567)')
+    setWaSending(true)
     try {
-      const res = await generateWhatsAppCode()
-      setWaGenCode(res.data.code)
-      toast.success('Code generated — send to our WhatsApp number!')
+      const res = await sendWhatsAppCode(phone)
+      setWaCodeSent(true)
+      setWaProvider(res.data.provider)
+      setWaTwilioNum(res.data.twilio_number || '+14155238886')
+      toast.success('Verification code sent to your WhatsApp!')
     } catch (err: unknown) {
-      toast.error((err as { response?: { data?: { detail?: string } } }).response?.data?.detail || 'Failed to generate code')
-    } finally { setWaGenerating(false) }
+      toast.error((err as { response?: { data?: { detail?: string } } }).response?.data?.detail || 'Failed to send code')
+    } finally { setWaSending(false) }
+  }
+
+  const handleVerifyWaCode = async () => {
+    const code = waOtpInput.trim()
+    if (!code) return toast.error('Enter the 6-digit code')
+    setWaVerifying(true)
+    try {
+      await verifyWhatsApp(code)
+      const res = await getMe()
+      setUser(res.data)
+      setWaCodeSent(false)
+      setWaOtpInput('')
+      setWaPhoneInput('')
+      toast.success('WhatsApp connected!')
+    } catch (err: unknown) {
+      toast.error((err as { response?: { data?: { detail?: string } } }).response?.data?.detail || 'Invalid or expired code')
+    } finally { setWaVerifying(false) }
   }
 
   const handleDisconnectWa = async () => {
@@ -153,7 +184,9 @@ export default function FinApiPage() {
       await disconnectWhatsApp()
       const res = await getMe()
       setUser(res.data)
-      setWaGenCode(null)
+      setWaCodeSent(false)
+      setWaPhoneInput('')
+      setWaOtpInput('')
       toast.success('WhatsApp disconnected')
     } catch { toast.error('Failed to disconnect') }
   }
@@ -434,10 +467,22 @@ export default function FinApiPage() {
             </div>
           ) : (
             <div className="bg-[#0b0e11] border border-[#2b3139] rounded-xl p-4 space-y-3">
+              {/* Header row */}
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
                   <MessageCircle size={12} className="text-[#25D366]" />
                   <span className="text-xs font-semibold text-[#eaecef]">WhatsApp</span>
+                  {/* Provider badge — shown when Evolution is connected */}
+                  {waEvConnected === true && (
+                    <span className="text-[9px] bg-[#25D366]/15 border border-[#25D366]/25 text-[#25D366] px-1.5 py-0.5 rounded-full font-medium">
+                      Evolution API
+                    </span>
+                  )}
+                  {waEvConnected === false && (
+                    <span className="text-[9px] bg-[#848e9c]/10 border border-[#2b3139] text-[#848e9c] px-1.5 py-0.5 rounded-full font-medium">
+                      Twilio fallback
+                    </span>
+                  )}
                 </div>
                 {waVerified && (
                   <span className="flex items-center gap-1 text-[10px] text-[#0ecb81] bg-[#0ecb81]/10 border border-[#0ecb81]/20 px-2 py-0.5 rounded-full">
@@ -445,51 +490,93 @@ export default function FinApiPage() {
                   </span>
                 )}
               </div>
+
+              {/* Connected state */}
               {waVerified ? (
                 <div className="space-y-2">
                   <div className="flex items-center gap-2 bg-[#0ecb81]/8 border border-[#0ecb81]/15 rounded-lg px-3 py-2.5">
                     <CheckCircle size={13} className="text-[#0ecb81] flex-shrink-0" />
                     <div>
                       <p className="text-xs font-medium text-[#eaecef]">{waPhone || 'WhatsApp connected'}</p>
-                      <p className="text-[10px] text-[#848e9c]">Connected · Alerts enabled</p>
+                      <p className="text-[10px] text-[#848e9c]">Alerts &amp; signals will be delivered here</p>
                     </div>
                   </div>
                   <button onClick={handleDisconnectWa} className="w-full border border-[#f6465d]/30 hover:bg-[#f6465d]/10 text-[#f6465d] font-medium py-2 rounded-lg text-xs transition">
                     Disconnect WhatsApp
                   </button>
                 </div>
-              ) : (
+              ) : !waCodeSent ? (
+                /* Step 1 — enter phone number */
                 <div className="space-y-3">
-                  <p className="text-[10px] text-[#848e9c]">Connect WhatsApp to receive trade alerts and signals.</p>
-                  {!waGenCode ? (
-                    <button onClick={handleGenerateWaCode} disabled={waGenerating}
-                      className="w-full bg-[#25D366]/20 hover:bg-[#25D366]/30 disabled:opacity-50 border border-[#25D366]/30 text-[#25D366] font-semibold py-2.5 rounded-lg text-xs transition flex items-center justify-center gap-2">
-                      {waGenerating ? <><RefreshCw size={12} className="animate-spin" /> Generating…</> : <><Send size={12} /> Generate WhatsApp Code</>}
+                  <p className="text-[10px] text-[#848e9c]">Enter your WhatsApp number and we'll send you a 6-digit code to verify.</p>
+                  <div className="flex gap-2">
+                    <input
+                      value={waPhoneInput}
+                      onChange={e => setWaPhoneInput(e.target.value)}
+                      placeholder="+15551234567 (with country code)"
+                      className={`${inp} flex-1 min-w-0 text-xs`}
+                      onKeyDown={e => e.key === 'Enter' && handleSendWaCode()}
+                    />
+                    <button
+                      onClick={handleSendWaCode}
+                      disabled={waSending || !waPhoneInput.trim()}
+                      className="flex items-center gap-1.5 bg-[#25D366]/20 hover:bg-[#25D366]/30 disabled:opacity-50 border border-[#25D366]/30 text-[#25D366] font-semibold px-3 py-2 rounded-lg text-xs transition whitespace-nowrap">
+                      {waSending ? <RefreshCw size={12} className="animate-spin" /> : <Send size={12} />}
+                      {waSending ? 'Sending…' : 'Send Code'}
                     </button>
-                  ) : (
-                    <div className="space-y-3">
-                      <div className="bg-[#25D366]/8 border border-[#25D366]/20 rounded-xl p-3 space-y-2">
-                        <p className="text-[10px] text-[#848e9c] font-semibold uppercase tracking-wider">Your code</p>
-                        <div className="flex items-center gap-3">
-                          <code className="text-xl font-mono font-bold text-[#25D366] tracking-widest">{waGenCode}</code>
-                          <button onClick={() => { navigator.clipboard.writeText(waGenCode); toast.success('Code copied!') }}
-                            className="text-[#848e9c] hover:text-[#25D366] transition"><Copy size={13} /></button>
-                        </div>
-                      </div>
-                      <div className="bg-[#0b0e11] border border-[#2b3139] rounded-xl p-3 space-y-1.5">
-                        <p className="text-[10px] text-[#848e9c] font-semibold">How to connect:</p>
-                        <ol className="text-[10px] text-[#848e9c] space-y-1 list-decimal list-inside">
-                          <li>Open WhatsApp on your phone</li>
-                          <li>Message <span className="text-[#25D366] font-mono font-semibold">+1 415 523 8886</span></li>
-                          <li>Send: <span className="text-[#f0b90b] font-mono font-semibold">{waGenCode}</span></li>
-                        </ol>
-                      </div>
-                      <button onClick={handleGenerateWaCode} disabled={waGenerating}
-                        className="w-full border border-[#2b3139] text-[#848e9c] hover:text-[#eaecef] py-2 rounded-lg text-xs transition">
-                        {waGenerating ? 'Generating…' : 'Generate a new code'}
-                      </button>
+                  </div>
+                  {/* Info about which provider will deliver */}
+                  <div className="flex items-start gap-2 bg-[#161a1e] border border-[#2b3139] rounded-lg px-3 py-2">
+                    <Wifi size={11} className={waEvConnected ? 'text-[#25D366] flex-shrink-0 mt-0.5' : 'text-[#848e9c] flex-shrink-0 mt-0.5'} />
+                    <p className="text-[10px] text-[#848e9c]">
+                      {waEvConnected
+                        ? 'Code will be sent from your linked FinAi WhatsApp number via Evolution API.'
+                        : `Code will be sent via Twilio WhatsApp (${waTwilioNum}). You may need to message that number first to receive messages.`}
+                    </p>
+                  </div>
+                </div>
+              ) : (
+                /* Step 2 — enter OTP */
+                <div className="space-y-3">
+                  {/* Provider delivery confirmation */}
+                  <div className={`flex items-start gap-2 rounded-lg px-3 py-2.5 border ${
+                    waProvider === 'evolution'
+                      ? 'bg-[#25D366]/8 border-[#25D366]/20'
+                      : 'bg-[#f0b90b]/8 border-[#f0b90b]/20'
+                  }`}>
+                    <CheckCircle size={12} className={`flex-shrink-0 mt-0.5 ${waProvider === 'evolution' ? 'text-[#25D366]' : 'text-[#f0b90b]'}`} />
+                    <div>
+                      <p className="text-xs font-medium text-[#eaecef]">Code sent to {waPhoneInput}</p>
+                      <p className="text-[10px] text-[#848e9c]">
+                        {waProvider === 'evolution'
+                          ? 'Delivered via Evolution API (your FinAi WhatsApp)'
+                          : `Delivered via Twilio (${waTwilioNum})`}
+                      </p>
                     </div>
-                  )}
+                  </div>
+                  <div className="flex gap-2">
+                    <input
+                      value={waOtpInput}
+                      onChange={e => setWaOtpInput(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                      placeholder="6-digit code"
+                      inputMode="numeric"
+                      maxLength={6}
+                      className={`${inp} flex-1 min-w-0 text-sm font-mono tracking-widest`}
+                      onKeyDown={e => e.key === 'Enter' && handleVerifyWaCode()}
+                    />
+                    <button
+                      onClick={handleVerifyWaCode}
+                      disabled={waVerifying || waOtpInput.length < 6}
+                      className="flex items-center gap-1.5 bg-[#25D366] hover:bg-[#1da851] disabled:opacity-50 text-white font-semibold px-3 py-2 rounded-lg text-xs transition whitespace-nowrap">
+                      {waVerifying ? <RefreshCw size={12} className="animate-spin" /> : <CheckCircle size={12} />}
+                      {waVerifying ? 'Verifying…' : 'Verify'}
+                    </button>
+                  </div>
+                  <button
+                    onClick={() => { setWaCodeSent(false); setWaOtpInput('') }}
+                    className="w-full border border-[#2b3139] text-[#848e9c] hover:text-[#eaecef] py-1.5 rounded-lg text-[10px] transition">
+                    ← Change number / resend
+                  </button>
                 </div>
               )}
             </div>

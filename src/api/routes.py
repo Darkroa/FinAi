@@ -1123,14 +1123,16 @@ async def send_verify_email(current_user=Depends(get_current_user), db: Session 
 
 @router.post("/users/send-whatsapp-code")
 async def send_whatsapp_code(data: WhatsAppCodeRequest, current_user=Depends(get_current_user), db: Session = Depends(get_db)):
+    """
+    Send a 6-digit OTP to the user's WhatsApp number.
+    Primary: Evolution API (self-hosted, instant).
+    Fallback: Twilio WhatsApp sandbox.
+    Returns provider field so the frontend can show correct instructions.
+    """
     user = db.query(User).filter(User.email == current_user["email"]).first()
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
-    account_sid = os.getenv("TWILIO_ACCOUNT_SID")
-    auth_token  = os.getenv("TWILIO_AUTH_TOKEN")
-    from_number = os.getenv("TWILIO_WHATSAPP_NUMBER", "+14155238886")
-    if not account_sid or not auth_token:
-        raise HTTPException(status_code=503, detail="WhatsApp service not configured. Contact support.")
+
     code    = "".join(random.choices(string.digits, k=6))
     expires = datetime.utcnow() + timedelta(minutes=10)
     prefs = dict(user.notification_preferences or {})
@@ -1139,20 +1141,50 @@ async def send_whatsapp_code(data: WhatsAppCodeRequest, current_user=Depends(get
     prefs["whatsapp_otp_expires"] = expires.isoformat()
     user.notification_preferences = prefs
     db.commit()
-    try:
-        from twilio.rest import Client as _Twilio
-        _tc = _Twilio(account_sid, auth_token)
-        _from = f"whatsapp:{from_number}"
-        _tc.messages.create(
-            from_=_from,
-            body=f"🔐 FinAi WhatsApp Verification\n\nYour code is: *{code}*\n\nExpires in 10 minutes. Do not share this code.",
-            to=f"whatsapp:{data.phone}",
+
+    msg = (
+        f"🔐 *FinAi WhatsApp Verification*\n\n"
+        f"Your code is: *{code}*\n\n"
+        f"Expires in 10 minutes. Do not share this code."
+    )
+
+    # ── Try Evolution API first ────────────────────────────────────────────────
+    from src.notifications.whatsapp_provider import (
+        _ev_configured, evolution_status, evolution_send, twilio_send,
+    )
+    provider = "none"
+    sent = False
+
+    if _ev_configured():
+        ev_state = evolution_status().get("state", "")
+        if ev_state == "open":
+            sent = evolution_send(data.phone, msg)
+            if sent:
+                provider = "evolution"
+                logger.info(f"WhatsApp OTP sent via Evolution API to {data.phone}")
+
+    # ── Twilio fallback ────────────────────────────────────────────────────────
+    if not sent:
+        sent = twilio_send(data.phone, msg)
+        if sent:
+            provider = "twilio"
+            logger.info(f"WhatsApp OTP sent via Twilio to {data.phone}")
+
+    if not sent:
+        raise HTTPException(
+            status_code=503,
+            detail=(
+                "Could not deliver the WhatsApp message. "
+                "Make sure the Evolution API instance is connected or Twilio credentials are set."
+            ),
         )
-        logger.info(f"WhatsApp OTP sent to {data.phone}")
-    except Exception as e:
-        logger.error(f"WhatsApp OTP send failed: {e}")
-        raise HTTPException(status_code=503, detail=f"Failed to send WhatsApp message: {str(e)}")
-    return {"message": "Verification code sent to WhatsApp"}
+
+    twilio_number = os.getenv("TWILIO_WHATSAPP_NUMBER", "+14155238886")
+    return {
+        "message": "Verification code sent to WhatsApp",
+        "provider": provider,
+        "twilio_number": twilio_number,
+    }
 
 
 @router.post("/users/verify-whatsapp")
