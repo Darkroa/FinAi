@@ -107,7 +107,7 @@ def _get_bot_context(user_email: Optional[str]) -> Dict[str, Any]:
     ctx: Dict[str, Any] = {"bots": [], "total_pnl": 0.0, "bot_count": 0}
     try:
         if user_email:
-            from src.users.crud import get_user_bot_manager
+            from src.users.bot_manager import get_user_bot_manager
             manager = get_user_bot_manager(user_email, None)
         else:
             from src.trading.trade_bot import bot_manager as manager  # type: ignore
