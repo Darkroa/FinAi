@@ -1870,6 +1870,179 @@ async def admin_tatum_unsubscribe(sub_id: str):
     return {"ok": ok, "subscription_id": sub_id}
 
 
+@router.post("/admin/tatum/test-webhook/{tx_id}", dependencies=[Depends(require_admin)])
+async def admin_tatum_test_webhook(
+    tx_id: int,
+    confirmed: bool = True,
+    request: Request = None,
+    db: Session = Depends(get_db),
+):
+    """
+    Simulate a Tatum webhook hit for a pending deposit (admin only).
+    - confirmed=True  → fires the 'confirmed' path (auto-approves + credits balance)
+    - confirmed=False → fires the 'mempool' path (pending_confirmation)
+    No real crypto needed — purely for testing the webhook pipeline.
+    """
+    tx = db.query(Transaction).filter(Transaction.id == tx_id).first()
+    if not tx:
+        raise HTTPException(status_code=404, detail="Transaction not found")
+    if tx.tx_type != "deposit":
+        raise HTTPException(status_code=400, detail="Only deposit transactions can be tested")
+    if tx.status not in ("pending", "pending_confirmation"):
+        raise HTTPException(status_code=400, detail=f"Transaction status is '{tx.status}' — must be pending or pending_confirmation")
+
+    # Determine chain from method
+    method_chain_map = {
+        "crypto_btc":  "BTC",
+        "crypto_eth":  "ETH",
+        "crypto_usdt": "TRON",
+    }
+    chain = method_chain_map.get(tx.method, "ETH")
+
+    # Get address for this tx
+    user = db.query(User).filter(User.id == tx.user_id).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    # Derive deposit address same way the deposit endpoint does
+    address = "test_address_unknown"
+    master_seed = os.getenv("MASTER_SEED", "").strip()
+    if master_seed:
+        try:
+            from src.users.hd_wallet import MultiAssetHDWallet
+            wallet = MultiAssetHDWallet()
+            idx = user.hd_wallet_index if user.hd_wallet_index is not None else user.id
+            if chain == "BTC":
+                address = wallet.get_btc_account(index=idx, bip=84)["address"]
+            elif chain == "ETH":
+                address = wallet.get_eth_account(index=idx)["address"]
+            else:
+                address = wallet.get_trx_account(index=idx)["address"]
+        except Exception:
+            pass
+
+    # Simulate a fake tx hash
+    import secrets as _secrets
+    fake_tx_hash = "TEST_" + _secrets.token_hex(16)
+
+    # Build a synthetic payload that matches Tatum webhook structure
+    synthetic_payload = {
+        "subscriptionType":  "ADDRESS_TRANSACTION",
+        "chain":             chain,
+        "address":           address,
+        "asset":             "BTC" if chain == "BTC" else ("ETH" if chain == "ETH" else "USDT_TRON"),
+        "amount":            str(tx.amount_usdt),
+        "txId":              fake_tx_hash,
+        "blockHash":         None,
+        "blockNumber":       None,
+        "mempool":           not confirmed,
+        "_test_mode":        True,
+    }
+
+    # ── Replay the exact same matching + processing logic ─────────────────────
+    chain_recv  = synthetic_payload.get("chain", "").upper()
+    address_hit = (synthetic_payload.get("address") or "").lower()
+    tx_id_str   = synthetic_payload.get("txId") or synthetic_payload.get("hash") or ""
+    amount_recv = float(synthetic_payload.get("amount") or 0)
+    is_mempool  = bool(synthetic_payload.get("mempool", False))
+
+    cutoff = datetime.utcnow() - timedelta(hours=48)
+    candidates = (
+        db.query(Transaction)
+        .filter(
+            Transaction.tx_type == "deposit",
+            Transaction.status.in_(["pending", "pending_confirmation"]),
+            Transaction.created_at >= cutoff,
+        )
+        .order_by(Transaction.created_at.desc())
+        .all()
+    )
+
+    matched_tx: Transaction | None = None
+    for cand in candidates:
+        meta = {}
+        try:
+            import json as _j
+            meta = _j.loads(cand.note or "{}")
+        except Exception:
+            pass
+        dep_addr = (meta.get("deposit_address") or "").lower()
+        if dep_addr and dep_addr == address_hit:
+            matched_tx = cand
+            break
+        elif dep_addr == "" and cand.id == tx_id:
+            matched_tx = cand
+            break
+
+    if not matched_tx:
+        matched_tx = tx
+
+    if is_mempool:
+        matched_tx.status             = "pending_confirmation"
+        matched_tx.monitoring_status  = "matched"
+        matched_tx.blockchain_tx_hash = tx_id_str
+        if amount_recv:
+            matched_tx.blockchain_amount = amount_recv
+        db.commit()
+        _notify_user(
+            user,
+            "🔍 Deposit TX Detected (Test)",
+            f"Test: Your deposit of ${matched_tx.amount_usdt:,.2f} USDT was detected in the mempool. Awaiting confirmation.",
+            db,
+        )
+        return {
+            "ok": True,
+            "simulated": "mempool",
+            "tx_id": matched_tx.id,
+            "status": matched_tx.status,
+            "fake_tx_hash": fake_tx_hash,
+        }
+    else:
+        # Confirmed — auto-approve
+        matched_tx.status                  = "approved"
+        matched_tx.monitoring_status       = "confirmed"
+        matched_tx.blockchain_tx_hash      = tx_id_str
+        matched_tx.blockchain_confirmed_at = datetime.utcnow()
+        if amount_recv:
+            matched_tx.blockchain_amount = amount_recv
+
+        user.balance_usdt = (user.balance_usdt or 0) + matched_tx.amount_usdt
+
+        sub_id = getattr(matched_tx, "tatum_subscription_id", None)
+        if sub_id:
+            try:
+                from src.users.tatum import unsubscribe
+                unsubscribe(sub_id)
+                matched_tx.tatum_subscription_id = None
+            except Exception:
+                pass
+
+        db.commit()
+        _notify_user(
+            user,
+            "✅ Deposit Confirmed (Test)",
+            f"Test: Your deposit of ${matched_tx.amount_usdt:,.2f} USDT has been confirmed on-chain and credited to your account.",
+            db,
+        )
+        _fire_admin_telegram_alert(
+            f"🧪 *Tatum Test Webhook — Confirmed*\n\n"
+            f"👤 User: `{user.email}`\n"
+            f"💰 Credited: `${matched_tx.amount_usdt:,.2f} USDT`\n"
+            f"⛓ Chain: {chain} | TX: `{fake_tx_hash[:24]}…` (SIMULATED)\n"
+            f"💳 New Balance: `${user.balance_usdt:,.2f} USDT`",
+            db=db,
+        )
+        return {
+            "ok": True,
+            "simulated": "confirmed",
+            "tx_id": matched_tx.id,
+            "status": matched_tx.status,
+            "balance_credited": matched_tx.amount_usdt,
+            "new_balance": user.balance_usdt,
+            "fake_tx_hash": fake_tx_hash,
+        }
+
+
 @router.get("/users/withdrawal-methods")
 async def get_withdrawal_methods(current_user=Depends(get_current_user), db: Session = Depends(get_db)):
     import json as _json
