@@ -2574,6 +2574,8 @@ export default function AdminPage({ initialTab, embedded }: { initialTab?: Tab; 
               binance:      { label: 'Binance API',        emoji: '🔶' },
               ai_providers: { label: 'AI Providers',       emoji: '🤖' },
               storage:      { label: 'File Storage',       emoji: '🗂️' },
+              prometheus:   { label: 'Prometheus',         emoji: '🔥' },
+              grafana:      { label: 'Grafana',            emoji: '📊' },
               tatum:        { label: 'Tatum (Blockchain)',  emoji: '⛓️' },
               hd_wallet:    { label: 'HD Wallet',          emoji: '🔑' },
               newsapi:      { label: 'NewsAPI',            emoji: '📰' },
@@ -2671,6 +2673,39 @@ export default function AdminPage({ initialTab, embedded }: { initialTab?: Tab; 
                                   <span className="text-[#eaecef] font-mono truncate max-w-[55%] text-right">{String(v)}</span>
                                 </div>
                               ))}
+                          </div>
+                        ) : (name === 'prometheus' || name === 'grafana') && check.url ? (
+                          <div className="space-y-2">
+                            <div className="flex items-center justify-between text-xs">
+                              <span className="text-[#848e9c]">URL</span>
+                              <span className="text-[#eaecef] font-mono text-[10px] truncate max-w-[60%] text-right">{check.url}</span>
+                            </div>
+                            {check.latency_ms != null && (
+                              <div className="flex items-center justify-between text-xs">
+                                <span className="text-[#848e9c]">Latency</span>
+                                <span className={`font-mono font-semibold ${check.latency_ms < 100 ? 'text-[#0ecb81]' : check.latency_ms < 500 ? 'text-[#f0b90b]' : 'text-[#f6465d]'}`}>{check.latency_ms} ms</span>
+                              </div>
+                            )}
+                            {name === 'grafana' && check.version && check.version !== '—' && (
+                              <div className="flex items-center justify-between text-xs">
+                                <span className="text-[#848e9c]">Version</span>
+                                <span className="text-[#eaecef] font-mono">{check.version}</span>
+                              </div>
+                            )}
+                            {check.error && (
+                              <p className="text-[10px] text-[#f6465d] bg-[#f6465d]/5 rounded px-2 py-1 break-all">{check.error}</p>
+                            )}
+                            <a
+                              href={name === 'grafana' ? '/graf' : '/prom'}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className={`flex items-center justify-center gap-1.5 text-[10px] w-full mt-1 px-3 py-1.5 rounded-lg border font-medium transition
+                                ${isHealthy
+                                  ? 'bg-[#f0b90b]/5 border-[#f0b90b]/20 text-[#f0b90b] hover:bg-[#f0b90b]/10'
+                                  : 'bg-[#2b3139]/30 border-[#2b3139] text-[#848e9c] cursor-not-allowed pointer-events-none'}`}
+                            >
+                              {name === 'grafana' ? '📊 Open Grafana Dashboard' : '🔥 Open Prometheus'}
+                            </a>
                           </div>
                         ) : name === 'ai_providers' && check.providers ? (
                           <div className="space-y-1.5">

@@ -2799,6 +2799,49 @@ async def admin_health_check(db: Session = Depends(get_db)):
     except Exception as e:
         checks["storage"] = {"status": "error", "error": str(e)[:120]}
 
+    # ── Prometheus ────────────────────────────────────────────────────────────
+    try:
+        import time as _time
+        from src.utils.config import config as _cfg
+        _prom_url = _cfg.PROMETHEUS_URL.rstrip("/")
+        _t0 = _time.time()
+        async with httpx.AsyncClient(timeout=3.0) as _c:
+            _r = await _c.get(f"{_prom_url}/-/healthy")
+        _lat = round((_time.time() - _t0) * 1000)
+        checks["prometheus"] = {
+            "status":     "healthy" if _r.status_code == 200 else "degraded",
+            "url":        _prom_url,
+            "latency_ms": _lat,
+        }
+    except Exception as e:
+        from src.utils.config import config as _cfg2
+        checks["prometheus"] = {"status": "error", "url": _cfg2.PROMETHEUS_URL, "error": str(e)[:80]}
+
+    # ── Grafana ───────────────────────────────────────────────────────────────
+    try:
+        import time as _time2
+        from src.utils.config import config as _cfg3
+        _graf_url = _cfg3.GRAFANA_URL.rstrip("/")
+        _t0 = _time2.time()
+        async with httpx.AsyncClient(timeout=3.0) as _c2:
+            _r2 = await _c2.get(f"{_graf_url}/api/health")
+        _lat2 = round((_time2.time() - _t0) * 1000)
+        _gdata = {}
+        try:
+            _gdata = _r2.json()
+        except Exception:
+            pass
+        checks["grafana"] = {
+            "status":     "healthy" if _r2.status_code == 200 else "degraded",
+            "url":        _graf_url,
+            "latency_ms": _lat2,
+            "version":    _gdata.get("version", "—"),
+            "commit":     _gdata.get("commit", "—")[:8] if _gdata.get("commit") else "—",
+        }
+    except Exception as e:
+        from src.utils.config import config as _cfg4
+        checks["grafana"] = {"status": "error", "url": _cfg4.GRAFANA_URL, "error": str(e)[:80]}
+
     # ── Tatum blockchain monitoring ───────────────────────────────────────────
     try:
         from src.users.tatum import ping as tatum_ping, is_configured as tatum_configured
