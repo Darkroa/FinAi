@@ -556,11 +556,11 @@ async def _deferred_init():
                 )
                 _data = _r.json()
                 if _data.get("ok"):
-                    logger.success(f"✅ Telegram webhook registered: {WEBHOOK_URL}")
+                    logger.success(f" Telegram webhook registered: {WEBHOOK_URL}")
                 else:
-                    logger.warning(f"⚠️  Telegram webhook registration failed: {_data}")
+                    logger.warning(f"  Telegram webhook registration failed: {_data}")
         else:
-            logger.info("ℹ️  TELEGRAM_BOT_TOKEN not set — webhook skipped")
+            logger.info("  TELEGRAM_BOT_TOKEN not set — webhook skipped")
     except Exception as _tg_err:
         logger.warning(f"Telegram webhook init skipped: {_tg_err}")
 
@@ -570,7 +570,7 @@ async def shutdown_event():
     try:
         from src.notifications.scheduler import scheduler
         scheduler.shutdown()
-        logger.info("🛑 Scheduler shut down gracefully")
+        logger.info(" Scheduler shut down gracefully")
     except Exception as e:
         logger.error(f"Error during shutdown: {e}")
 
