@@ -9,11 +9,11 @@ def chat(message: str, history):
         return response
     except Exception as e:
         logger.error(f"Chat error: {e}")
-        return f"⚠️ Sorry, something went wrong: {str(e)}"
+        return f" Sorry, something went wrong: {str(e)}"
 
 
 with gr.Blocks(title="FinAi", theme=gr.themes.Dark()) as demo:
-    gr.Markdown("# 🤖 FinAi\n**Powered by Finllm** — Your Intelligent Financial Assistant")
+    gr.Markdown("#  FinAi\n**Powered by Finllm** — Your Intelligent Financial Assistant")
 
     chatbot = gr.Chatbot(height=600, label="Chat with FinAi")
     msg = gr.Textbox(
