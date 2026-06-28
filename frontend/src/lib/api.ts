@@ -402,3 +402,7 @@ export const submitChatFeedback = (message_hash: string, feedback: 'like' | 'dis
 
 // Admin — Chat Feedback Stats
 export const adminGetChatFeedback = () => api.get('/admin/chat-feedback')
+
+// Admin — Tatum test webhook
+export const adminTatumTestWebhook = (tx_id: number, confirmed: boolean) =>
+  api.post(`/admin/tatum/test-webhook/${tx_id}?confirmed=${confirmed}`)

@@ -15,6 +15,7 @@ import {
   adminGetTestimonials, adminCreateTestimonial, adminUpdateTestimonial, adminToggleTestimonial, adminDeleteTestimonial,
   adminGetWalletStats,
   adminGetChatFeedback,
+  adminTatumTestWebhook,
 } from '../lib/api'
 import { AdminLiveVisitors } from '../components/AdminLiveVisitors'
 import toast from 'react-hot-toast'
@@ -85,6 +86,10 @@ export default function AdminPage() {
   const [userDepLoading, setUserDepLoading] = useState(false)
   const [userDepSaving, setUserDepSaving] = useState(false)
   const [viewProofTx, setViewProofTx] = useState<any>(null)
+
+  // Tatum test webhook
+  const [tatumTestingId, setTatumTestingId] = useState<number | null>(null)
+  const [copiedTxId, setCopiedTxId] = useState<number | null>(null)
 
   // Testimonials
   const [testimonials, setTestimonials] = useState<any[]>([])
@@ -585,7 +590,20 @@ export default function AdminPage() {
                 {transactions.length === 0 ? <tr><td colSpan={7} className="px-4 py-8 text-center text-[#848e9c]">No transactions</td></tr>
                   : transactions.map(tx => (
                   <tr key={tx.id} className="border-b border-[#2b3139]/50 hover:bg-[#1e2329] transition">
-                    <td className="px-4 py-3 font-mono text-xs text-[#848e9c]">#{tx.id}</td>
+                    <td className="px-4 py-3 font-mono text-xs text-[#848e9c]">
+                      <button
+                        className="flex items-center gap-1 hover:text-[#f0b90b] transition group"
+                        title="Copy ID"
+                        onClick={() => {
+                          navigator.clipboard.writeText(String(tx.id))
+                          setCopiedTxId(tx.id)
+                          setTimeout(() => setCopiedTxId(null), 1500)
+                        }}
+                      >
+                        #{tx.id}
+                        <Copy size={10} className={`opacity-0 group-hover:opacity-100 transition ${copiedTxId === tx.id ? 'text-[#0ecb81] opacity-100' : ''}`} />
+                      </button>
+                    </td>
                     <td className="px-4 py-3 text-xs text-[#eaecef] truncate max-w-[140px]">{tx.user_email || '—'}</td>
                     <td className="px-4 py-3 text-xs text-[#848e9c] capitalize">{(tx.tx_type || 'deposit').replace(/_/g, ' ')}</td>
                     <td className="px-4 py-3 text-right font-mono text-xs text-[#eaecef]">${(tx.amount_usdt || tx.amount || 0).toFixed(2)}</td>
@@ -907,6 +925,98 @@ export default function AdminPage() {
                 </div>
               </div>
             )}
+          </div>
+
+          {/* Tatum Blockchain Monitor Test */}
+          <div className="bg-[#161a1e] border border-[#2b3139] rounded-xl p-5">
+            <h2 className="text-sm font-semibold text-[#eaecef] mb-1 flex items-center gap-2">
+              <Activity size={14} className="text-[#0ecb81]" /> Tatum Webhook Tester
+            </h2>
+            <p className="text-[11px] text-[#848e9c] mb-4">
+              Simulate a Tatum blockchain event for any pending crypto deposit — no real crypto needed.
+              <span className="text-[#f0b90b] ml-1">Requires TATUM_API_KEY to be set for production; test mode always works.</span>
+            </p>
+
+            {(() => {
+              const pendingCrypto = transactions.filter(
+                tx => tx.tx_type === 'deposit' &&
+                  ['pending', 'pending_confirmation'].includes(tx.status) &&
+                  (tx.method || '').startsWith('crypto_')
+              )
+              if (pendingCrypto.length === 0) {
+                return (
+                  <p className="text-xs text-[#848e9c] italic">
+                    No pending crypto deposits right now. Create a deposit from a user account to test.
+                  </p>
+                )
+              }
+              return (
+                <div className="space-y-2">
+                  {pendingCrypto.map(tx => (
+                    <div key={tx.id} className="flex flex-wrap items-center gap-3 p-3 bg-[#0b0e11] border border-[#2b3139] rounded-xl">
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2">
+                          <button
+                            className="font-mono text-xs text-[#f0b90b] hover:underline flex items-center gap-1 group"
+                            onClick={() => {
+                              navigator.clipboard.writeText(String(tx.id))
+                              setCopiedTxId(tx.id)
+                              setTimeout(() => setCopiedTxId(null), 1500)
+                            }}
+                          >
+                            #{tx.id}
+                            <Copy size={9} className={`${copiedTxId === tx.id ? 'text-[#0ecb81]' : 'opacity-0 group-hover:opacity-100'} transition`} />
+                          </button>
+                          <span className="text-[10px] text-[#848e9c]">{tx.user_email}</span>
+                          <span className={`text-[10px] px-1.5 py-0.5 rounded-full ${tx.status === 'pending_confirmation' ? 'bg-[#f0b90b]/10 text-[#f0b90b]' : 'bg-[#848e9c]/10 text-[#848e9c]'}`}>
+                            {tx.status}
+                          </span>
+                        </div>
+                        <p className="text-[10px] text-[#848e9c] mt-0.5">
+                          {tx.method?.replace('crypto_', '').toUpperCase()} · ${(tx.amount_usdt || 0).toFixed(2)} USDT
+                        </p>
+                      </div>
+                      <div className="flex gap-2 flex-shrink-0">
+                        <button
+                          disabled={tatumTestingId === tx.id}
+                          onClick={async () => {
+                            setTatumTestingId(tx.id)
+                            try {
+                              await adminTatumTestWebhook(tx.id, false)
+                              toast.success(`TX #${tx.id}: Mempool detection simulated`)
+                              const res = await adminGetTransactions()
+                              if (res?.data) setTransactions(res.data)
+                            } catch (e: any) {
+                              toast.error(e?.response?.data?.detail || 'Test failed')
+                            } finally { setTatumTestingId(null) }
+                          }}
+                          className="flex items-center gap-1.5 px-3 py-1.5 bg-[#f0b90b]/10 hover:bg-[#f0b90b]/20 border border-[#f0b90b]/30 text-[#f0b90b] rounded-lg text-[10px] font-semibold transition disabled:opacity-50">
+                          {tatumTestingId === tx.id ? <RefreshCw size={10} className="animate-spin" /> : <Activity size={10} />}
+                          Mempool
+                        </button>
+                        <button
+                          disabled={tatumTestingId === tx.id}
+                          onClick={async () => {
+                            setTatumTestingId(tx.id)
+                            try {
+                              const res = await adminTatumTestWebhook(tx.id, true)
+                              toast.success(`TX #${tx.id}: Confirmed — $${res.data?.balance_credited?.toFixed(2)} credited!`)
+                              const txRes = await adminGetTransactions()
+                              if (txRes?.data) setTransactions(txRes.data)
+                            } catch (e: any) {
+                              toast.error(e?.response?.data?.detail || 'Test failed')
+                            } finally { setTatumTestingId(null) }
+                          }}
+                          className="flex items-center gap-1.5 px-3 py-1.5 bg-[#0ecb81]/10 hover:bg-[#0ecb81]/20 border border-[#0ecb81]/30 text-[#0ecb81] rounded-lg text-[10px] font-semibold transition disabled:opacity-50">
+                          {tatumTestingId === tx.id ? <RefreshCw size={10} className="animate-spin" /> : <CheckCircle size={10} />}
+                          Confirm
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )
+            })()}
           </div>
         </div>
       )}
