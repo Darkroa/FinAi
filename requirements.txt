@@ -85,3 +85,5 @@ uvicorn[standard]
 boto3
 hdwallet
 psutil
+prometheus-client
+grafana-client

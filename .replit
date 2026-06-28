@@ -80,3 +80,6 @@ build = ["sh", "-c", "cd /home/runner/workspace/frontend && npm install --legacy
 
 [darkroa]
 expertMode = true
+
+[agent]
+expertMode = true

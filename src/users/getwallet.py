@@ -6,7 +6,7 @@ from pathlib import Path
 env_path = Path(__file__).resolve().parents[2] / ".env"
 load_dotenv(dotenv_path=env_path)
 
-from hd_wallet import MultiAssetHDWallet
+from src.users.hd_wallet import MultiAssetHDWallet
 
 
 def run_wallet_test():
