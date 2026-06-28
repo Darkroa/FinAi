@@ -1,6 +1,7 @@
 import os
 import asyncio
 from pathlib import Path
+from collections import deque
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -11,6 +12,15 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse, Response
 import httpx
 from loguru import logger
+
+# ── In-memory circular log buffer (last 500 lines) ──────────────────────────
+LOG_BUFFER: deque = deque(maxlen=500)
+
+def _log_sink(message: str) -> None:
+    LOG_BUFFER.append(message.rstrip())
+
+logger.add(_log_sink, format="{time:HH:mm:ss} | {level:<8} | {message}", level="DEBUG", colorize=False)
+# ────────────────────────────────────────────────────────────────────────────
 
 from src.api.routes import router
 from src.api.middleware import APIRateLimitMiddleware

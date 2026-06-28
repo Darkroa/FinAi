@@ -2306,6 +2306,15 @@ async def admin_reset_user(email: str, db: Session = Depends(get_db)):
     return {"status": "reset", "email": email}
 
 
+@router.get("/admin/server-logs", dependencies=[Depends(require_admin)])
+async def admin_server_logs(n: int = 200):
+    try:
+        from src.api.main import LOG_BUFFER
+        lines = list(LOG_BUFFER)[-n:]
+    except Exception:
+        lines = ["Log buffer unavailable"]
+    return {"lines": lines}
+
 @router.get("/admin/server-metrics", dependencies=[Depends(require_admin)])
 async def admin_server_metrics(db: Session = Depends(get_db)):
     import time, psutil as _ps

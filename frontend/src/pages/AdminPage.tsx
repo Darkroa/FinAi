@@ -37,6 +37,178 @@ interface VpsPlan { id: number; name: string; price: number; specs: string; star
 interface AssetProduct { id: number; name: string; price: number; icon: string; start_date?: string; end_date?: string; roi_percent?: number; description?: string }
 interface PricingPlan { name: string; price: number; period: string }
 
+function ApiConsoleTab({ apiMethod, setApiMethod, apiUrl, setApiUrl, apiBody, setApiBody, apiLoading, apiResponse, apiTime, onSend }: {
+  apiMethod: string; setApiMethod: (v: string) => void
+  apiUrl: string; setApiUrl: (v: string) => void
+  apiBody: string; setApiBody: (v: string) => void
+  apiLoading: boolean; apiResponse: any; apiTime: number | null
+  onSend: () => void
+}) {
+  const [view, setView] = useState<'request' | 'console'>('request')
+  const [consoleLogs, setConsoleLogs] = useState<string[]>([])
+  const [consoleLoading, setConsoleLoading] = useState(false)
+  const consoleRef = useState<HTMLPreElement | null>(null)
+
+  const fetchLogs = async () => {
+    setConsoleLoading(true)
+    try {
+      const token = JSON.parse(localStorage.getItem('finai-auth') || '{}')?.state?.token || ''
+      const res = await fetch('/api/admin/server-logs?n=300', {
+        headers: { Authorization: `Bearer ${token}` },
+      })
+      const data = await res.json()
+      setConsoleLogs(Array.isArray(data.lines) ? data.lines : [])
+    } catch { setConsoleLogs(['Failed to fetch logs']) }
+    setConsoleLoading(false)
+  }
+
+  const methodColor: Record<string, string> = { GET: '#0ecb81', POST: '#f0b90b', PUT: '#a78bfa', DELETE: '#f6465d', PATCH: '#22d3ee' }
+
+  const lineColor = (line: string) => {
+    if (/ERROR|CRITICAL|Exception/.test(line)) return '#f6465d'
+    if (/WARNING|WARN/.test(line)) return '#f0b90b'
+    if (/SUCCESS|200|201/.test(line)) return '#0ecb81'
+    if (/INFO/.test(line)) return '#60a5fa'
+    return '#848e9c'
+  }
+
+  return (
+    <div className="space-y-4">
+      {/* Sub-tab bar */}
+      <div className="flex items-center gap-1 bg-[#161a1e] border border-[#2b3139] rounded-xl p-1 w-fit">
+        <button
+          onClick={() => setView('request')}
+          className={`flex items-center gap-1.5 px-4 py-1.5 rounded-lg text-xs font-semibold transition-all ${view === 'request' ? 'bg-[#1e2329] text-[#f0b90b]' : 'text-[#848e9c] hover:text-[#eaecef]'}`}
+        >
+          <Terminal size={11} /> API Request
+        </button>
+        <button
+          onClick={() => { setView('console'); if (consoleLogs.length === 0) fetchLogs() }}
+          className={`flex items-center gap-1.5 px-4 py-1.5 rounded-lg text-xs font-semibold transition-all ${view === 'console' ? 'bg-[#1e2329] text-[#0ecb81]' : 'text-[#848e9c] hover:text-[#eaecef]'}`}
+        >
+          <Monitor size={11} /> Server Console
+        </button>
+      </div>
+
+      {view === 'request' && (
+        <>
+          {/* Response — shown ABOVE the request form when available */}
+          {apiResponse && (
+            <div className="bg-[#0b0e11] border border-[#2b3139] rounded-2xl overflow-hidden">
+              <div className="flex items-center justify-between px-4 py-2.5 border-b border-[#2b3139] bg-[#161a1e]">
+                <div className="flex items-center gap-2">
+                  <div className={`w-2 h-2 rounded-full ${apiResponse.ok ? 'bg-[#0ecb81]' : 'bg-[#f6465d]'}`} />
+                  <span className="text-xs font-bold font-mono" style={{ color: apiResponse.ok ? '#0ecb81' : '#f6465d' }}>
+                    {apiResponse.status} {apiResponse.ok ? 'OK' : 'ERROR'}
+                  </span>
+                  <span className="text-[10px] text-[#848e9c]">Response</span>
+                </div>
+                {apiTime != null && <span className="text-[10px] text-[#848e9c] font-mono">{apiTime}ms</span>}
+              </div>
+              <pre className="text-[11px] font-mono text-[#eaecef] overflow-auto max-h-72 p-4 whitespace-pre-wrap leading-relaxed">
+                {typeof apiResponse.body === 'string' ? apiResponse.body : JSON.stringify(apiResponse.body, null, 2)}
+              </pre>
+            </div>
+          )}
+
+          {/* Request form */}
+          <div className="bg-[#161a1e] border border-[#2b3139] rounded-2xl p-4 space-y-3">
+            <div className="flex flex-col gap-2">
+              <div className="flex gap-2">
+                <select
+                  value={apiMethod}
+                  onChange={e => setApiMethod(e.target.value)}
+                  className="shrink-0 bg-[#0b0e11] border border-[#2b3139] rounded-xl px-3 py-2 text-sm font-mono font-bold focus:outline-none focus:border-[#f0b90b] transition"
+                  style={{ color: methodColor[apiMethod] || '#eaecef' }}
+                >
+                  {['GET', 'POST', 'PUT', 'PATCH', 'DELETE'].map(m => <option key={m} value={m}>{m}</option>)}
+                </select>
+                <input
+                  value={apiUrl}
+                  onChange={e => setApiUrl(e.target.value)}
+                  onKeyDown={e => e.key === 'Enter' && onSend()}
+                  placeholder="/api/admin/users"
+                  className="min-w-0 flex-1 bg-[#0b0e11] border border-[#2b3139] rounded-xl px-3 py-2 text-sm font-mono text-[#eaecef] placeholder-[#4a5568] focus:outline-none focus:border-[#f0b90b] transition"
+                />
+              </div>
+              <button onClick={onSend} disabled={apiLoading}
+                className="w-full flex items-center justify-center gap-2 bg-[#f0b90b] hover:bg-[#d4a30a] disabled:opacity-50 text-black font-semibold px-4 py-2.5 rounded-xl text-sm transition">
+                {apiLoading ? <RefreshCw size={13} className="animate-spin" /> : <Play size={13} />}
+                {apiLoading ? 'Sending…' : 'Send Request'}
+              </button>
+            </div>
+
+            <div>
+              <p className="text-[10px] text-[#848e9c] mb-1.5 font-medium">Quick Endpoints</p>
+              <div className="flex flex-wrap gap-1.5">
+                {[
+                  { m: 'GET', u: '/api/admin/users' },
+                  { m: 'GET', u: '/api/admin/transactions' },
+                  { m: 'GET', u: '/api/admin/health' },
+                  { m: 'GET', u: '/api/admin/server-metrics' },
+                  { m: 'GET', u: '/api/admin/server-logs' },
+                  { m: 'GET', u: '/api/admin/subscriptions' },
+                  { m: 'GET', u: '/api/admin/api-key-users' },
+                  { m: 'GET', u: '/api/admin/wallet-config' },
+                  { m: 'GET', u: '/api/admin/referrals' },
+                  { m: 'GET', u: '/api/users/me' },
+                ].map(ep => (
+                  <button key={ep.u} onClick={() => { setApiMethod(ep.m); setApiUrl(ep.u) }}
+                    className="text-[10px] font-mono px-2 py-1 rounded-lg bg-[#1e2329] border border-[#2b3139] hover:border-[#f0b90b]/40 text-[#848e9c] hover:text-[#eaecef] transition">
+                    <span style={{ color: methodColor[ep.m] }}>{ep.m}</span> {ep.u.replace('/api', '')}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {['POST', 'PUT', 'PATCH'].includes(apiMethod) && (
+              <div>
+                <p className="text-[10px] text-[#848e9c] mb-1.5 font-medium">Request Body (JSON)</p>
+                <textarea
+                  value={apiBody}
+                  onChange={e => setApiBody(e.target.value)}
+                  rows={4}
+                  placeholder='{"key": "value"}'
+                  className="w-full bg-[#0b0e11] border border-[#2b3139] rounded-xl px-3 py-2 text-sm font-mono text-[#eaecef] placeholder-[#4a5568] focus:outline-none focus:border-[#f0b90b] transition resize-none"
+                />
+              </div>
+            )}
+          </div>
+        </>
+      )}
+
+      {view === 'console' && (
+        <div className="bg-[#0b0e11] border border-[#2b3139] rounded-2xl overflow-hidden">
+          <div className="flex items-center justify-between px-4 py-2.5 border-b border-[#2b3139] bg-[#161a1e]">
+            <div className="flex items-center gap-2">
+              <Monitor size={13} className="text-[#0ecb81]" />
+              <span className="text-xs font-semibold text-[#eaecef]">Server Console</span>
+              <span className="text-[10px] text-[#848e9c]">last {consoleLogs.length} lines</span>
+            </div>
+            <button
+              onClick={fetchLogs}
+              className="flex items-center gap-1.5 text-[10px] text-[#848e9c] hover:text-[#eaecef] border border-[#2b3139] px-2.5 py-1 rounded-lg transition"
+            >
+              <RefreshCw size={10} className={consoleLoading ? 'animate-spin' : ''} /> Refresh
+            </button>
+          </div>
+          <div className="h-[60vh] overflow-y-auto p-3 font-mono text-[11px] leading-relaxed space-y-0.5">
+            {consoleLoading ? (
+              <div className="flex items-center justify-center h-full text-[#848e9c] animate-pulse">Loading logs…</div>
+            ) : consoleLogs.length === 0 ? (
+              <div className="flex items-center justify-center h-full text-[#848e9c]">No log lines captured yet</div>
+            ) : (
+              consoleLogs.map((line, i) => (
+                <div key={i} style={{ color: lineColor(line) }} className="whitespace-pre-wrap break-all">{line}</div>
+              ))
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
 function VisitorsActivityTab({ activityLogs, activityLoading, setActivityLoading, setActivityLogs }: {
   activityLogs: any[]
   activityLoading: boolean
@@ -600,12 +772,10 @@ export default function AdminPage({ initialTab, embedded }: { initialTab?: Tab; 
     setApiResponse(null)
     const t0 = Date.now()
     try {
-      const token = document.cookie.match(/finai-auth/)
-        ? JSON.parse(localStorage.getItem('finai-auth') || '{}')?.state?.token
-        : ''
+      const token = JSON.parse(localStorage.getItem('finai-auth') || '{}')?.state?.token || ''
       const opts: RequestInit = {
         method: apiMethod,
-        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+        headers: { 'Content-Type': 'application/json', ...(token ? { 'Authorization': `Bearer ${token}` } : {}) },
       }
       if (apiBody && ['POST', 'PUT', 'PATCH'].includes(apiMethod)) {
         opts.body = apiBody
@@ -3739,87 +3909,14 @@ export default function AdminPage({ initialTab, embedded }: { initialTab?: Tab; 
 
       {/* ── API CONSOLE ── */}
       {tab === 'api-console' && (
-        <div className="space-y-4">
-          <p className="text-[10px] font-semibold text-[#848e9c] uppercase tracking-wide">API Console</p>
-
-          <div className="bg-[#161a1e] border border-[#2b3139] rounded-2xl p-4 space-y-3">
-            <div className="flex flex-col gap-2">
-              <div className="flex gap-2">
-                <select
-                  value={apiMethod}
-                  onChange={e => setApiMethod(e.target.value)}
-                  className="shrink-0 bg-[#0b0e11] border border-[#2b3139] rounded-xl px-3 py-2 text-sm font-mono font-bold focus:outline-none focus:border-[#f0b90b] transition"
-                  style={{ color: { GET: '#0ecb81', POST: '#f0b90b', PUT: '#a78bfa', DELETE: '#f6465d', PATCH: '#22d3ee' }[apiMethod] || '#eaecef' }}
-                >
-                  {['GET', 'POST', 'PUT', 'PATCH', 'DELETE'].map(m => <option key={m} value={m}>{m}</option>)}
-                </select>
-                <input
-                  value={apiUrl}
-                  onChange={e => setApiUrl(e.target.value)}
-                  placeholder="/api/admin/users"
-                  className="min-w-0 flex-1 bg-[#0b0e11] border border-[#2b3139] rounded-xl px-3 py-2 text-sm font-mono text-[#eaecef] placeholder-[#4a5568] focus:outline-none focus:border-[#f0b90b] transition"
-                />
-              </div>
-              <button onClick={sendApiRequest} disabled={apiLoading}
-                className="w-full flex items-center justify-center gap-2 bg-[#f0b90b] hover:bg-[#d4a30a] disabled:opacity-50 text-black font-semibold px-4 py-2.5 rounded-xl text-sm transition">
-                {apiLoading ? <RefreshCw size={13} className="animate-spin" /> : <Play size={13} />}
-                {apiLoading ? 'Sending…' : 'Send Request'}
-              </button>
-            </div>
-
-            <div>
-              <p className="text-[10px] text-[#848e9c] mb-1.5 font-medium">Quick Endpoints</p>
-              <div className="flex flex-wrap gap-1.5">
-                {[
-                  { m: 'GET', u: '/api/admin/users' },
-                  { m: 'GET', u: '/api/admin/transactions' },
-                  { m: 'GET', u: '/api/admin/health' },
-                  { m: 'GET', u: '/api/admin/server-metrics' },
-                  { m: 'GET', u: '/api/admin/subscriptions' },
-                  { m: 'GET', u: '/api/admin/api-key-users' },
-                  { m: 'GET', u: '/api/admin/wallet-config' },
-                  { m: 'GET', u: '/api/admin/referrals' },
-                  { m: 'GET', u: '/api/users/me' },
-                ].map(ep => (
-                  <button key={ep.u} onClick={() => { setApiMethod(ep.m); setApiUrl(ep.u) }}
-                    className="text-[10px] font-mono px-2 py-1 rounded-lg bg-[#1e2329] border border-[#2b3139] hover:border-[#f0b90b]/40 text-[#848e9c] hover:text-[#eaecef] transition">
-                    {ep.m} {ep.u.replace('/api', '')}
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            {['POST', 'PUT', 'PATCH'].includes(apiMethod) && (
-              <div>
-                <p className="text-[10px] text-[#848e9c] mb-1.5 font-medium">Request Body (JSON)</p>
-                <textarea
-                  value={apiBody}
-                  onChange={e => setApiBody(e.target.value)}
-                  rows={4}
-                  placeholder='{"key": "value"}'
-                  className="w-full bg-[#0b0e11] border border-[#2b3139] rounded-xl px-3 py-2 text-sm font-mono text-[#eaecef] placeholder-[#4a5568] focus:outline-none focus:border-[#f0b90b] transition resize-none"
-                />
-              </div>
-            )}
-          </div>
-
-          {apiResponse && (
-            <div className="bg-[#161a1e] border border-[#2b3139] rounded-2xl p-4">
-              <div className="flex items-center justify-between mb-3">
-                <div className="flex items-center gap-2">
-                  <div className={`w-2 h-2 rounded-full ${apiResponse.ok ? 'bg-[#0ecb81]' : 'bg-[#f6465d]'}`} />
-                  <span className="text-xs font-bold" style={{ color: apiResponse.ok ? '#0ecb81' : '#f6465d' }}>
-                    {apiResponse.status} {apiResponse.ok ? 'OK' : 'Error'}
-                  </span>
-                </div>
-                {apiTime != null && <span className="text-[10px] text-[#848e9c]">{apiTime}ms</span>}
-              </div>
-              <pre className="text-[11px] font-mono text-[#eaecef] overflow-auto max-h-64 whitespace-pre-wrap">
-                {typeof apiResponse.body === 'string' ? apiResponse.body : JSON.stringify(apiResponse.body, null, 2)}
-              </pre>
-            </div>
-          )}
-        </div>
+        <ApiConsoleTab
+          apiMethod={apiMethod} setApiMethod={setApiMethod}
+          apiUrl={apiUrl} setApiUrl={setApiUrl}
+          apiBody={apiBody} setApiBody={setApiBody}
+          apiLoading={apiLoading} apiResponse={apiResponse}
+          apiTime={apiTime}
+          onSend={sendApiRequest}
+        />
       )}
 
       {/* ── DELETE CONFIRM MODAL ── */}
