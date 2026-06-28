@@ -86,7 +86,7 @@ export default function LoginPage() {
           headers: { Authorization: `Bearer ${access_token}` }
         })
         setAuth(access_token, meRes.data)
-        navigate('/app/dashboard')
+        navigate(meRes.data.is_admin ? '/admin' : '/app/dashboard')
       } else {
         await signup(email, password, referralCode.trim() || undefined)
         toast.success('Account created — please sign in')
@@ -113,7 +113,7 @@ export default function LoginPage() {
         headers: { Authorization: `Bearer ${access_token}` }
       })
       setAuth(access_token, meRes.data)
-      navigate('/app/dashboard')
+      navigate(meRes.data.is_admin ? '/admin' : '/app/dashboard')
     } catch (err: unknown) {
       const msg = err && typeof err === 'object' && 'response' in err
         ? (err as { response?: { data?: { detail?: string } } }).response?.data?.detail

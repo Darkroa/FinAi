@@ -5,6 +5,8 @@ import LandingPage from './pages/LandingPage'
 import AboutPage from './pages/AboutPage'
 import TermsPage from './pages/TermsPage'
 import LoginPage from './pages/LoginPage'
+import AdminLoginPage from './pages/AdminLoginPage'
+import AdminFullDashboard from './pages/AdminFullDashboard'
 import DashboardPage from './pages/DashboardPage'
 import AdminDashboardPage from './pages/AdminDashboardPage'
 import MarketsPage from './pages/MarketsPage'
@@ -38,6 +40,13 @@ import { LanguageProvider } from './contexts/LanguageContext'
 function PrivateRoute({ children }: { children: React.ReactNode }) {
   const token = useAuthStore((s) => s.token)
   return token ? <>{children}</> : <Navigate to="/login" replace />
+}
+
+function AdminRoute({ children }: { children: React.ReactNode }) {
+  const { token, user } = useAuthStore()
+  if (!token) return <Navigate to="/admin-login" replace />
+  if (!user?.is_admin) return <Navigate to="/app/dashboard" replace />
+  return <>{children}</>
 }
 
 function VisitorBeacon() {
@@ -94,6 +103,15 @@ export default function App() {
 
         <Route path="/terms" element={<TermsPage />} />
         <Route path="/login" element={<LoginPage />} />
+        <Route path="/admin-login" element={<AdminLoginPage />} />
+        <Route
+          path="/admin"
+          element={
+            <AdminRoute>
+              <AdminFullDashboard />
+            </AdminRoute>
+          }
+        />
         <Route
           path="/app"
           element={
