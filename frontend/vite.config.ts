@@ -33,12 +33,26 @@ export default defineConfig({
       '/graf': {
         target: 'http://localhost:3001',
         changeOrigin: true,
-        rewrite: (path) => path.replace(/^\/graf/, ''),
+        configure: (proxy) => {
+          proxy.on('proxyRes', (proxyRes) => {
+            const loc = proxyRes.headers['location']
+            if (loc) {
+              proxyRes.headers['location'] = loc.replace(/^https?:\/\/[^/]+(\/graf)/, '$1')
+            }
+          })
+        },
       },
       '/prom': {
         target: 'http://localhost:9090',
         changeOrigin: true,
-        rewrite: (path) => path.replace(/^\/prom/, ''),
+        configure: (proxy) => {
+          proxy.on('proxyRes', (proxyRes) => {
+            const loc = proxyRes.headers['location']
+            if (loc) {
+              proxyRes.headers['location'] = loc.replace(/^https?:\/\/[^/]+(\/prom)/, '$1')
+            }
+          })
+        },
       },
     },
   },
