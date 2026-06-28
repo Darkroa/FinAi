@@ -1296,7 +1296,7 @@ export default function BotsPage() {
                       )}
                     </div>
 
-                    {/* Open positions — margin calculator style */}
+                    {/* Open positions — FinBot card style */}
                     {Object.keys(bot.open_positions ?? {}).length > 0 && (
                       <div className="space-y-2">
                         {Object.entries(bot.open_positions as Record<string, {
@@ -1313,46 +1313,64 @@ export default function BotsPage() {
                           const margin = pos.margin ?? 0
                           const curPx  = pos.current_price   ?? pos.entry_price ?? 0
                           return (
-                            <div key={ticker} className={`rounded-xl border overflow-hidden ${isLong ? 'border-[#0ecb81]/20' : 'border-[#f6465d]/20'}`}>
-                              {/* Position header row — margin calc style */}
-                              <div className={`flex items-center justify-between px-4 py-2.5 border-b border-[#2b3139]/60 ${isLong ? 'bg-[#0ecb81]/5' : 'bg-[#f6465d]/5'}`}>
-                                <div className="flex items-center gap-2">
-                                  <div className={`w-6 h-6 rounded-lg flex items-center justify-center flex-shrink-0 ${isLong ? 'bg-[#0ecb81]/15' : 'bg-[#f6465d]/15'}`}>
-                                    <Target size={10} className={isLong ? 'text-[#0ecb81]' : 'text-[#f6465d]'} />
-                                  </div>
-                                  <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded uppercase ${isLong ? 'bg-[#0ecb81]/15 text-[#0ecb81]' : 'bg-[#f6465d]/15 text-[#f6465d]'}`}>
+                            <div key={ticker} className="bg-[#f0b90b]/5 border border-[#f0b90b]/20 rounded-xl px-3 py-2.5 space-y-1">
+                              {/* Header row — ticker + side badge + close button */}
+                              <div className="flex items-center justify-between">
+                                <p className="text-[10px] text-[#f0b90b] font-semibold uppercase tracking-wide flex items-center gap-1.5">
+                                  <Target size={9} />
+                                  Open Position
+                                  <span className="font-mono text-[#eaecef] normal-case tracking-normal">{ticker}</span>
+                                  <span className={`px-1.5 py-0.5 rounded text-[9px] font-bold ${isLong ? 'bg-[#0ecb81]/15 text-[#0ecb81]' : 'bg-[#f6465d]/15 text-[#f6465d]'}`}>
                                     {isLong ? '▲ LONG' : '▼ SHORT'}
                                   </span>
-                                  <span className="text-xs font-mono font-bold text-[#eaecef] bg-[#2b3139] px-1.5 py-0.5 rounded">{ticker}</span>
-                                  <span className="text-[9px] font-bold text-[#848e9c] bg-[#2b3139] px-1.5 py-0.5 rounded">{lev}x</span>
-                                </div>
-                                <div className="flex items-center gap-2">
-                                  <span className={`text-sm font-bold font-mono ${upnl >= 0 ? 'text-[#0ecb81]' : 'text-[#f6465d]'}`}>
-                                    {upnl >= 0 ? '+' : ''}${Math.abs(upnl).toFixed(2)}
-                                  </span>
-                                  {bot.running && (
-                                    <button onClick={() => handleFeClosePosition(bot.bot_name, ticker)} disabled={feLoading}
-                                      className="flex items-center gap-1 px-2 py-1 rounded-lg bg-[#f6465d]/10 hover:bg-[#f6465d]/25 border border-[#f6465d]/30 text-[#f6465d] text-[10px] font-bold transition disabled:opacity-50">
-                                      <Square size={8} /> Close
-                                    </button>
-                                  )}
-                                </div>
+                                </p>
+                                {bot.running && (
+                                  <button onClick={() => handleFeClosePosition(bot.bot_name, ticker)} disabled={feLoading}
+                                    className="flex items-center gap-1 px-2 py-1 rounded-lg bg-[#f6465d]/10 hover:bg-[#f6465d]/20 border border-[#f6465d]/30 text-[#f6465d] text-[10px] font-bold transition disabled:opacity-50">
+                                    <Square size={8} /> Close
+                                  </button>
+                                )}
                               </div>
-                              {/* Position stats grid */}
-                              <div className="grid grid-cols-3 gap-0 divide-x divide-[#2b3139]/40 bg-[#0b0e11]">
-                                {[
-                                  { label: 'Entry',  value: `$${(pos.entry_price ?? 0).toLocaleString(undefined, { maximumFractionDigits: 4 })}`, color: 'text-[#eaecef]' },
-                                  { label: 'Current',value: `$${curPx.toLocaleString(undefined, { maximumFractionDigits: 4 })}`,                   color: 'text-[#eaecef]' },
-                                  { label: 'Margin', value: `$${margin.toFixed(2)}`,                                                               color: 'text-[#eaecef]' },
-                                  { label: 'TP Target', value: `+${tp}% (+$${(margin * tp / 100).toFixed(2)})`,                                    color: 'text-[#0ecb81]' },
-                                  { label: 'SL Target', value: `-${sl}% (-$${(margin * sl / 100).toFixed(2)})`,                                    color: 'text-[#f6465d]' },
-                                  { label: 'Bot P&L', value: `${(bot.total_pnl ?? 0) >= 0 ? '+' : ''}$${Math.abs(bot.total_pnl ?? 0).toFixed(2)}`,color: (bot.total_pnl ?? 0) >= 0 ? 'text-[#0ecb81]' : 'text-[#f6465d]' },
-                                ].map(s => (
-                                  <div key={s.label} className="px-3 py-2 text-center">
-                                    <p className="text-[9px] text-[#4a5568] uppercase tracking-wide mb-0.5">{s.label}</p>
-                                    <p className={`text-[10px] font-bold font-mono ${s.color}`}>{s.value}</p>
-                                  </div>
-                                ))}
+                              {/* Rows */}
+                              <div className="flex justify-between text-xs">
+                                <span className="text-[#848e9c]">Entry</span>
+                                <span className="font-mono text-[#eaecef]">${(pos.entry_price ?? 0).toLocaleString(undefined, { maximumFractionDigits: 4 })}</span>
+                              </div>
+                              <div className="flex justify-between text-xs">
+                                <span className="text-[#848e9c]">Current</span>
+                                <span className="font-mono text-[#eaecef]">${curPx.toLocaleString(undefined, { maximumFractionDigits: 4 })}</span>
+                              </div>
+                              <div className="flex justify-between text-xs">
+                                <span className="text-[#848e9c]">Qty</span>
+                                <span className="font-mono text-[#f0b90b]">{(pos.qty ?? 0).toFixed(6)} {ticker.replace('-USD', '')}</span>
+                              </div>
+                              <div className="flex justify-between text-xs">
+                                <span className="text-[#848e9c]">Leverage</span>
+                                <span className="font-mono text-[#eaecef]">{lev}x</span>
+                              </div>
+                              <div className="flex justify-between text-xs">
+                                <span className="text-[#848e9c]">Margin Used</span>
+                                <span className="font-mono text-[#eaecef]">${margin.toFixed(2)}</span>
+                              </div>
+                              <div className="flex justify-between text-xs">
+                                <span className="text-[#0ecb81]">TP Target</span>
+                                <span className="font-mono text-[#0ecb81]">+${(margin * tp / 100).toFixed(2)} (+{tp}%)</span>
+                              </div>
+                              <div className="flex justify-between text-xs">
+                                <span className="text-[#f6465d]">SL Target</span>
+                                <span className="font-mono text-[#f6465d]">-${(margin * sl / 100).toFixed(2)} (-{sl}%)</span>
+                              </div>
+                              <div className="flex justify-between text-xs">
+                                <span className="text-[#848e9c]">Unrealized P&L</span>
+                                <span className={`font-mono font-semibold ${upnl >= 0 ? 'text-[#0ecb81]' : 'text-[#f6465d]'}`}>
+                                  {upnl >= 0 ? '+' : ''}${Math.abs(upnl).toFixed(2)}
+                                </span>
+                              </div>
+                              <div className="flex justify-between text-xs pt-0.5 border-t border-[#f0b90b]/10">
+                                <span className="text-[#848e9c]">Bot Realized P&L</span>
+                                <span className={`font-mono font-semibold ${(bot.total_pnl ?? 0) >= 0 ? 'text-[#0ecb81]' : 'text-[#f6465d]'}`}>
+                                  {(bot.total_pnl ?? 0) >= 0 ? '+' : ''}${Math.abs(bot.total_pnl ?? 0).toFixed(2)}
+                                </span>
                               </div>
                             </div>
                           )
