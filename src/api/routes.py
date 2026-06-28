@@ -2776,6 +2776,92 @@ async def admin_health_check(db: Session = Depends(get_db)):
     except Exception as e:
         checks["hd_wallet"] = {"status": "error", "error": str(e)[:120]}
 
+    # ── NewsAPI ───────────────────────────────────────────────────────────────
+    try:
+        news_key = os.getenv("NEWSAPI_KEY", "").strip()
+        if news_key:
+            import httpx as _hx
+            t0 = time.time()
+            async with _hx.AsyncClient(timeout=4.0) as _c:
+                r = await _c.get(
+                    "https://newsapi.org/v2/top-headlines",
+                    params={"sources": "the-verge", "pageSize": 1, "apiKey": news_key},
+                )
+            if r.status_code == 200:
+                checks["newsapi"] = {
+                    "status": "healthy",
+                    "key_set": True,
+                    "latency_ms": round((time.time() - t0) * 1000),
+                    "note": "Live news feed active — all users benefit",
+                }
+            else:
+                checks["newsapi"] = {
+                    "status": "degraded",
+                    "key_set": True,
+                    "http_status": r.status_code,
+                    "note": r.text[:120],
+                }
+        else:
+            checks["newsapi"] = {
+                "status": "degraded",
+                "key_set": False,
+                "note": "NEWSAPI_KEY not set — using free RSS fallback (Reuters, CNBC, Yahoo)",
+            }
+    except Exception as e:
+        checks["newsapi"] = {"status": "error", "error": str(e)[:120]}
+
+    # ── CoinGecko key status ───────────────────────────────────────────────────
+    try:
+        cg_key = os.getenv("COINGECKO_API_KEY", "").strip()
+        checks["coingecko"]["key_set"] = bool(cg_key)
+        checks["coingecko"]["note"] = (
+            "API key set — higher rate limits active"
+            if cg_key else
+            "No key — free public API (30 req/min). Set COINGECKO_API_KEY for 500 req/min."
+        )
+    except Exception:
+        pass
+
+    # ── Alpaca Trading ────────────────────────────────────────────────────────
+    try:
+        alp_key    = os.getenv("ALPACA_API_KEY", "").strip()
+        alp_secret = os.getenv("ALPACA_SECRET_KEY", "").strip()
+        both_set   = bool(alp_key and alp_secret)
+        if both_set:
+            import httpx as _hx2
+            t0 = time.time()
+            async with _hx2.AsyncClient(timeout=4.0) as _c2:
+                r2 = await _c2.get(
+                    "https://paper-api.alpaca.markets/v2/account",
+                    headers={"APCA-API-KEY-ID": alp_key, "APCA-API-SECRET-KEY": alp_secret},
+                )
+            if r2.status_code == 200:
+                acct = r2.json()
+                checks["alpaca"] = {
+                    "status":      "healthy",
+                    "key_set":     True,
+                    "mode":        "paper",
+                    "latency_ms":  round((time.time() - t0) * 1000),
+                    "portfolio_value": acct.get("portfolio_value"),
+                    "buying_power":    acct.get("buying_power"),
+                    "note":        "Paper trading active — platform bot can place orders",
+                }
+            else:
+                checks["alpaca"] = {
+                    "status":  "degraded",
+                    "key_set": True,
+                    "http_status": r2.status_code,
+                    "note":    "Keys set but API rejected them — check key/secret",
+                }
+        else:
+            checks["alpaca"] = {
+                "status":  "degraded",
+                "key_set": False,
+                "note":    "ALPACA_API_KEY / ALPACA_SECRET_KEY not set — platform bot runs in simulation mode",
+            }
+    except Exception as e:
+        checks["alpaca"] = {"status": "error", "error": str(e)[:120]}
+
     overall = "healthy" if all(c["status"] == "healthy" for c in checks.values()) else "degraded"
     return {"overall": overall, "checks": checks, "timestamp": datetime.utcnow().isoformat()}
 

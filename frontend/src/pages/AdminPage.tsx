@@ -2420,13 +2420,17 @@ export default function AdminPage() {
             const healthyCount = entries.filter(([, c]) => c.status === 'healthy').length
             const total = entries.length
             const SERVICE_META: Record<string, { label: string; emoji: string }> = {
-              database:     { label: 'PostgreSQL',    emoji: '🗄️' },
-              supabase_env: { label: 'Supabase',      emoji: '☁️' },
-              celery:       { label: 'Celery Worker', emoji: '⚙️' },
-              coingecko:    { label: 'CoinGecko',     emoji: '🦎' },
-              binance:      { label: 'Binance API',   emoji: '🔶' },
-              ai_providers: { label: 'AI Providers',  emoji: '🤖' },
-              storage:      { label: 'File Storage',  emoji: '🗂️' },
+              database:     { label: 'PostgreSQL',         emoji: '🗄️' },
+              supabase_env: { label: 'Supabase',           emoji: '☁️' },
+              celery:       { label: 'Celery Worker',      emoji: '⚙️' },
+              coingecko:    { label: 'CoinGecko',          emoji: '🦎' },
+              binance:      { label: 'Binance API',        emoji: '🔶' },
+              ai_providers: { label: 'AI Providers',       emoji: '🤖' },
+              storage:      { label: 'File Storage',       emoji: '🗂️' },
+              tatum:        { label: 'Tatum (Blockchain)',  emoji: '⛓️' },
+              hd_wallet:    { label: 'HD Wallet',          emoji: '🔑' },
+              newsapi:      { label: 'NewsAPI',            emoji: '📰' },
+              alpaca:       { label: 'Alpaca Trading',     emoji: '📈' },
             }
             return (
               <>
