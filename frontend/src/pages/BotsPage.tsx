@@ -406,6 +406,8 @@ export default function BotsPage() {
         leverage:           params.leverage,
         sl_usdt:            params.sl_usdt,
         num_trades:         params.num_trades,
+        lot_size:           params.lot_size,
+        execution_cooldown: params.execution_cooldown,
       })
       setStatus(s => ({ ...s, running: true }))
       toast.success(res.data?.message || 'Bot started successfully')
@@ -727,40 +729,48 @@ export default function BotsPage() {
               )}
             </div>
 
-            {/* Lot Size */}
+            {/* Row 1: Lot Size | % Per Trade | Max Drawdown */}
             <div>
               <label className="text-xs text-[#848e9c] mb-1.5 block">Lot Size</label>
               <input type="number" min={1} max={1000} step={1} value={params.lot_size}
                 onChange={e => setParams(p => ({ ...p, lot_size: Math.min(100, Math.max(1, parseInt(e.target.value) || 1)) }))}
                 className="w-full bg-[#0b0e11] border border-[#2b3139] focus:border-[#f0b90b] rounded-xl px-3 py-2.5 text-sm font-mono text-[#eaecef] focus:outline-none transition" />
-              <p className="text-[10px] text-[#4a5568] mt-1">Range: 1 – 100 lots</p>
             </div>
 
-            {/* Take Profit */}
+            <div>
+              <label className="text-xs text-[#848e9c] mb-1.5 block">% Per Trade</label>
+              <input type="number" min={1} max={100} step={1} value={params.pct_per_trade}
+                onChange={e => setParams(p => ({ ...p, pct_per_trade: Math.min(100, Math.max(1, parseFloat(e.target.value) || 1)) }))}
+                className="w-full bg-[#0b0e11] border border-[#2b3139] focus:border-[#f0b90b] rounded-xl px-3 py-2.5 text-sm font-mono text-[#f0b90b] focus:outline-none transition" />
+            </div>
+
+            <div>
+              <label className="text-xs text-[#848e9c] mb-1.5 block">Max Drawdown (%)</label>
+              <input type="number" min={0} max={90} step={1} value={params.max_drawdown_pct}
+                onChange={e => { const v = parseFloat(e.target.value); setParams(p => ({ ...p, max_drawdown_pct: isNaN(v) ? p.max_drawdown_pct : Math.min(90, Math.max(0, v)) })) }}
+                className="w-full bg-[#0b0e11] border border-[#2b3139] focus:border-[#f6465d] rounded-xl px-3 py-2.5 text-sm font-mono text-[#f6465d] focus:outline-none transition" />
+            </div>
+
+            {/* Row 2: Take Profit | Stop Loss | Execution Cooldown */}
             <div>
               <label className="text-xs text-[#848e9c] mb-1.5 block">Take Profit (%)</label>
               <input type="number" min={5} max={1000} step={1} value={params.take_profit_pct}
                 onChange={e => setParams(p => ({ ...p, take_profit_pct: Math.min(1000, Math.max(5, parseFloat(e.target.value) || 5)) }))}
                 className="w-full bg-[#0b0e11] border border-[#2b3139] focus:border-[#0ecb81] rounded-xl px-3 py-2.5 text-sm font-mono text-[#0ecb81] focus:outline-none transition" />
-              <p className="text-[10px] text-[#4a5568] mt-1">Range: 5% – 1000%</p>
             </div>
 
-            {/* Stop Loss */}
             <div>
               <label className="text-xs text-[#848e9c] mb-1.5 block">Stop Loss (%)</label>
               <input type="number" min={5} max={100} step={1} value={params.stop_loss_pct}
                 onChange={e => setParams(p => ({ ...p, stop_loss_pct: Math.min(100, Math.max(5, parseFloat(e.target.value) || 5)) }))}
                 className="w-full bg-[#0b0e11] border border-[#2b3139] focus:border-[#f6465d] rounded-xl px-3 py-2.5 text-sm font-mono text-[#f6465d] focus:outline-none transition" />
-              <p className="text-[10px] text-[#4a5568] mt-1">Range: 5% – 100%</p>
             </div>
 
-            {/* Execution Cooldown */}
             <div>
-              <label className="text-xs text-[#848e9c] mb-1.5 block">Execution Cooldown <span className="text-[#f0b90b]">(seconds)</span></label>
+              <label className="text-xs text-[#848e9c] mb-1.5 block">Cooldown (s)</label>
               <input type="number" min={40} max={3600} step={1} value={params.execution_cooldown}
                 onChange={e => setParams(p => ({ ...p, execution_cooldown: Math.max(40, parseInt(e.target.value) || 40) }))}
                 className="w-full bg-[#0b0e11] border border-[#2b3139] focus:border-[#f0b90b] rounded-xl px-3 py-2.5 text-sm font-mono text-[#eaecef] focus:outline-none transition" />
-              <p className="text-[10px] text-[#4a5568] mt-1">Minimum <span className="text-[#eaecef]">40 seconds</span> wait between trades — not minutes</p>
             </div>
 
             {/* Leverage */}
@@ -781,17 +791,6 @@ export default function BotsPage() {
               </div>
             </div>
 
-            {/* Max drawdown */}
-            <div>
-              <label className="text-xs text-[#848e9c] mb-1.5 block">
-                Max Drawdown Stop (%)
-              </label>
-              <input type="number" min={0} max={90} step={1} value={params.max_drawdown_pct}
-                onChange={e => { const v = parseFloat(e.target.value); setParams(p => ({ ...p, max_drawdown_pct: isNaN(v) ? p.max_drawdown_pct : Math.min(90, Math.max(0, v)) })) }}
-                className="w-full bg-[#0b0e11] border border-[#2b3139] focus:border-[#f6465d] rounded-xl px-3 py-2.5 text-sm font-mono text-[#f6465d] focus:outline-none transition" />
-              <p className="text-[10px] text-[#4a5568] mt-1">Stop bot when portfolio drops <span className="text-[#f6465d]">{params.max_drawdown_pct}%</span> — Range: 0% – 90%</p>
-            </div>
-
             {/* Number of Trades */}
             <div>
               <label className="text-xs text-[#848e9c] mb-1.5 block">
@@ -800,7 +799,6 @@ export default function BotsPage() {
               <input type="number" min={0} max={10000} step={1} value={params.num_trades}
                 onChange={e => setParams(p => ({ ...p, num_trades: Math.max(0, parseInt(e.target.value) || 0) }))}
                 className="w-full bg-[#0b0e11] border border-[#2b3139] focus:border-[#f0b90b] rounded-xl px-3 py-2.5 text-sm font-mono text-[#eaecef] focus:outline-none transition" />
-              <p className="text-[10px] text-[#4a5568] mt-1">Bot stops after this many <span className="text-[#eaecef]">completed trades</span> or max drawdown — whichever comes first</p>
             </div>
 
             {/* Margin Calculator — card style */}
@@ -842,20 +840,6 @@ export default function BotsPage() {
                   </div>
                 )
               })()}
-            </div>
-
-            {/* % Per Trade field */}
-            <div>
-              <label className="text-xs text-[#848e9c] mb-1.5 block">
-                % Per Trade Execution &nbsp;
-                <span className="text-[#4a5568]">of starting capital</span>
-              </label>
-              <input type="number" min={1} max={100} step={1} value={params.pct_per_trade}
-                onChange={e => setParams(p => ({ ...p, pct_per_trade: Math.min(100, Math.max(1, parseFloat(e.target.value) || 1)) }))}
-                className="w-full bg-[#0b0e11] border border-[#2b3139] focus:border-[#f0b90b] rounded-xl px-3 py-2.5 text-sm font-mono text-[#f0b90b] focus:outline-none transition" />
-              <p className="text-[10px] text-[#4a5568] mt-1">
-                Each execution uses <span className="text-[#f0b90b] font-semibold">${((params.initial_capital * params.pct_per_trade) / 100).toLocaleString('en-US', { maximumFractionDigits: 2 })}</span> of ${params.initial_capital.toLocaleString()} capital
-              </p>
             </div>
 
             {/* Config summary card — margin calculator style */}
@@ -908,6 +892,29 @@ export default function BotsPage() {
         </div>
       )}
 
+      {/* ── Portfolio Summary (compact one-line) ── */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-2">
+        {[
+          { label: 'Portfolio Value', value: totalPortfolio > 0 ? `$${fmtC(totalPortfolio)}` : '—', up: true, icon: DollarSign },
+          { label: 'Win Rate',        value: `${winRate}%`,                                          up: parseFloat(winRate as string) > 50, icon: Cpu },
+          { label: 'Unrealized P&L',  value: totalUnrealized !== 0 ? `${totalUnrealized >= 0 ? '+' : ''}$${fmtC(totalUnrealized)}` : '—', up: totalUnrealized >= 0, icon: Activity },
+          { label: 'Realized P&L',    value: `${totalPnl >= 0 ? '+' : ''}$${fmtC(totalPnl)}`,       up: totalPnl >= 0, icon: TrendingUp },
+        ].map(s => {
+          const Icon = s.icon
+          return (
+            <div key={s.label} className="bg-[#161a1e] border border-[#2b3139] rounded-xl px-3 py-2.5 flex items-center justify-between gap-2">
+              <div className="flex items-center gap-2 min-w-0">
+                <div className="w-6 h-6 rounded-lg bg-[#f0b90b]/10 flex items-center justify-center flex-shrink-0">
+                  <Icon size={11} className="text-[#f0b90b]" />
+                </div>
+                <span className="text-[10px] text-[#848e9c] truncate">{s.label}</span>
+              </div>
+              <p className={`text-sm font-bold font-mono flex-shrink-0 ${s.up ? 'text-[#0ecb81]' : 'text-[#f6465d]'}`}>{s.value}</p>
+            </div>
+          )
+        })}
+      </div>
+
       {/* ── Active Bots Grid ── */}
       {activeBots.length === 0 && !showAddBot && (
         <div className="flex flex-col items-center justify-center py-16 gap-4 bg-[#161a1e] border border-[#2b3139] rounded-2xl">
@@ -947,6 +954,10 @@ export default function BotsPage() {
                         <span className="text-[10px] uppercase font-semibold text-[#848e9c]">{bot.strategy}</span>
                         <span className="text-[10px] text-[#848e9c]">·</span>
                         <span className="text-[10px] capitalize text-[#848e9c]">{bot.direction}</span>
+                        <span className="text-[10px] text-[#848e9c]">·</span>
+                        <span className="text-[10px] font-mono text-[#0ecb81]">TP +{bot.take_profit_pct}%</span>
+                        <span className="text-[10px] text-[#848e9c]">·</span>
+                        <span className="text-[10px] font-mono text-[#f6465d]">SL -{bot.stop_loss_pct ?? 50}%</span>
                         {bot.running && <span className="text-[10px] text-[#0ecb81] animate-pulse">● Live</span>}
                       </div>
                     </div>
@@ -1264,21 +1275,27 @@ export default function BotsPage() {
                   <div key={bot.bot_name} className="px-5 py-3 space-y-3">
                     {/* Bot header row */}
                     <div className="flex flex-wrap items-center gap-3">
-                      <div className="flex items-center gap-2 flex-1 min-w-0">
-                        <span className={`w-2 h-2 rounded-full flex-shrink-0 ${bot.running ? 'bg-[#f0b90b] animate-pulse' : 'bg-[#2b3139]'}`} />
-                        <span className="text-xs font-semibold text-[#eaecef] truncate capitalize">{bot.bot_name}</span>
-                        <span className={`text-[10px] px-1.5 py-0.5 rounded-full ${
-                          bot.running && Object.keys(bot.open_positions ?? {}).length > 0
-                            ? 'bg-[#f0b90b]/10 text-[#f0b90b]'
-                            : bot.running ? 'bg-[#0ecb81]/10 text-[#0ecb81]'
-                            : 'bg-[#2b3139] text-[#848e9c]'
-                        }`}>
-                          {bot.running && Object.keys(bot.open_positions ?? {}).length > 0 ? 'Open Position' : bot.running ? 'Running' : 'Stopped'}
-                        </span>
-                        {/* Ticker slots — each ticker = 1 bot slot */}
-                        {(bot.tickers ?? []).map((t: string) => (
-                          <span key={t} className="text-[9px] font-mono font-bold bg-[#2b3139] text-[#f0b90b] px-1.5 py-0.5 rounded">{t}</span>
-                        ))}
+                      <div className="flex-1 min-w-0 space-y-1">
+                        <div className="flex items-center gap-2">
+                          <span className={`w-2 h-2 rounded-full flex-shrink-0 ${bot.running ? 'bg-[#f0b90b] animate-pulse' : 'bg-[#2b3139]'}`} />
+                          <span className="text-xs font-semibold text-[#eaecef] truncate capitalize">{bot.bot_name}</span>
+                          <span className={`text-[10px] px-1.5 py-0.5 rounded-full ${
+                            bot.running && Object.keys(bot.open_positions ?? {}).length > 0
+                              ? 'bg-[#f0b90b]/10 text-[#f0b90b]'
+                              : bot.running ? 'bg-[#0ecb81]/10 text-[#0ecb81]'
+                              : 'bg-[#2b3139] text-[#848e9c]'
+                          }`}>
+                            {bot.running && Object.keys(bot.open_positions ?? {}).length > 0 ? 'Open Position' : bot.running ? 'Running' : 'Stopped'}
+                          </span>
+                        </div>
+                        {/* Ticker chips on their own line */}
+                        {(bot.tickers ?? []).length > 0 && (
+                          <div className="flex flex-wrap gap-1 pl-4">
+                            {(bot.tickers ?? []).map((t: string) => (
+                              <span key={t} className="text-[9px] font-mono font-bold bg-[#2b3139] text-[#f0b90b] px-1.5 py-0.5 rounded">{t}</span>
+                            ))}
+                          </div>
+                        )}
                       </div>
                       <div className="flex flex-wrap items-center gap-2 text-[10px] text-[#848e9c]">
                         {/* num_trades progress — most important, shown first */}
@@ -1384,6 +1401,16 @@ export default function BotsPage() {
                                   {(bot.total_pnl ?? 0) >= 0 ? '+' : ''}${Math.abs(bot.total_pnl ?? 0).toFixed(2)}
                                 </span>
                               </div>
+                              {((pos as any).price_chart?.length ?? 0) >= 2 && (
+                                <div className="pt-1 -mx-0.5">
+                                  <BotPriceChart bot={{
+                                    price_chart:    (pos as any).price_chart ?? [],
+                                    entry_markers:  (pos as any).entry_markers ?? [],
+                                    exit_markers:   (pos as any).exit_markers ?? [],
+                                    entry_price:    pos.entry_price ?? 0,
+                                  } as any} />
+                                </div>
+                              )}
                             </div>
                           )
                         })}
@@ -1622,30 +1649,6 @@ export default function BotsPage() {
             )}
           </>
         )}
-      </div>
-
-      {/* ── Summary P&L stats ── */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        {[
-          { label: 'Realized P&L',    value: `${totalPnl >= 0 ? '+' : ''}$${fmtC(totalPnl)}`,       sub: `${pnlTrades.length} closed`,              up: totalPnl >= 0,             icon: TrendingUp   },
-          { label: 'Unrealized P&L',  value: totalUnrealized !== 0 ? `${totalUnrealized >= 0 ? '+' : ''}$${fmtC(totalUnrealized)}` : '—', sub: activeBots.filter(b => b.position > 0).length + ' open', up: totalUnrealized >= 0, icon: Activity },
-          { label: 'Win Rate',        value: `${winRate}%`,                                          sub: `${winningTrades} of ${pnlTrades.length}`, up: parseFloat(winRate as string) > 50, icon: Cpu },
-          { label: 'Portfolio Value', value: totalPortfolio > 0 ? `$${fmtC(totalPortfolio)}` : '—', sub: `${activeBots.length} active bots`,         up: true,                      icon: DollarSign   },
-        ].map(s => {
-          const Icon = s.icon
-          return (
-            <div key={s.label} className="bg-[#161a1e] border border-[#2b3139] rounded-xl p-4">
-              <div className="flex items-center justify-between mb-3">
-                <span className="text-xs text-[#848e9c]">{s.label}</span>
-                <div className="w-7 h-7 rounded-lg bg-[#f0b90b]/10 flex items-center justify-center">
-                  <Icon size={13} className="text-[#f0b90b]" />
-                </div>
-              </div>
-              <p className={`text-xl font-bold font-mono ${s.up ? 'text-[#0ecb81]' : 'text-[#f6465d]'}`}>{s.value}</p>
-              <p className="text-xs text-[#848e9c] mt-1">{s.sub}</p>
-            </div>
-          )
-        })}
       </div>
 
       {/* ── Cumulative P&L Chart ── */}
