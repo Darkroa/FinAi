@@ -37,6 +37,22 @@ app.add_middleware(
 )
 app.add_middleware(APIRateLimitMiddleware)
 
+# ===================== Prometheus Metrics =====================
+try:
+    from prometheus_fastapi_instrumentator import Instrumentator
+    Instrumentator(
+        should_group_status_codes=True,
+        should_ignore_untemplated=True,
+        should_respect_env_var=False,
+        should_instrument_requests_inprogress=True,
+        excluded_handlers=["/metrics", "/docs", "/redoc", "/openapi.json"],
+        inprogress_name="finai_inprogress",
+        inprogress_labels=True,
+    ).instrument(app).expose(app, endpoint="/metrics", include_in_schema=True, tags=["monitoring"])
+    logger.info("✅ Prometheus metrics exposed at /metrics")
+except Exception as _prom_err:
+    logger.warning(f"Prometheus instrumentation skipped: {_prom_err}")
+
 
 # Include API routes
 app.include_router(router, prefix="/api")

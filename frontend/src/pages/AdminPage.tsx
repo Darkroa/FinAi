@@ -37,9 +37,9 @@ interface VpsPlan { id: number; name: string; price: number; specs: string; star
 interface AssetProduct { id: number; name: string; price: number; icon: string; start_date?: string; end_date?: string; roi_percent?: number; description?: string }
 interface PricingPlan { name: string; price: number; period: string }
 
-export default function AdminPage() {
+export default function AdminPage({ initialTab }: { initialTab?: Tab } = {}) {
   const location = useLocation()
-  const [tab, setTab] = useState<Tab>(() => (location.state as any)?.tab || 'users')
+  const [tab, setTab] = useState<Tab>(initialTab || (location.state as any)?.tab || 'users')
   const [users, setUsers] = useState<any[]>([])
   const [transactions, setTransactions] = useState<any[]>([])
   const [notifications, setNotifications] = useState<any[]>([])
