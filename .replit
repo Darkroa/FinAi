@@ -12,6 +12,7 @@ runButton = "Project"
 
 [[workflows.workflow]]
 name = "Start application"
+mode = "sequential"
 
 [[workflows.workflow.tasks]]
 task = "shell.exec"
@@ -22,7 +23,7 @@ waitForPort = 5000
 outputType = "webview"
 
 [[workflows.workflow]]
-name = ""
+name = "artifacts/mockup-sandbox: Component Preview Server"
 author = "agent"
 mode = "sequential"
 
