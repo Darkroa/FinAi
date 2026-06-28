@@ -15,7 +15,7 @@ class Config:
 
     # Default user settings
     DEFAULT_CAPITAL = 10000.0
-    DEFAULT_RISK_PERCENT = 1.0
-    DEFAULT_MAX_DRAWDOWN = 10.0
+    DEFAULT_RISK_PERCENT = 9.0
+    DEFAULT_MAX_DRAWDOWN = 90.0
 
 config = Config()

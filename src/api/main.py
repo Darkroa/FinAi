@@ -528,7 +528,7 @@ async def _deferred_init():
         # Prioritize custom domain from env, fallback to hardcoded
         WEBHOOK_URL = os.getenv(
             "WEBHOOK_URL", 
-            "https://fin-ai--fibot.replit.app/api/telegram/webhook"
+            "https://fin--aifin.replit.app/api/telegram/webhook"
         )
         logger.info(f"Webhook URL: {WEBHOOK_URL}")
         if _bot_token:
