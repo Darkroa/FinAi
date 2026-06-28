@@ -147,7 +147,7 @@ export default function AdminDashboardPage({ onNavigate }: { onNavigate?: (tab: 
             </button>
           </div>
           <div className="p-4 max-h-[60vh] overflow-y-auto">
-            <AdminPage key={expandedTab} initialTab={expandedTab} />
+            <AdminPage key={expandedTab} initialTab={expandedTab} embedded />
           </div>
         </div>
       )}

@@ -186,22 +186,23 @@ fi
 
 # ── Grafana ────────────────────────────────────────────────────────────────────
 if command -v grafana-server >/dev/null 2>&1 || command -v grafana >/dev/null 2>&1; then
-    GRAFANA_BIN=$(command -v grafana-server 2>/dev/null || command -v grafana)
-    GRAFANA_HOME=$(dirname $(dirname "$GRAFANA_BIN") 2>/dev/null || echo "/run/grafana")
-    echo "→ Starting Grafana on port 3001..."
+    GRAFANA_BIN=$(command -v grafana 2>/dev/null || command -v grafana-server)
+    GRAFANA_PKG_ROOT=$(dirname "$(dirname "$GRAFANA_BIN")")
+    GRAFANA_HOME="$GRAFANA_PKG_ROOT/share/grafana"
+    echo "→ Starting Grafana on port 3001 (home: $GRAFANA_HOME)..."
+    mkdir -p /tmp/grafana-data /tmp/grafana-logs /tmp/grafana-plugins
     GF_SERVER_HTTP_PORT=3001 \
     GF_SERVER_ROOT_URL="http://localhost:8000/graf/" \
     GF_SERVER_SERVE_FROM_SUB_PATH=true \
     GF_AUTH_ANONYMOUS_ENABLED=true \
     GF_AUTH_ANONYMOUS_ORG_ROLE=Admin \
+    GF_AUTH_DISABLE_LOGIN_FORM=false \
     GF_SECURITY_ALLOW_EMBEDDING=true \
     GF_LOG_LEVEL=warn \
-    "$GRAFANA_BIN" server \
-        --config=/home/runner/workspace/grafana.ini \
-        --homepath="$GRAFANA_HOME" \
-        cfg:default.paths.data=/tmp/grafana-data \
-        cfg:default.paths.logs=/tmp/grafana-logs \
-        cfg:default.paths.plugins=/tmp/grafana-plugins &
+    GF_PATHS_DATA=/tmp/grafana-data \
+    GF_PATHS_LOGS=/tmp/grafana-logs \
+    GF_PATHS_PLUGINS=/tmp/grafana-plugins \
+    "$GRAFANA_BIN" server --homepath="$GRAFANA_HOME" &
     GRAF_PID=$!
     echo "$GRAF_PID" > "$PIDFILE_DIR/grafana.pid"
     echo "Grafana started (PID: $GRAF_PID)"

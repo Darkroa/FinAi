@@ -37,7 +37,7 @@ interface VpsPlan { id: number; name: string; price: number; specs: string; star
 interface AssetProduct { id: number; name: string; price: number; icon: string; start_date?: string; end_date?: string; roi_percent?: number; description?: string }
 interface PricingPlan { name: string; price: number; period: string }
 
-export default function AdminPage({ initialTab }: { initialTab?: Tab } = {}) {
+export default function AdminPage({ initialTab, embedded }: { initialTab?: Tab; embedded?: boolean } = {}) {
   const location = useLocation()
   const [tab, setTab] = useState<Tab>(initialTab || (location.state as any)?.tab || 'users')
   const [users, setUsers] = useState<any[]>([])
@@ -105,6 +105,8 @@ export default function AdminPage({ initialTab }: { initialTab?: Tab } = {}) {
   const [metricsLoading, setMetricsLoading] = useState(false)
   const [metricHistory, setMetricHistory] = useState<any[]>([])
   const metricsTimerRef = useRef<ReturnType<typeof setInterval> | null>(null)
+  const [promStats, setPromStats] = useState<any>(null)
+  const [promLoading, setPromLoading] = useState(false)
 
   // API Console
   const [apiMethod, setApiMethod] = useState('GET')
@@ -317,6 +319,33 @@ export default function AdminPage({ initialTab }: { initialTab?: Tab } = {}) {
     return () => clearInterval(interval)
   }, [tab])
 
+  const fetchPromStats = async () => {
+    setPromLoading(true)
+    try {
+      const qs: Record<string, string> = {
+        req_rate:    'sum(rate(fastapi_requests_total[1m]))',
+        req_total:   'sum(fastapi_requests_total)',
+        err_rate:    'sum(rate(fastapi_requests_total{status_code=~"5.."}[1m]))',
+        p95_latency: 'histogram_quantile(0.95, sum(rate(fastapi_request_duration_seconds_bucket[1m])) by (le))',
+        mem_bytes:   'process_resident_memory_bytes',
+        open_fds:    'process_open_fds',
+      }
+      const res: any = {}
+      await Promise.all(
+        Object.entries(qs).map(async ([key, q]) => {
+          try {
+            const r = await fetch(`/prom/api/v1/query?query=${encodeURIComponent(q)}`)
+            const j = await r.json()
+            const v = j?.data?.result?.[0]?.value?.[1]
+            res[key] = v != null ? parseFloat(v) : null
+          } catch { res[key] = null }
+        })
+      )
+      setPromStats(res)
+    } catch { /* silent */ }
+    finally { setPromLoading(false) }
+  }
+
   const approve = async (txId: number) => {
     try {
       await adminApproveTransaction(String(txId))
@@ -473,42 +502,46 @@ export default function AdminPage({ initialTab }: { initialTab?: Tab } = {}) {
 
   return (
     <div className="space-y-5">
-      {/* Header */}
-      <div className="flex flex-wrap items-center gap-3">
-        <div className="w-8 h-8 rounded-lg bg-[#f6465d]/10 flex items-center justify-center">
-          <ShieldCheck size={16} className="text-[#f6465d]" />
-        </div>
-        <h1 className="text-xl font-bold text-[#eaecef]">Admin Panel</h1>
-        <span className="text-xs px-2 py-0.5 rounded-full bg-[#f6465d]/10 text-[#f6465d] font-medium">Admin Only</span>
-      </div>
-
-      {/* Stats */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        {[
-          { label: 'Total Users', value: users.length, color: 'text-[#f0b90b]' },
-          { label: 'Active Users', value: users.filter(u => u.is_active && !u.is_banned).length, color: 'text-[#0ecb81]' },
-          { label: 'Pending Txns', value: transactions.filter(t => t.status === 'pending').length, color: 'text-[#f0b90b]' },
-          { label: 'Open Tickets', value: tickets.filter(t => t.status === 'open').length, color: 'text-[#848e9c]' },
-        ].map(s => (
-          <div key={s.label} className="bg-[#161a1e] border border-[#2b3139] rounded-xl p-4">
-            <p className="text-xs text-[#848e9c] mb-2">{s.label}</p>
-            <p className={`text-2xl font-bold font-mono ${s.color}`}>{loading ? '—' : s.value}</p>
+      {!embedded && (
+        <>
+          {/* Header */}
+          <div className="flex flex-wrap items-center gap-3">
+            <div className="w-8 h-8 rounded-lg bg-[#f6465d]/10 flex items-center justify-center">
+              <ShieldCheck size={16} className="text-[#f6465d]" />
+            </div>
+            <h1 className="text-xl font-bold text-[#eaecef]">Admin Panel</h1>
+            <span className="text-xs px-2 py-0.5 rounded-full bg-[#f6465d]/10 text-[#f6465d] font-medium">Admin Only</span>
           </div>
-        ))}
-      </div>
 
-      {/* Tabs — grid layout */}
-      <div className="bg-[#161a1e] border border-[#2b3139] rounded-xl p-1.5">
-        <div className="grid grid-cols-3 sm:grid-cols-5 lg:grid-cols-7 gap-1">
-          {tabs.map(({ id, label, icon: Icon }) => (
-            <button key={id} onClick={() => loadTabData(id as Tab)}
-              className={`flex flex-col items-center gap-1 px-2 py-2 rounded-lg text-[10px] font-medium transition ${tab === id ? 'bg-[#2b3139] text-[#eaecef]' : 'text-[#848e9c] hover:text-[#eaecef] hover:bg-[#2b3139]/50'}`}>
-              <Icon size={13} />
-              <span className="leading-tight text-center">{label}</span>
-            </button>
-          ))}
-        </div>
-      </div>
+          {/* Stats */}
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+            {[
+              { label: 'Total Users', value: users.length, color: 'text-[#f0b90b]' },
+              { label: 'Active Users', value: users.filter(u => u.is_active && !u.is_banned).length, color: 'text-[#0ecb81]' },
+              { label: 'Pending Txns', value: transactions.filter(t => t.status === 'pending').length, color: 'text-[#f0b90b]' },
+              { label: 'Open Tickets', value: tickets.filter(t => t.status === 'open').length, color: 'text-[#848e9c]' },
+            ].map(s => (
+              <div key={s.label} className="bg-[#161a1e] border border-[#2b3139] rounded-xl p-4">
+                <p className="text-xs text-[#848e9c] mb-2">{s.label}</p>
+                <p className={`text-2xl font-bold font-mono ${s.color}`}>{loading ? '—' : s.value}</p>
+              </div>
+            ))}
+          </div>
+
+          {/* Tabs — grid layout */}
+          <div className="bg-[#161a1e] border border-[#2b3139] rounded-xl p-1.5">
+            <div className="grid grid-cols-3 sm:grid-cols-5 lg:grid-cols-7 gap-1">
+              {tabs.map(({ id, label, icon: Icon }) => (
+                <button key={id} onClick={() => loadTabData(id as Tab)}
+                  className={`flex flex-col items-center gap-1 px-2 py-2 rounded-lg text-[10px] font-medium transition ${tab === id ? 'bg-[#2b3139] text-[#eaecef]' : 'text-[#848e9c] hover:text-[#eaecef] hover:bg-[#2b3139]/50'}`}>
+                  <Icon size={13} />
+                  <span className="leading-tight text-center">{label}</span>
+                </button>
+              ))}
+            </div>
+          </div>
+        </>
+      )}
 
       {/* Edit user modal */}
       {editingUser && (
@@ -3499,6 +3532,7 @@ export default function AdminPage({ initialTab }: { initialTab?: Tab } = {}) {
             <div className="bg-[#161a1e] border border-[#2b3139] rounded-2xl p-8 text-center">
               <Cpu size={32} className="text-[#2b3139] mx-auto mb-3" />
               <p className="text-sm text-[#848e9c]">Click Refresh to load server metrics</p>
+              <button onClick={() => { fetchPromStats() }} className="mt-3 text-xs text-[#e6522c] hover:underline">Load Prometheus metrics only</button>
             </div>
           )}
 
@@ -3572,6 +3606,85 @@ export default function AdminPage({ initialTab }: { initialTab?: Tab } = {}) {
               </>
             )
           })()}
+
+          {/* ── Prometheus Live Metrics ── */}
+          <div className="bg-[#161a1e] border border-[#2b3139] rounded-2xl p-4">
+            <div className="flex items-center justify-between mb-3">
+              <div className="flex items-center gap-2">
+                <div className="w-6 h-6 rounded-lg bg-[#e6522c]/10 flex items-center justify-center">
+                  <Activity size={12} className="text-[#e6522c]" />
+                </div>
+                <p className="text-[10px] font-semibold text-[#848e9c] uppercase tracking-wide">Prometheus Live Metrics</p>
+              </div>
+              <button
+                onClick={fetchPromStats}
+                disabled={promLoading}
+                className="flex items-center gap-1.5 text-xs text-[#e6522c] hover:underline disabled:opacity-50"
+              >
+                <RefreshCw size={11} className={promLoading ? 'animate-spin' : ''} />
+                {promLoading ? 'Querying…' : 'Fetch'}
+              </button>
+            </div>
+
+            {!promStats && !promLoading && (
+              <p className="text-xs text-[#848e9c] text-center py-4">Click Fetch to query Prometheus</p>
+            )}
+
+            {promStats && (
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                {[
+                  {
+                    label: 'Req/s (1m rate)',
+                    value: promStats.req_rate != null ? promStats.req_rate.toFixed(3) : 'N/A',
+                    color: '#0ecb81',
+                    icon: Zap,
+                  },
+                  {
+                    label: 'Total Requests',
+                    value: promStats.req_total != null ? Math.round(promStats.req_total).toLocaleString() : 'N/A',
+                    color: '#60a5fa',
+                    icon: Activity,
+                  },
+                  {
+                    label: 'Error Rate/s',
+                    value: promStats.err_rate != null ? promStats.err_rate.toFixed(4) : 'N/A',
+                    color: promStats.err_rate > 0.01 ? '#f6465d' : '#0ecb81',
+                    icon: AlertTriangle,
+                  },
+                  {
+                    label: 'P95 Latency',
+                    value: promStats.p95_latency != null
+                      ? `${(promStats.p95_latency * 1000).toFixed(1)}ms`
+                      : 'N/A',
+                    color: promStats.p95_latency > 0.5 ? '#f0b90b' : '#0ecb81',
+                    icon: Clock,
+                  },
+                  {
+                    label: 'Process Memory',
+                    value: promStats.mem_bytes != null
+                      ? `${(promStats.mem_bytes / 1024 / 1024).toFixed(1)} MB`
+                      : 'N/A',
+                    color: '#a78bfa',
+                    icon: HardDrive,
+                  },
+                  {
+                    label: 'Open FDs',
+                    value: promStats.open_fds != null ? Math.round(promStats.open_fds) : 'N/A',
+                    color: '#22d3ee',
+                    icon: Server,
+                  },
+                ].map(c => (
+                  <div key={c.label} className="bg-[#0b0e11] border border-[#2b3139] rounded-xl p-3">
+                    <div className="flex items-center gap-1.5 mb-1.5">
+                      <c.icon size={11} style={{ color: c.color }} />
+                      <span className="text-[9px] text-[#848e9c] uppercase tracking-wide">{c.label}</span>
+                    </div>
+                    <p className="text-base font-bold font-mono" style={{ color: c.color }}>{c.value}</p>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
         </div>
       )}
 
