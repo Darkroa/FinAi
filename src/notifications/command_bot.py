@@ -14,7 +14,7 @@ from src.notifications.notifier import Notifier
 
 notifier = Notifier()
 
-APP_URL = os.getenv("APP_URL", "https://finai.replit.app")
+APP_URL = os.getenv("APP_URL", "")
 
 # ─── DB helpers ─────────────────────────────────────────────────────────────
 
