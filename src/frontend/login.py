@@ -589,7 +589,7 @@ st.markdown("""
   <div class="feat-head">Everything you need to trade intelligently</div>
   <div class="feat-sub">From AI news analysis to automated order execution</div>
   <div class="feat-grid">
-    <div class="feat-card"><span class="feat-icon">🧠</span><div class="feat-title">Grok AI Analysis</div><div class="feat-desc">Real-time sentiment analysis and market impact scoring powered by Grok LLM for precise trading signals.</div></div>
+    <div class="feat-card"><span class="feat-icon">🧠</span><div class="feat-title">Fin AI Analysis</div><div class="feat-desc">Real-time sentiment analysis and market impact scoring powered by FinAi LLM for precise trading signals.</div></div>
     <div class="feat-card"><span class="feat-icon">📰</span><div class="feat-title">News Ingestion Engine</div><div class="feat-desc">Aggregates Bloomberg, CNBC, Reuters, 50+ sources. Events detected and ranked by market impact within seconds.</div></div>
     <div class="feat-card"><span class="feat-icon">🤖</span><div class="feat-title">Automated Trading Bots</div><div class="feat-desc">Per-user bots with configurable risk, drawdown limits, and Alpaca paper &amp; live trading support.</div></div>
     <div class="feat-card"><span class="feat-icon">📊</span><div class="feat-title">Trendline Forecasting</div><div class="feat-desc">ATR-based breakout detection with AI-powered price forecasting across any timeframe.</div></div>
