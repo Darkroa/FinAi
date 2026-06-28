@@ -63,10 +63,11 @@ function SubPageWrapper({ title, onBack, children }: { title: string; onBack: ()
 }
 
 export default function ProfilePage() {
-  const { user, setUser } = useAuthStore()
+  const { user, setUser, logout } = useAuthStore()
   const navigate = useNavigate()
   const [subPage, setSubPage] = useState<SubPage>(null)
   const [photoLoading, setPhotoLoading] = useState(false)
+  const [usernameCopied, setUsernameCopied] = useState(false)
   const fileRef = useRef<HTMLInputElement>(null)
 
   const handlePhotoChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -115,7 +116,6 @@ export default function ProfilePage() {
     </SubPageWrapper>
   )
 
-  const { logout } = useAuthStore()
   const firstName = user?.first_name || user?.email?.split('@')[0] || 'User'
   const initial   = firstName[0]?.toUpperCase() ?? 'U'
 
@@ -129,7 +129,6 @@ export default function ProfilePage() {
     tier.label,
   ].filter(Boolean)
 
-  const [usernameCopied, setUsernameCopied] = useState(false)
   const copyUsername = () => {
     const val = user?.username || user?.email || ''
     if (!val) return

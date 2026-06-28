@@ -37,51 +37,47 @@ const NAV_SECTIONS: NavSection[] = [
   {
     title: '',
     items: [
-      { id: 'overview',       label: 'Overview',       icon: LayoutDashboard, color: '#f0b90b' },
-    ],
-  },
-  {
-    title: 'Management',
-    items: [
-      { id: 'users',          label: 'Users',          icon: Users,          color: '#60a5fa' },
-      { id: 'transactions',   label: 'Transactions',   icon: Receipt,        color: '#0ecb81' },
-      { id: 'subscriptions',  label: 'Subscriptions',  icon: CreditCard,     color: '#a78bfa' },
-      { id: 'notifications',  label: 'Notifications',  icon: Bell,           color: '#f0b90b' },
-      { id: 'wallet-config',  label: 'Wallet Config',  icon: Wallet,         color: '#22d3ee' },
-      { id: 'support',        label: 'Support',        icon: MessageSquare,  color: '#fb923c' },
-      { id: 'bonuses',        label: 'Bonuses',        icon: Gift,           color: '#f0b90b' },
-      { id: 'referrals',      label: 'Referrals',      icon: Share2,         color: '#0ecb81' },
-      { id: 'ads',            label: 'Ads',            icon: Megaphone,      color: '#a78bfa' },
-      { id: 'products',       label: 'Products',       icon: ShoppingBag,    color: '#fb923c' },
-      { id: 'testimonials',   label: 'Testimonials',   icon: Star,           color: '#f0b90b' },
-    ],
-  },
-  {
-    title: 'Analytics',
-    items: [
-      { id: 'visitors',       label: 'Visitors',       icon: Globe,          color: '#22d3ee' },
-      { id: 'health',         label: 'Health',         icon: Activity,       color: '#0ecb81' },
-      { id: 'activity',       label: 'Activity Log',   icon: Clock,          color: '#848e9c' },
-      { id: 'platform-stats', label: 'Platform Stats', icon: BarChart2,      color: '#f0b90b' },
-    ],
-  },
-  {
-    title: 'System',
-    items: [
-      { id: 'whatsapp-bot',   label: 'WhatsApp Bot',   icon: MessageCircle,  color: '#25D366' },
-      { id: 'server-monitor', label: 'Server Monitor', icon: Server,         color: '#60a5fa' },
-      { id: 'api-console',    label: 'API Console',    icon: Terminal,       color: '#a78bfa' },
-      { id: 'api-users',      label: 'API Users',      icon: Key,            color: '#fb923c' },
-    ],
-  },
-  {
-    title: 'Monitoring',
-    items: [
-      { id: 'grafana',        label: 'Grafana',        icon: BarChart2,      color: '#f46800' },
-      { id: 'prometheus',     label: 'Prometheus',     icon: Activity,       color: '#e6522c' },
-    ],
-  },
-]
+            { id: 'overview',       label: 'Overview',       icon: LayoutDashboard, color: '#f0b90b' },
+            { id: 'grafana',        label: 'Grafana',        icon: BarChart2,      color: '#f46800' },
+            { id: 'prometheus',     label: 'Prometheus',     icon: Activity,       color: '#e6522c' },
+          ],
+        },
+        {
+          title: 'Management',
+          items: [
+            { id: 'users',          label: 'Users',          icon: Users,          color: '#60a5fa' },
+            { id: 'transactions',   label: 'Transactions',   icon: Receipt,        color: '#0ecb81' },
+            { id: 'subscriptions',  label: 'Subscriptions',  icon: CreditCard,     color: '#a78bfa' },
+            { id: 'notifications',  label: 'Notifications',  icon: Bell,           color: '#f0b90b' },
+            { id: 'wallet-config',  label: 'Wallet Config',  icon: Wallet,         color: '#22d3ee' },
+            { id: 'support',        label: 'Support',        icon: MessageSquare,  color: '#fb923c' },
+            { id: 'bonuses',        label: 'Bonuses',        icon: Gift,           color: '#f0b90b' },
+            { id: 'referrals',      label: 'Referrals',      icon: Share2,         color: '#0ecb81' },
+            { id: 'ads',            label: 'Ads',            icon: Megaphone,      color: '#a78bfa' },
+            { id: 'products',       label: 'Products',       icon: ShoppingBag,    color: '#fb923c' },
+            { id: 'testimonials',   label: 'Testimonials',   icon: Star,           color: '#f0b90b' },
+          ],
+        },
+        {
+          title: 'Analytics',
+          items: [
+            { id: 'visitors',       label: 'Visitors',       icon: Globe,          color: '#22d3ee' },
+            { id: 'health',         label: 'Health',         icon: Activity,       color: '#0ecb81' },
+            { id: 'activity',       label: 'Activity Log',   icon: Clock,          color: '#848e9c' },
+            { id: 'platform-stats', label: 'Platform Stats', icon: BarChart2,      color: '#f0b90b' },
+          ],
+        },
+        {
+          title: 'System',
+          items: [
+            { id: 'whatsapp-bot',   label: 'WhatsApp Bot',   icon: MessageCircle,  color: '#25D366' },
+            { id: 'server-monitor', label: 'Server Monitor', icon: Server,         color: '#60a5fa' },
+            { id: 'api-console',    label: 'API Console',    icon: Terminal,       color: '#a78bfa' },
+            { id: 'api-users',      label: 'API Users',      icon: Key,            color: '#fb923c' },
+          ],
+        },
+      ]
+      
 
 const ALL_ITEMS = NAV_SECTIONS.flatMap(s => s.items)
 
