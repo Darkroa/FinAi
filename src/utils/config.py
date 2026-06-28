@@ -8,7 +8,11 @@ class Config:
     JWT_SECRET_KEY = os.getenv("JWT_SECRET_KEY", "change-this-in-production")
     DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://finuser:finpass@postgres:5432/finforge")
     REDIS_URL = os.getenv("REDIS_URL", "redis://redis:6379/0")
-    
+
+    # Monitoring services
+    PROMETHEUS_URL = os.getenv("PROMETHEUS_URL", "http://localhost:9090")
+    GRAFANA_URL = os.getenv("GRAFANA_URL", "http://localhost:3001")
+
     # Default user settings
     DEFAULT_CAPITAL = 10000.0
     DEFAULT_RISK_PERCENT = 1.0
