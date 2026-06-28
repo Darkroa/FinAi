@@ -13,7 +13,7 @@ import {
   Mail, Lock, Key, Eye, EyeOff,
   Copy, AlertCircle, Send, MessageCircle, LogOut, ChevronDown,
   RefreshCw, Gift, Share2, Users as UsersIcon, TrendingUp,
-  ChevronLeft, ChevronRight, Settings, Smartphone,
+  ChevronLeft, ChevronRight, Settings, Smartphone, Star,
 } from 'lucide-react'
 
 const TIERS = [
@@ -115,64 +115,107 @@ export default function ProfilePage() {
     </SubPageWrapper>
   )
 
+  const { logout } = useAuthStore()
   const firstName = user?.first_name || user?.email?.split('@')[0] || 'User'
-  const lastName  = user?.last_name || ''
   const initial   = firstName[0]?.toUpperCase() ?? 'U'
+
+  // Role badges row: always show FINAI, add ADMIN if applicable
+  const roleBadges = ['FINAI', user?.is_admin ? 'ADMIN' : 'AGENT', 'STAFF'].join(' | ')
+
+  // Detail row: username · dob · joined date · tier label
+  const detailParts = [
+    user?.username && `@${user.username}`,
+    user?.dob,
+    user?.created_at ? new Date(user.created_at).toLocaleDateString('en-GB', { day:'2-digit', month:'2-digit', year:'2-digit' }) : null,
+    tier.label,
+  ].filter(Boolean)
+
+  // Tier icon color
+  const tierIconColor = (user?.account_tier ?? 0) === 3 ? '#a78bfa' : (user?.account_tier ?? 0) === 2 ? '#0ecb81' : '#f0b90b'
+
+  const handleLogout = () => {
+    logout()
+    navigate('/login')
+  }
 
   return (
     <div className="max-w-md mx-auto space-y-3">
 
-      {/* ── Profile card ── */}
-      <div className="bg-[#161a1e] border border-[#2b3139] rounded-2xl p-6 flex flex-col items-center gap-3">
-        {/* Photo — tappable to upload */}
-        <div className="relative">
-          <button
-            onClick={() => fileRef.current?.click()}
-            disabled={photoLoading}
-            className="w-20 h-20 rounded-full bg-[#f0b90b] flex items-center justify-center text-black font-bold text-2xl overflow-hidden focus:outline-none ring-2 ring-transparent hover:ring-[#f0b90b]/40 transition"
-            title="Tap to change photo"
-          >
-            {user?.profile_photo
-              ? <img src={user.profile_photo} alt="" className="w-full h-full object-cover" />
-              : initial
-            }
-          </button>
-          {/* Camera badge */}
-          <button
-            onClick={() => fileRef.current?.click()}
-            disabled={photoLoading}
-            className="absolute -bottom-1 -right-1 w-7 h-7 rounded-full bg-[#f0b90b] flex items-center justify-center shadow-lg hover:bg-[#d4a30a] transition disabled:opacity-60"
-          >
-            {photoLoading
-              ? <div className="w-3 h-3 border border-black border-t-transparent rounded-full animate-spin" />
-              : <Camera size={12} className="text-black" />
-            }
-          </button>
-          <input ref={fileRef} type="file" accept="image/*" className="hidden" onChange={handlePhotoChange} />
+      {/* ── Premium Profile Card ── */}
+      <div className="relative bg-[#161a1e] border border-[#2b3139] rounded-2xl overflow-hidden">
+
+        {/* Green online dot — top right corner */}
+        <span className="absolute top-3.5 right-3.5 w-2.5 h-2.5 rounded-full bg-[#0ecb81] shadow-[0_0_6px_#0ecb81] z-10" />
+
+        <div className="p-5 flex gap-4">
+          {/* ── Left: avatar ~40% ── */}
+          <div className="flex-shrink-0 w-[38%] flex items-center justify-center">
+            <div className="relative">
+              <button
+                onClick={() => fileRef.current?.click()}
+                disabled={photoLoading}
+                className="w-24 h-24 rounded-full bg-[#f0b90b] flex items-center justify-center text-black font-extrabold text-4xl overflow-hidden focus:outline-none ring-2 ring-[#f0b90b]/30 hover:ring-[#f0b90b]/60 transition shadow-lg shadow-[#f0b90b]/10"
+                title="Tap to change photo"
+              >
+                {user?.profile_photo
+                  ? <img src={user.profile_photo} alt="" className="w-full h-full object-cover" />
+                  : initial
+                }
+              </button>
+              {/* Camera badge */}
+              <button
+                onClick={() => fileRef.current?.click()}
+                disabled={photoLoading}
+                className="absolute -bottom-1 -right-1 w-7 h-7 rounded-full bg-[#f0b90b] flex items-center justify-center shadow-lg hover:bg-[#d4a30a] transition disabled:opacity-60 border-2 border-[#161a1e]"
+              >
+                {photoLoading
+                  ? <div className="w-3 h-3 border border-black border-t-transparent rounded-full animate-spin" />
+                  : <Camera size={12} className="text-black" />
+                }
+              </button>
+              <input ref={fileRef} type="file" accept="image/*" className="hidden" onChange={handlePhotoChange} />
+            </div>
+          </div>
+
+          {/* ── Right: info ── */}
+          <div className="flex-1 min-w-0 flex flex-col justify-start pt-0.5">
+            {/* Label */}
+            <p className="text-[9px] font-bold tracking-[0.18em] text-[#4a5568] uppercase mb-0.5">Profile</p>
+            {/* Role badges */}
+            <p className="text-sm font-extrabold text-[#eaecef] tracking-wide leading-tight">{roleBadges}</p>
+            {/* Detail row */}
+            <p className="text-[10px] text-[#848e9c] mt-1 leading-relaxed">
+              {detailParts.join(' · ')}
+            </p>
+          </div>
         </div>
 
-        {/* Tier badge — just label, no limits text */}
-        <span className={`text-xs font-bold px-4 py-1.5 rounded-full border ${tier.bg} ${tier.color} ${tier.border}`}>
-          {tier.label}
-        </span>
-
-        {/* Channel status icons — inline row */}
-        <div className="flex items-center gap-5 mt-1">
-          <div className={`flex flex-col items-center gap-1 ${emailVerified ? 'text-[#0ecb81]' : 'text-[#848e9c]'}`}>
-            <Mail size={18} />
-            <span className="text-[9px] font-medium">Email</span>
+        {/* ── Bottom icon strip ── */}
+        <div className="border-t border-[#2b3139] px-4 py-3 flex items-center justify-between">
+          {/* Email */}
+          <div className={`flex flex-col items-center gap-1 ${emailVerified ? 'text-[#0ecb81]' : 'text-[#3c4451]'}`}>
+            <Mail size={17} />
+            <span className="text-[9px] font-semibold tracking-wide">Email</span>
           </div>
-          <div className={`flex flex-col items-center gap-1 ${waVerified ? 'text-[#25D366]' : 'text-[#848e9c]'}`}>
-            <MessageCircle size={18} />
-            <span className="text-[9px] font-medium">WhatsApp</span>
+          {/* KYC */}
+          <div className={`flex flex-col items-center gap-1 ${kycApproved ? 'text-[#0ecb81]' : kycSubmitted ? 'text-[#f0b90b]' : 'text-[#3c4451]'}`}>
+            <Shield size={17} />
+            <span className="text-[9px] font-semibold tracking-wide">KYC</span>
           </div>
-          <div className={`flex flex-col items-center gap-1 ${tgVerified ? 'text-[#229ED9]' : 'text-[#848e9c]'}`}>
-            <Send size={18} />
-            <span className="text-[9px] font-medium">Telegram</span>
+          {/* Tier */}
+          <div className="flex flex-col items-center gap-1" style={{ color: tierIconColor }}>
+            <Star size={17} />
+            <span className="text-[9px] font-semibold tracking-wide">{tier.label}</span>
           </div>
-          <div className={`flex flex-col items-center gap-1 ${kycApproved ? 'text-[#0ecb81]' : kycSubmitted ? 'text-[#f0b90b]' : 'text-[#848e9c]'}`}>
-            <Shield size={18} />
-            <span className="text-[9px] font-medium">KYC</span>
+          {/* WhatsApp */}
+          <div className={`flex flex-col items-center gap-1 ${waVerified ? 'text-[#25D366]' : 'text-[#3c4451]'}`}>
+            <MessageCircle size={17} />
+            <span className="text-[9px] font-semibold tracking-wide">WhatsApp</span>
+          </div>
+          {/* Telegram */}
+          <div className={`flex flex-col items-center gap-1 ${tgVerified ? 'text-[#229ED9]' : 'text-[#3c4451]'}`}>
+            <Send size={17} />
+            <span className="text-[9px] font-semibold tracking-wide">Telegram</span>
           </div>
         </div>
       </div>
@@ -192,9 +235,9 @@ export default function ProfilePage() {
       <div className="bg-[#161a1e] border border-[#2b3139] rounded-2xl overflow-hidden divide-y divide-[#2b3139]">
         {([
           { label: 'Personal Information', sub: 'Update details & profile photo', page: 'personal' as SubPage, icon: User },
-          { label: 'FinAPI',               sub: 'API keys & exchange connections', page: null,                  icon: Key, action: () => navigate('/app/finapi') },
+          { label: 'FinAPI',               sub: 'API keys & exchange connections', page: null,                  icon: Key,      action: () => navigate('/app/finapi') },
           { label: 'Referral',             sub: 'Invite friends & earn rewards',  page: 'referral' as SubPage, icon: Gift },
-          { label: 'Settings',             sub: 'Notifications & preferences',    page: null,                  icon: Settings,  action: () => navigate('/app/settings') },
+          { label: 'Settings',             sub: 'Notifications & preferences',    page: null,                  icon: Settings, action: () => navigate('/app/settings') },
           { label: 'Security',             sub: 'Password, PIN & safety',         page: 'security' as SubPage, icon: Shield },
         ] as const).map(item => (
           <button key={item.label}
@@ -210,6 +253,19 @@ export default function ProfilePage() {
             <ChevronRight size={16} className="text-[#848e9c] flex-shrink-0" />
           </button>
         ))}
+
+        {/* Logout */}
+        <button
+          onClick={handleLogout}
+          className="w-full flex items-center gap-4 px-5 py-4 hover:bg-[#f6465d]/5 transition text-left group">
+          <div className="w-9 h-9 rounded-xl bg-[#f6465d]/10 flex items-center justify-center flex-shrink-0">
+            <LogOut size={16} className="text-[#f6465d]" />
+          </div>
+          <div className="flex-1 min-w-0">
+            <p className="text-sm font-semibold text-[#f6465d]">Log Out</p>
+            <p className="text-xs text-[#848e9c]">Sign out of your account</p>
+          </div>
+        </button>
       </div>
     </div>
   )
