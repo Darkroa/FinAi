@@ -1,6 +1,6 @@
 import os
-from hdwallet import HDWallet
-from hdwallet.symbols import BTC, ETH
+from hdwallet import BIP44HDWallet, BIP49HDWallet, BIP84HDWallet
+from hdwallet.cryptocurrencies import BitcoinMainnet, EthereumMainnet
 
 
 class MultiAssetHDWallet:
@@ -14,7 +14,7 @@ class MultiAssetHDWallet:
         """Simple health check"""
         try:
             # Test BTC
-            w = HDWallet(symbol=BTC)
+            w = BIP84HDWallet(cryptocurrency=BitcoinMainnet)
             w.from_mnemonic(mnemonic=self.mnemonic)
             w.clean_derivation()
             w.from_index(84, hardened=True)
@@ -22,11 +22,10 @@ class MultiAssetHDWallet:
             w.from_index(0, hardened=True)
             w.from_index(0)
             w.from_index(0)
-
             btc_addr = w.p2wpkh_address()
 
             # Test ETH
-            w2 = HDWallet(symbol=ETH)
+            w2 = BIP44HDWallet(cryptocurrency=EthereumMainnet)
             w2.from_mnemonic(mnemonic=self.mnemonic)
             w2.clean_derivation()
             w2.from_index(44, hardened=True)
@@ -34,7 +33,6 @@ class MultiAssetHDWallet:
             w2.from_index(0, hardened=True)
             w2.from_index(0)
             w2.from_index(0)
-
             eth_addr = w2.address()
 
             return {
@@ -47,11 +45,10 @@ class MultiAssetHDWallet:
             return {"status": "ERROR", "message": str(e)}
 
     def get_btc_account(self, index: int = 0, bip: int = 84) -> dict:
-        w = HDWallet(symbol=BTC)
-        w.from_mnemonic(mnemonic=self.mnemonic)
-        w.clean_derivation()
-
         if bip == 84:
+            w = BIP84HDWallet(cryptocurrency=BitcoinMainnet)
+            w.from_mnemonic(mnemonic=self.mnemonic)
+            w.clean_derivation()
             w.from_index(84, hardened=True)
             w.from_index(0, hardened=True)
             w.from_index(0, hardened=True)
@@ -60,12 +57,15 @@ class MultiAssetHDWallet:
             addr = w.p2wpkh_address()
             sem = "BIP84 (bc1q...)"
         else:
+            w = BIP49HDWallet(cryptocurrency=BitcoinMainnet)
+            w.from_mnemonic(mnemonic=self.mnemonic)
+            w.clean_derivation()
             w.from_index(49, hardened=True)
             w.from_index(0, hardened=True)
             w.from_index(0, hardened=True)
             w.from_index(0)
             w.from_index(index)
-            addr = w.p2sh_address()
+            addr = w.p2wpkh_in_p2sh_address()
             sem = "BIP49 (3...)"
 
         return {
@@ -76,7 +76,7 @@ class MultiAssetHDWallet:
         }
 
     def get_eth_account(self, index: int = 0) -> dict:
-        w = HDWallet(symbol=ETH)
+        w = BIP44HDWallet(cryptocurrency=EthereumMainnet)
         w.from_mnemonic(mnemonic=self.mnemonic)
         w.clean_derivation()
         w.from_index(44, hardened=True)
