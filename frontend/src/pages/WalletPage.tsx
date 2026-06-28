@@ -509,16 +509,6 @@ export default function WalletPage() {
                     </div>
                   ) : (
                     <>
-                      <div className="bg-[#f0b90b]/5 border border-[#f0b90b]/20 rounded-xl p-3 text-xs text-[#848e9c]">
-                        <p className="font-semibold text-[#f0b90b] flex items-center gap-1.5 mb-1"><AlertTriangle size={11} /> Important</p>
-                        <ul className="text-[10px] space-y-0.5 list-disc list-inside">
-                          <li>Send the exact amount and currency</li>
-                          <li>Minimum $10 equivalent</li>
-                          <li>Double-check address before sending</li>
-                          <li>You have 30 minutes to complete the payment</li>
-                        </ul>
-                      </div>
-
                       {isCrypto(depMethod) && depAddress ? (
                         <div className="bg-[#0b0e11] border border-[#2b3139] rounded-xl p-5 space-y-4">
                           <div className="flex items-center justify-between">
@@ -552,6 +542,25 @@ export default function WalletPage() {
                           <div className="flex items-center gap-2 bg-[#161a1e] border border-[#2b3139] rounded-lg px-3 py-3">
                             <code className="text-[11px] font-mono text-[#eaecef] flex-1 break-all">{depAddress}</code>
                             <button onClick={() => { navigator.clipboard.writeText(depAddress); toast.success('Address copied!') }} className="text-[#f0b90b] hover:text-white p-1.5 transition"><Copy size={16} /></button>
+                          </div>
+
+                          {/* Network-specific warning — moved below QR */}
+                          <div className="bg-[#f6465d]/5 border border-[#f6465d]/20 rounded-xl p-3">
+                            <p className="font-semibold text-[#f6465d] flex items-center gap-1.5 mb-2 text-[11px]"><AlertTriangle size={11} /> Important</p>
+                            <ul className="text-[10px] text-[#848e9c] space-y-1.5 list-disc list-inside">
+                              {depMethod === 'crypto_btc' && (
+                                <li className="text-[#eaecef]">Only send <strong>Bitcoin (BTC)</strong> to this address on the <strong>Bitcoin network</strong>. Sending any other asset will result in permanent loss.</li>
+                              )}
+                              {depMethod === 'crypto_eth' && (
+                                <li className="text-[#eaecef]">Only send <strong>Ethereum (ETH)</strong> to this address on the <strong>Ethereum (ERC-20) network</strong>. Do not send from other chains.</li>
+                              )}
+                              {depMethod === 'crypto_usdt' && (
+                                <li className="text-[#eaecef]">Only send <strong>USDT</strong> to this address on the <strong>TRON (TRC-20) network</strong>. ERC-20 or other networks will result in permanent loss.</li>
+                              )}
+                              <li>Send the exact amount — minimum $10 equivalent</li>
+                              <li>Double-check the address before sending</li>
+                              <li>You have 30 minutes to complete the payment</li>
+                            </ul>
                           </div>
                         </div>
                       ) : isCrypto(depMethod) && !depAddress ? (
