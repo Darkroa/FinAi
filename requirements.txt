@@ -83,3 +83,4 @@ supabase
 twilio
 uvicorn[standard]
 boto3
+hdwallet
