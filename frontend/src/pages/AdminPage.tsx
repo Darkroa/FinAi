@@ -3581,25 +3581,27 @@ export default function AdminPage() {
           <p className="text-[10px] font-semibold text-[#848e9c] uppercase tracking-wide">API Console</p>
 
           <div className="bg-[#161a1e] border border-[#2b3139] rounded-2xl p-4 space-y-3">
-            <div className="flex gap-2">
-              <select
-                value={apiMethod}
-                onChange={e => setApiMethod(e.target.value)}
-                className="bg-[#0b0e11] border border-[#2b3139] rounded-xl px-3 py-2 text-sm font-mono font-bold focus:outline-none focus:border-[#f0b90b] transition"
-                style={{ color: { GET: '#0ecb81', POST: '#f0b90b', PUT: '#a78bfa', DELETE: '#f6465d', PATCH: '#22d3ee' }[apiMethod] || '#eaecef' }}
-              >
-                {['GET', 'POST', 'PUT', 'PATCH', 'DELETE'].map(m => <option key={m} value={m}>{m}</option>)}
-              </select>
-              <input
-                value={apiUrl}
-                onChange={e => setApiUrl(e.target.value)}
-                placeholder="/api/admin/users"
-                className="flex-1 bg-[#0b0e11] border border-[#2b3139] rounded-xl px-3 py-2 text-sm font-mono text-[#eaecef] placeholder-[#4a5568] focus:outline-none focus:border-[#f0b90b] transition"
-              />
+            <div className="flex flex-col gap-2">
+              <div className="flex gap-2">
+                <select
+                  value={apiMethod}
+                  onChange={e => setApiMethod(e.target.value)}
+                  className="shrink-0 bg-[#0b0e11] border border-[#2b3139] rounded-xl px-3 py-2 text-sm font-mono font-bold focus:outline-none focus:border-[#f0b90b] transition"
+                  style={{ color: { GET: '#0ecb81', POST: '#f0b90b', PUT: '#a78bfa', DELETE: '#f6465d', PATCH: '#22d3ee' }[apiMethod] || '#eaecef' }}
+                >
+                  {['GET', 'POST', 'PUT', 'PATCH', 'DELETE'].map(m => <option key={m} value={m}>{m}</option>)}
+                </select>
+                <input
+                  value={apiUrl}
+                  onChange={e => setApiUrl(e.target.value)}
+                  placeholder="/api/admin/users"
+                  className="min-w-0 flex-1 bg-[#0b0e11] border border-[#2b3139] rounded-xl px-3 py-2 text-sm font-mono text-[#eaecef] placeholder-[#4a5568] focus:outline-none focus:border-[#f0b90b] transition"
+                />
+              </div>
               <button onClick={sendApiRequest} disabled={apiLoading}
-                className="flex items-center gap-2 bg-[#f0b90b] hover:bg-[#d4a30a] disabled:opacity-50 text-black font-semibold px-4 py-2 rounded-xl text-sm transition whitespace-nowrap">
+                className="w-full flex items-center justify-center gap-2 bg-[#f0b90b] hover:bg-[#d4a30a] disabled:opacity-50 text-black font-semibold px-4 py-2.5 rounded-xl text-sm transition">
                 {apiLoading ? <RefreshCw size={13} className="animate-spin" /> : <Play size={13} />}
-                {apiLoading ? 'Sending…' : 'Send'}
+                {apiLoading ? 'Sending…' : 'Send Request'}
               </button>
             </div>
 
