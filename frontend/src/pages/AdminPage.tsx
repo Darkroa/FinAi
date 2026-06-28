@@ -2542,12 +2542,27 @@ export default function AdminPage() {
                               </div>
                             ))}
                           </div>
+                        ) : name === 'tatum' ? (
+                          <div className="space-y-1.5">
+                            {extras.filter(([k]) => k !== 'webhook_url').map(([k, v]) => (
+                              <div key={k} className="flex items-center justify-between text-xs gap-2">
+                                <span className="text-[#848e9c] capitalize flex-shrink-0">{k.replace(/_/g, ' ')}</span>
+                                <span className="text-[#eaecef] font-mono text-right">{String(v)}</span>
+                              </div>
+                            ))}
+                            {check.webhook_url && (
+                              <div className="mt-1.5 pt-1.5 border-t border-[#2b3139]">
+                                <p className="text-[10px] text-[#848e9c] mb-1">Webhook URL</p>
+                                <p className="text-[10px] font-mono text-[#eaecef] break-all bg-[#0b0e11] rounded-lg px-2.5 py-1.5 leading-relaxed">{check.webhook_url}</p>
+                              </div>
+                            )}
+                          </div>
                         ) : extras.length > 0 && (
                           <div className="space-y-1">
                             {extras.map(([k, v]) => (
-                              <div key={k} className="flex items-center justify-between text-xs">
-                                <span className="text-[#848e9c] capitalize">{k.replace(/_/g, ' ')}</span>
-                                <span className="text-[#eaecef] font-mono">{String(v)}</span>
+                              <div key={k} className="flex items-center justify-between text-xs gap-2">
+                                <span className="text-[#848e9c] capitalize flex-shrink-0">{k.replace(/_/g, ' ')}</span>
+                                <span className="text-[#eaecef] font-mono text-right truncate max-w-[60%]">{String(v)}</span>
                               </div>
                             ))}
                           </div>
