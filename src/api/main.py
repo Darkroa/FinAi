@@ -61,11 +61,13 @@ app.include_router(router, prefix="/api")
 # ===================== Monitoring Proxies =====================
 @app.api_route("/prom/{path:path}", methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"])
 async def proxy_prometheus(path: str, request: Request):
+    from src.utils.config import config
+    base = config.PROMETHEUS_URL.rstrip("/")
     async with httpx.AsyncClient(timeout=10.0) as client:
         try:
             resp = await client.request(
                 method=request.method,
-                url=f"http://localhost:9090/prom/{path}",
+                url=f"{base}/prom/{path}",
                 params=request.query_params,
                 content=await request.body(),
                 headers={k: v for k, v in request.headers.items()
@@ -82,11 +84,13 @@ async def proxy_prometheus(path: str, request: Request):
 
 @app.api_route("/graf/{path:path}", methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"])
 async def proxy_grafana(path: str, request: Request):
+    from src.utils.config import config
+    base = config.GRAFANA_URL.rstrip("/")
     async with httpx.AsyncClient(timeout=10.0) as client:
         try:
             resp = await client.request(
                 method=request.method,
-                url=f"http://localhost:3001/{path}",
+                url=f"{base}/{path}",
                 params=request.query_params,
                 content=await request.body(),
                 headers={k: v for k, v in request.headers.items()
