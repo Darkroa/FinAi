@@ -331,7 +331,7 @@ export default function AdminFullDashboard() {
                 <MonitorFrame
                   title="Grafana"
                   storageKey="finai-grafana-url"
-                  defaultUrl={`${window.location.protocol}//${window.location.hostname}:3000`}
+                  defaultUrl="/graf/"
                   accentColor="#f46800"
                 />
               )}
@@ -339,7 +339,7 @@ export default function AdminFullDashboard() {
                 <MonitorFrame
                   title="Prometheus"
                   storageKey="finai-prometheus-url"
-                  defaultUrl={`${window.location.protocol}//${window.location.hostname}:9090`}
+                  defaultUrl="/prom/"
                   accentColor="#e6522c"
                 />
               )}
@@ -347,7 +347,7 @@ export default function AdminFullDashboard() {
           ) : (
             <div className="h-full overflow-y-auto">
               <div className="max-w-7xl mx-auto px-4 sm:px-5 lg:px-6 py-5">
-                {view === 'overview' && <AdminDashboardPage />}
+                {view === 'overview' && <AdminDashboardPage onNavigate={(tab) => setView(tab as View)} />}
                 {isAdminTab && (
                   <AdminPage key={view} initialTab={view as AdminTab} />
                 )}

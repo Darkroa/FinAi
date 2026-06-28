@@ -5,10 +5,11 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, Response
+import httpx
 from loguru import logger
 
 from src.api.routes import router
@@ -56,6 +57,49 @@ except Exception as _prom_err:
 
 # Include API routes
 app.include_router(router, prefix="/api")
+
+# ===================== Monitoring Proxies =====================
+@app.api_route("/prom/{path:path}", methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"])
+async def proxy_prometheus(path: str, request: Request):
+    async with httpx.AsyncClient(timeout=10.0) as client:
+        try:
+            resp = await client.request(
+                method=request.method,
+                url=f"http://localhost:9090/{path}",
+                params=request.query_params,
+                content=await request.body(),
+                headers={k: v for k, v in request.headers.items()
+                         if k.lower() not in ("host", "content-length", "transfer-encoding")},
+                follow_redirects=True,
+            )
+            return Response(
+                content=resp.content,
+                status_code=resp.status_code,
+                media_type=resp.headers.get("content-type", "text/plain"),
+            )
+        except Exception:
+            return Response(content=b"<h2>Prometheus is starting up...</h2>", status_code=503, media_type="text/html")
+
+@app.api_route("/graf/{path:path}", methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"])
+async def proxy_grafana(path: str, request: Request):
+    async with httpx.AsyncClient(timeout=10.0) as client:
+        try:
+            resp = await client.request(
+                method=request.method,
+                url=f"http://localhost:3001/{path}",
+                params=request.query_params,
+                content=await request.body(),
+                headers={k: v for k, v in request.headers.items()
+                         if k.lower() not in ("host", "content-length", "transfer-encoding")},
+                follow_redirects=True,
+            )
+            return Response(
+                content=resp.content,
+                status_code=resp.status_code,
+                media_type=resp.headers.get("content-type", "text/plain"),
+            )
+        except Exception:
+            return Response(content=b"<h2>Grafana is starting up...</h2>", status_code=503, media_type="text/html")
 
 # ===================== Static Frontend Serving =====================
 FRONTEND_DIST = Path(__file__).parent.parent.parent / "frontend" / "dist"
@@ -120,7 +164,7 @@ if FRONTEND_DIST.exists():
 
     @app.get("/{full_path:path}")
     async def serve_spa(full_path: str):
-        if full_path.startswith(("api/", "docs", "redoc", "openapi.json", "metrics", "assets/", "app/")):
+        if full_path.startswith(("api/", "docs", "redoc", "openapi.json", "metrics", "prom/", "prom", "graf/", "graf", "assets/", "app/")):
             from fastapi import HTTPException
             raise HTTPException(status_code=404)
         index = FRONTEND_DIST / "index.html"

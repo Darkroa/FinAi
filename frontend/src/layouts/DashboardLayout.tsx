@@ -281,7 +281,7 @@ export default function DashboardLayout() {
         <div className="grid grid-cols-5 items-end pb-2 pt-1 max-w-lg mx-auto">
 
           {user?.is_admin ? (
-            <NavLink to="/app/admin-home" className={({ isActive }) => cn(
+            <NavLink to="/admin" className={({ isActive }) => cn(
               'flex flex-col items-center gap-0.5 py-1 transition-colors',
               isActive ? 'text-[#f6465d]' : 'text-[#848e9c] hover:text-[#f6465d]'
             )}>

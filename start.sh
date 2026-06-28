@@ -168,6 +168,47 @@ if [ "$EVO_RUNNING" -eq 0 ]; then
     fi
 fi
 
+# ── Prometheus ────────────────────────────────────────────────────────────────
+if command -v prometheus >/dev/null 2>&1; then
+    echo "→ Starting Prometheus on port 9090..."
+    prometheus \
+        --config.file=/home/runner/workspace/prometheus.yml \
+        --web.listen-address=":9090" \
+        --storage.tsdb.path=/tmp/prometheus-data \
+        --web.route-prefix="/" \
+        --log.level=warn &
+    PROM_PID=$!
+    echo "$PROM_PID" > "$PIDFILE_DIR/prometheus.pid"
+    echo "Prometheus started (PID: $PROM_PID)"
+else
+    echo "⚠️  prometheus not found in PATH — skipping"
+fi
+
+# ── Grafana ────────────────────────────────────────────────────────────────────
+if command -v grafana-server >/dev/null 2>&1 || command -v grafana >/dev/null 2>&1; then
+    GRAFANA_BIN=$(command -v grafana-server 2>/dev/null || command -v grafana)
+    GRAFANA_HOME=$(dirname $(dirname "$GRAFANA_BIN") 2>/dev/null || echo "/run/grafana")
+    echo "→ Starting Grafana on port 3001..."
+    GF_SERVER_HTTP_PORT=3001 \
+    GF_SERVER_ROOT_URL="http://localhost:8000/graf/" \
+    GF_SERVER_SERVE_FROM_SUB_PATH=true \
+    GF_AUTH_ANONYMOUS_ENABLED=true \
+    GF_AUTH_ANONYMOUS_ORG_ROLE=Admin \
+    GF_SECURITY_ALLOW_EMBEDDING=true \
+    GF_LOG_LEVEL=warn \
+    "$GRAFANA_BIN" server \
+        --config=/home/runner/workspace/grafana.ini \
+        --homepath="$GRAFANA_HOME" \
+        cfg:default.paths.data=/tmp/grafana-data \
+        cfg:default.paths.logs=/tmp/grafana-logs \
+        cfg:default.paths.plugins=/tmp/grafana-plugins &
+    GRAF_PID=$!
+    echo "$GRAF_PID" > "$PIDFILE_DIR/grafana.pid"
+    echo "Grafana started (PID: $GRAF_PID)"
+else
+    echo "⚠️  grafana not found in PATH — skipping"
+fi
+
 # ── React frontend (Vite) ──────────────────────────────────────────────────────
 echo "→ Starting React frontend (Vite) on port 5000..."
 cd /home/runner/workspace/frontend
