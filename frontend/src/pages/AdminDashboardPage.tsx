@@ -188,9 +188,13 @@ export default function AdminDashboardPage({ onNavigate }: { onNavigate?: (tab: 
             <p className="text-xs font-semibold text-[#848e9c] uppercase tracking-wide">System Health</p>
             <Activity size={13} className="text-[#848e9c]" />
           </div>
-          {health && Object.keys(health).length > 0 ? (
+          {health && Object.keys(health.checks || {}).length > 0 ? (
             <div className="space-y-2">
-              {Object.entries(health).map(([key, val]: any) => (
+              <div className="flex items-center justify-between mb-1">
+                <span className="text-[10px] text-[#848e9c]">Overall</span>
+                <span className={`text-[10px] font-semibold capitalize px-1.5 py-0.5 rounded ${health.overall === 'healthy' ? 'bg-[#0ecb81]/10 text-[#0ecb81]' : 'bg-[#f0b90b]/10 text-[#f0b90b]'}`}>{health.overall}</span>
+              </div>
+              {Object.entries(health.checks as Record<string, any>).map(([key, val]: any) => (
                 <div key={key} className="flex items-center justify-between">
                   <span className="text-xs text-[#848e9c] capitalize">{key.replace(/_/g, ' ')}</span>
                   <div className="flex items-center gap-1.5">

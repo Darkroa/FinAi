@@ -633,6 +633,7 @@ export default function AdminPage({ initialTab, embedded }: { initialTab?: Tab; 
 
   useEffect(() => {
     if (tab !== 'health') return
+    runHealthCheck()
     const interval = setInterval(runHealthCheck, 30000)
     return () => clearInterval(interval)
   }, [tab])
@@ -763,9 +764,15 @@ export default function AdminPage({ initialTab, embedded }: { initialTab?: Tab; 
       const r = await adminGetServerMetrics()
       setServerMetrics(r.data)
       setMetricHistory(h => [...h.slice(-19), { ...r.data, ts: Date.now() }])
-    } catch { /* silent */ }
+    } catch {
+      toast.error('Failed to load server metrics')
+    }
     setMetricsLoading(false)
   }
+
+  useEffect(() => {
+    if (initialTab && initialTab !== 'users') loadTabData(initialTab)
+  }, [])
 
   const sendApiRequest = async () => {
     setApiLoading(true)
