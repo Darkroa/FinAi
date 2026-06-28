@@ -11,38 +11,25 @@ packages = ["cargo", "eas-cli", "ffmpeg-full", "freetype", "glibcLocales", "lcms
 runButton = "Project"
 
 [[workflows.workflow]]
+name = "Project"
+mode = "parallel"
+author = "Darkroa"
+
+[[workflows.workflow.tasks]]
+task = "workflow.run"
+args = "Start application"
+
+[[workflows.workflow]]
 name = "Start application"
-mode = "sequential"
+author = "Darkroa"
+
+[workflows.workflow.metadata]
+outputType = "webview"
 
 [[workflows.workflow.tasks]]
 task = "shell.exec"
 args = "bash start.sh"
 waitForPort = 5000
-
-[workflows.workflow.metadata]
-outputType = "webview"
-
-[[workflows.workflow]]
-name = "artifacts/mockup-sandbox: Component Preview Server"
-author = "agent"
-mode = "sequential"
-
-[workflows.workflow.metadata]
-outputType = "webview"
-artifactId = "artifacts/mockup-sandbox"
-isCanvasWorkflow = true
-
-[[workflows.workflow.tasks]]
-task = "shell.exec"
-args = "npm run dev"
-cwd = "./artifacts/mockup-sandbox"
-waitForPort = 23636
-ensurePreviewReachable = "/"
-router = "path"
-
-[workflows.workflow.tasks.env]
-PORT = "23636"
-BASE_PATH = "/__mockup/"
 
 [[ports]]
 localPort = 3001
@@ -92,7 +79,4 @@ run = ["sh", "-c", "cd /home/runner/workspace && PYTHONPATH=/home/runner/workspa
 build = ["sh", "-c", "cd /home/runner/workspace/frontend && npm install --legacy-peer-deps && npm run build"]
 
 [darkroa]
-expertMode = true
-
-[agent]
 expertMode = true
