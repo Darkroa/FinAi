@@ -164,6 +164,14 @@ class Transaction(Base):
     start_date = Column(String(20), nullable=True)     # for VPS/asset: subscription start date
     end_date   = Column(String(20), nullable=True)     # for VPS/asset: subscription end date
     roi_percent = Column(Float, nullable=True)          # for VPS/asset: ROI % set by admin
+    # Tatum blockchain monitoring
+    tatum_subscription_id   = Column(String(100),  nullable=True)
+    monitoring_status       = Column(String(30),   nullable=True, default="none")
+    # none / monitoring / matched / confirmed
+    blockchain_tx_hash      = Column(String(300),  nullable=True)  # actual on-chain hash
+    blockchain_amount       = Column(Float,         nullable=True)  # on-chain asset amount
+    blockchain_confirmed_at = Column(DateTime,      nullable=True)
+
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 

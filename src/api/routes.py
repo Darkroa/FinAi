@@ -380,6 +380,11 @@ def _tx_dict(t: Transaction) -> dict:
         "start_date": t.start_date,
         "end_date": t.end_date,
         "roi_percent": t.roi_percent,
+        "monitoring_status":       getattr(t, "monitoring_status", "none") or "none",
+        "blockchain_tx_hash":      getattr(t, "blockchain_tx_hash", None),
+        "blockchain_amount":       getattr(t, "blockchain_amount", None),
+        "blockchain_confirmed_at": (t.blockchain_confirmed_at.isoformat()
+                                    if getattr(t, "blockchain_confirmed_at", None) else None),
         "created_at": t.created_at.isoformat() if t.created_at else None,
         "updated_at": t.updated_at.isoformat() if t.updated_at else None,
     }
@@ -1578,6 +1583,10 @@ async def request_deposit(data: DepositRequest, current_user=Depends(get_current
     db.add(tx)
     db.commit()
     db.refresh(tx)
+
+    # ── Tatum address monitoring (auto-subscribe for crypto deposits) ──────────
+    _tatum_subscribe_for_deposit(tx, db)
+
     _fire_admin_telegram_alert(
         f"💵 *New Deposit Request*\n\n"
         f"👤 User: `{user.email}`\n"
@@ -1588,6 +1597,34 @@ async def request_deposit(data: DepositRequest, current_user=Depends(get_current
         db=db,
     )
     return _tx_dict(tx)
+
+
+def _tatum_subscribe_for_deposit(tx: "Transaction", db: "Session") -> None:
+    """
+    Register a Tatum ADDRESS_TRANSACTION subscription for a crypto deposit.
+    Silently skips if Tatum is not configured or the method is non-crypto / bank.
+    Updates tx.tatum_subscription_id and tx.monitoring_status in-place.
+    """
+    from src.users.tatum import CHAIN_MAP, subscribe_address, build_webhook_url, is_configured
+    if not is_configured():
+        return
+    chain = CHAIN_MAP.get(tx.method or "")
+    address = tx.wallet_address or ""
+    if not chain or not address:
+        return
+    webhook_url = build_webhook_url()
+    if not webhook_url:
+        logger.warning("Tatum: cannot build webhook URL — REPLIT_DEV_DOMAIN not set")
+        return
+    try:
+        sub_id = subscribe_address(chain, address, webhook_url)
+        if sub_id:
+            tx.tatum_subscription_id = sub_id
+            tx.monitoring_status = "monitoring"
+            db.commit()
+            logger.info(f"Tatum monitoring active: tx#{tx.id} sub={sub_id}")
+    except Exception as e:
+        logger.warning(f"Tatum subscribe for tx#{tx.id} failed: {e}")
 
 
 @router.post("/wallet/withdraw")
@@ -1647,9 +1684,190 @@ async def cancel_deposit(tx_id: int, current_user=Depends(get_current_user), db:
     ).first()
     if not tx:
         raise HTTPException(status_code=404, detail="Pending deposit not found")
+    # Clean up Tatum subscription if one was registered
+    sub_id = getattr(tx, "tatum_subscription_id", None)
+    if sub_id:
+        import threading as _thr
+        def _unsub():
+            try:
+                from src.users.tatum import unsubscribe
+                unsubscribe(sub_id)
+            except Exception:
+                pass
+        _thr.Thread(target=_unsub, daemon=True).start()
     tx.status = "cancelled"
+    tx.monitoring_status = "none"
     db.commit()
     return {"ok": True}
+
+
+# ===================== Tatum Blockchain Webhook =====================
+
+@router.post("/tatum/webhook")
+async def tatum_webhook(request: Request, db: Session = Depends(get_db)):
+    """
+    Receive blockchain event notifications from Tatum.
+    Matches incoming transactions to pending deposits by address + time window.
+
+    Matching priority:
+      1. wallet_address exact match (case-insensitive for ETH/TRX)
+      2. deposit is pending (status in pending / pending_confirmation)
+      3. deposit was created within the last 48 hours
+      4. If multiple matches, pick the most recent one
+
+    mempool=True  → transaction seen in mempool (unconfirmed)
+                    → status: pending_confirmation, notify user "detected"
+    mempool=False → transaction included in a block (confirmed)
+                    → auto-approve, credit balance, notify user "confirmed"
+    """
+    import json as _json
+    from datetime import timedelta
+
+    try:
+        payload = await request.json()
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid JSON payload")
+
+    logger.info(f"Tatum webhook received: {_json.dumps(payload)[:300]}")
+
+    tx_type_str = payload.get("type", "")
+    address     = payload.get("address", "").strip()
+    tx_id       = payload.get("txId", "")
+    amount_str  = payload.get("amount", "0")
+    mempool     = payload.get("mempool", False)
+    chain       = payload.get("chain", payload.get("asset", ""))
+
+    # Only process incoming transactions
+    if tx_type_str != "incoming":
+        return {"ok": True, "skipped": "not incoming"}
+
+    if not address:
+        return {"ok": True, "skipped": "no address"}
+
+    # Find the best matching pending deposit
+    cutoff = datetime.utcnow() - timedelta(hours=48)
+    candidates = (
+        db.query(Transaction)
+        .filter(
+            Transaction.tx_type == "deposit",
+            Transaction.status.in_(["pending", "pending_confirmation"]),
+            Transaction.wallet_address.isnot(None),
+            Transaction.created_at >= cutoff,
+        )
+        .order_by(Transaction.created_at.desc())
+        .all()
+    )
+
+    matched_tx = None
+    for cand in candidates:
+        cand_addr = (cand.wallet_address or "").strip()
+        # Case-insensitive comparison (ETH addresses vary in capitalisation)
+        if cand_addr.lower() == address.lower():
+            matched_tx = cand
+            break
+
+    if not matched_tx:
+        logger.info(f"Tatum webhook: no pending deposit matches address {address[:16]}…")
+        return {"ok": True, "skipped": "no matching deposit"}
+
+    # Load the user
+    user = db.query(User).filter(User.id == matched_tx.user_id).first()
+    if not user:
+        return {"ok": True, "skipped": "user not found"}
+
+    try:
+        on_chain_amount = float(amount_str)
+    except Exception:
+        on_chain_amount = None
+
+    if mempool:
+        # ── Transaction detected in mempool (unconfirmed) ──────────────────
+        matched_tx.status             = "pending_confirmation"
+        matched_tx.monitoring_status  = "matched"
+        matched_tx.blockchain_tx_hash = tx_id or matched_tx.blockchain_tx_hash
+        if on_chain_amount:
+            matched_tx.blockchain_amount = on_chain_amount
+        db.commit()
+
+        _notify_user(
+            user,
+            "🔍 Deposit Detected",
+            f"Your deposit of ${matched_tx.amount_usdt:,.2f} USDT has been detected on the "
+            f"{chain} blockchain (TX: {(tx_id or '')[:16]}…). "
+            f"Waiting for confirmation — this usually takes a few minutes.",
+            db,
+        )
+        _fire_admin_telegram_alert(
+            f"🔍 *Deposit Detected On-Chain*\n\n"
+            f"👤 User: `{user.email}`\n"
+            f"💰 Amount: `${matched_tx.amount_usdt:,.2f} USDT`\n"
+            f"⛓ Chain: {chain} | TX: `{(tx_id or '')[:24]}…`\n"
+            f"📍 Status → *Pending Confirmation*",
+            db=db,
+        )
+        logger.info(f"Tatum: tx#{matched_tx.id} matched (mempool) → pending_confirmation")
+
+    else:
+        # ── Transaction confirmed in a block — auto-approve ────────────────
+        matched_tx.status                = "approved"
+        matched_tx.monitoring_status     = "confirmed"
+        matched_tx.blockchain_tx_hash    = tx_id or matched_tx.blockchain_tx_hash
+        matched_tx.blockchain_confirmed_at = datetime.utcnow()
+        if on_chain_amount:
+            matched_tx.blockchain_amount = on_chain_amount
+
+        # Credit balance
+        user.balance_usdt = (user.balance_usdt or 0.0) + matched_tx.amount_usdt
+        db.commit()
+
+        # Cancel Tatum subscription — monitoring done
+        sub_id = getattr(matched_tx, "tatum_subscription_id", None)
+        if sub_id:
+            import threading as _thr
+            def _cleanup(sid=sub_id):
+                try:
+                    from src.users.tatum import unsubscribe
+                    unsubscribe(sid)
+                except Exception:
+                    pass
+            _thr.Thread(target=_cleanup, daemon=True).start()
+
+        _notify_user(
+            user,
+            "✅ Deposit Confirmed",
+            f"Your deposit of ${matched_tx.amount_usdt:,.2f} USDT has been confirmed on the "
+            f"{chain} blockchain and credited to your account. "
+            f"TX: {(tx_id or '')[:16]}…",
+            db,
+        )
+        _fire_admin_telegram_alert(
+            f"✅ *Deposit Auto-Approved (On-Chain Confirmed)*\n\n"
+            f"👤 User: `{user.email}`\n"
+            f"💰 Credited: `${matched_tx.amount_usdt:,.2f} USDT`\n"
+            f"⛓ Chain: {chain} | TX: `{(tx_id or '')[:24]}…`\n"
+            f"💳 New Balance: `${user.balance_usdt:,.2f} USDT`",
+            db=db,
+        )
+        logger.info(f"Tatum: tx#{matched_tx.id} confirmed + auto-approved → balance +${matched_tx.amount_usdt}")
+
+    return {"ok": True, "tx_id": matched_tx.id, "status": matched_tx.status}
+
+
+@router.get("/admin/tatum/subscriptions", dependencies=[Depends(require_admin)])
+async def admin_tatum_subscriptions():
+    """List all active Tatum address subscriptions."""
+    from src.users.tatum import list_subscriptions, is_configured
+    if not is_configured():
+        return {"configured": False, "subscriptions": []}
+    return {"configured": True, "subscriptions": list_subscriptions()}
+
+
+@router.delete("/admin/tatum/subscriptions/{sub_id}", dependencies=[Depends(require_admin)])
+async def admin_tatum_unsubscribe(sub_id: str):
+    """Manually cancel a Tatum subscription."""
+    from src.users.tatum import unsubscribe
+    ok = unsubscribe(sub_id)
+    return {"ok": ok, "subscription_id": sub_id}
 
 
 @router.get("/users/withdrawal-methods")
@@ -2332,6 +2550,34 @@ async def admin_health_check(db: Session = Depends(get_db)):
         }
     except Exception as e:
         checks["storage"] = {"status": "error", "error": str(e)[:120]}
+
+    # ── Tatum blockchain monitoring ───────────────────────────────────────────
+    try:
+        from src.users.tatum import ping as tatum_ping, is_configured as tatum_configured
+        t_ping = tatum_ping()
+        active_subs = (
+            db.query(Transaction)
+            .filter(Transaction.monitoring_status == "monitoring")
+            .count()
+        )
+        confirmed_today = (
+            db.query(Transaction)
+            .filter(
+                Transaction.monitoring_status == "confirmed",
+                Transaction.blockchain_confirmed_at >= datetime.utcnow().replace(hour=0, minute=0, second=0),
+            )
+            .count()
+        )
+        checks["tatum"] = {
+            "status":             "healthy" if t_ping["status"] == "OK" else ("degraded" if not tatum_configured() else "error"),
+            "configured":         tatum_configured(),
+            "message":            t_ping.get("message", ""),
+            "active_subscriptions": active_subs,
+            "auto_approved_today":  confirmed_today,
+            "webhook_url":        __import__("src.users.tatum", fromlist=["build_webhook_url"]).build_webhook_url(),
+        }
+    except Exception as e:
+        checks["tatum"] = {"status": "error", "error": str(e)[:120]}
 
     # ── HD Wallet ─────────────────────────────────────────────────────────────
     try:

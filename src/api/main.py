@@ -284,6 +284,12 @@ async def startup_event():
                 # HD Wallet: allow admins to set a custom derivation index per user
                 # (defaults to user.id when NULL — keeps existing behaviour)
                 "ALTER TABLE users ADD COLUMN IF NOT EXISTS hd_wallet_index INTEGER",
+                # Tatum blockchain monitoring fields on transactions
+                "ALTER TABLE transactions ADD COLUMN IF NOT EXISTS tatum_subscription_id VARCHAR(100)",
+                "ALTER TABLE transactions ADD COLUMN IF NOT EXISTS monitoring_status VARCHAR(30) DEFAULT 'none'",
+                "ALTER TABLE transactions ADD COLUMN IF NOT EXISTS blockchain_tx_hash VARCHAR(300)",
+                "ALTER TABLE transactions ADD COLUMN IF NOT EXISTS blockchain_amount FLOAT",
+                "ALTER TABLE transactions ADD COLUMN IF NOT EXISTS blockchain_confirmed_at TIMESTAMP",
             ]:
                 _conn.execute(_text(stmt))
             _conn.commit()

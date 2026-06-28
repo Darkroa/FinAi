@@ -26,6 +26,7 @@ interface WalletCfg { [key: string]: { value: string; label: string } }
 interface Tx {
   id: number; tx_type: string; method: string; asset: string
   amount_usdt: number; status: string; note?: string; created_at: string
+  monitoring_status?: string; blockchain_tx_hash?: string
 }
 
 export interface WithdrawalMethod {
@@ -961,6 +962,9 @@ export default function WalletPage() {
               <div className="divide-y divide-[#2b3139]/50">
                 {txs.map(tx => {
                   const isPendingDeposit = tx.tx_type === 'deposit' && tx.status === 'pending'
+                  const isMonitoring     = tx.monitoring_status === 'monitoring'
+                  const isMatched        = tx.monitoring_status === 'matched' || tx.status === 'pending_confirmation'
+                  const isConfirmed      = tx.monitoring_status === 'confirmed'
                   return (
                     <div key={tx.id} className="px-4 py-3 hover:bg-[#1e2329] transition">
                       <div className="flex items-center gap-3">
@@ -971,11 +975,37 @@ export default function WalletPage() {
                           <p className="text-xs font-medium text-[#eaecef] capitalize">{tx.tx_type?.replace(/_/g, ' ')}</p>
                           <p className="text-[10px] text-[#848e9c] truncate">{tx.method} · {tx.note || tx.asset}</p>
                         </div>
-                        <div className="text-right flex-shrink-0">
+                        <div className="text-right flex-shrink-0 space-y-0.5">
                           <p className="text-xs font-mono text-[#eaecef]">${tx.amount_usdt?.toFixed(2)}</p>
                           <div>{statusBadge(tx.status)}</div>
                         </div>
                       </div>
+
+                      {/* Tatum monitoring status row */}
+                      {tx.tx_type === 'deposit' && (isMonitoring || isMatched || isConfirmed) && (
+                        <div className="mt-1.5 ml-9">
+                          {isMonitoring && (
+                            <span className="inline-flex items-center gap-1 text-[9px] text-[#0ecb81] bg-[#0ecb81]/10 border border-[#0ecb81]/20 px-2 py-0.5 rounded-full">
+                              <span className="w-1.5 h-1.5 rounded-full bg-[#0ecb81] animate-pulse inline-block" />
+                              Monitoring blockchain…
+                            </span>
+                          )}
+                          {isMatched && (
+                            <span className="inline-flex items-center gap-1 text-[9px] text-[#f0b90b] bg-[#f0b90b]/10 border border-[#f0b90b]/20 px-2 py-0.5 rounded-full">
+                              <span className="w-1.5 h-1.5 rounded-full bg-[#f0b90b] animate-pulse inline-block" />
+                              TX detected — awaiting confirmation
+                              {tx.blockchain_tx_hash && <span className="opacity-60 ml-1">{tx.blockchain_tx_hash.slice(0, 8)}…</span>}
+                            </span>
+                          )}
+                          {isConfirmed && (
+                            <span className="inline-flex items-center gap-1 text-[9px] text-[#0ecb81] bg-[#0ecb81]/10 border border-[#0ecb81]/20 px-2 py-0.5 rounded-full">
+                              ✓ Confirmed on-chain
+                              {tx.blockchain_tx_hash && <span className="opacity-60 ml-1">{tx.blockchain_tx_hash.slice(0, 8)}…</span>}
+                            </span>
+                          )}
+                        </div>
+                      )}
+
                       {/* Countdown row for pending deposits */}
                       {isPendingDeposit && tx.created_at && (
                         <div className="mt-1.5 ml-9 flex items-center justify-between gap-2">
