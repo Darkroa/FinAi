@@ -2333,6 +2333,30 @@ async def admin_health_check(db: Session = Depends(get_db)):
     except Exception as e:
         checks["storage"] = {"status": "error", "error": str(e)[:120]}
 
+    # ── HD Wallet ─────────────────────────────────────────────────────────────
+    try:
+        master_seed = os.getenv("MASTER_SEED", "").strip()
+        if master_seed:
+            from src.users.hd_wallet import MultiAssetHDWallet
+            w = MultiAssetHDWallet()
+            ping = w.ping()
+            checks["hd_wallet"] = {
+                "status":   "healthy" if ping["status"] == "OK" else "error",
+                "message":  ping["message"],
+                "btc_test": ping.get("btc_test"),
+                "eth_test": ping.get("eth_test"),
+                "trx_test": ping.get("trx_test"),
+                "mode":     "hd_wallet",
+            }
+        else:
+            checks["hd_wallet"] = {
+                "status":  "degraded",
+                "message": "MASTER_SEED not set — falling back to admin wallet config",
+                "mode":    "admin_config",
+            }
+    except Exception as e:
+        checks["hd_wallet"] = {"status": "error", "error": str(e)[:120]}
+
     overall = "healthy" if all(c["status"] == "healthy" for c in checks.values()) else "degraded"
     return {"overall": overall, "checks": checks, "timestamp": datetime.utcnow().isoformat()}
 
@@ -6049,18 +6073,49 @@ async def admin_set_user_deposit_config(
 
 @router.get("/wallet/my-deposit-config")
 async def get_my_deposit_config(current_user=Depends(get_current_user), db: Session = Depends(get_db)):
-    """Return user-specific deposit config if admin has set one, otherwise empty dict."""
+    """
+    Return deposit addresses for the logged-in user using a 3-tier priority:
+      1. Admin-set targeted override (highest)  — stored in WalletConfig key user_deposit_config_<id>
+      2. HD wallet derived from MASTER_SEED     — uses user.id as derivation index
+      3. Falls back to empty dict               — frontend then uses global /wallet/config
+    The special key `_address_source` is included so the UI can badge the source.
+    """
     import json as _json
     user = db.query(User).filter(User.email == current_user["email"]).first()
     if not user:
         return {}
+
+    # ── Priority 1: Admin-set targeted override ──────────────────────────────
     key = f"user_deposit_config_{user.id}"
     row = db.query(WalletConfig).filter(WalletConfig.key == key).first()
     if row and row.value:
         try:
-            return _json.loads(row.value)
+            data = _json.loads(row.value)
+            data["_address_source"] = "custom"
+            return data
         except Exception:
-            return {}
+            pass
+
+    # ── Priority 2: HD Wallet (MASTER_SEED env set) ──────────────────────────
+    master_seed = os.getenv("MASTER_SEED", "").strip()
+    if master_seed:
+        try:
+            from src.users.hd_wallet import MultiAssetHDWallet
+            wallet = MultiAssetHDWallet()
+            idx = user.hd_wallet_index if user.hd_wallet_index is not None else user.id
+            btc = wallet.get_btc_account(index=idx, bip=84)
+            eth = wallet.get_eth_account(index=idx)
+            trx = wallet.get_trx_account(index=idx)
+            return {
+                "btc_address":   btc["address"],
+                "eth_address":   eth["address"],
+                "usdt_trc20":    trx["address"],
+                "_address_source": "hd_wallet",
+            }
+        except Exception:
+            pass
+
+    # ── Priority 3: Fall through — frontend uses global /wallet/config ───────
     return {}
 
 

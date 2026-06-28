@@ -281,6 +281,9 @@ async def startup_event():
                 "CREATE INDEX IF NOT EXISTS idx_positions_user_ticker ON positions(user_id, ticker)",
                 # Link trade_logs → positions
                 "ALTER TABLE trade_logs ADD COLUMN IF NOT EXISTS position_id INTEGER REFERENCES positions(id)",
+                # HD Wallet: allow admins to set a custom derivation index per user
+                # (defaults to user.id when NULL — keeps existing behaviour)
+                "ALTER TABLE users ADD COLUMN IF NOT EXISTS hd_wallet_index INTEGER",
             ]:
                 _conn.execute(_text(stmt))
             _conn.commit()

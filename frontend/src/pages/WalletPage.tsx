@@ -337,6 +337,7 @@ export default function WalletPage() {
   const depConfigured = depMethod === 'bank' ? !!cfg['bank_account']?.value : !!depAddress
   const bankLogo = cfg['bank_logo']?.value || ''
   const depositNote = cfg['deposit_note']?.value?.trim() || ''
+  const addrSource = cfg['_address_source']?.value as 'hd_wallet' | 'custom' | undefined
 
   const selectedMethod = wdMethods.find(m => m.id === wdSelectedId)
   const balance = user?.balance_usdt ?? 0
@@ -520,7 +521,24 @@ export default function WalletPage() {
 
                       {isCrypto(depMethod) && depAddress ? (
                         <div className="bg-[#0b0e11] border border-[#2b3139] rounded-xl p-5 space-y-4">
-                          <p className="text-center text-xs text-[#848e9c]">Scan QR or Copy Address</p>
+                          <div className="flex items-center justify-between">
+                            <p className="text-xs text-[#848e9c]">Scan QR or Copy Address</p>
+                            {addrSource === 'hd_wallet' && (
+                              <span className="flex items-center gap-1 text-[10px] font-medium bg-[#f0b90b]/10 text-[#f0b90b] border border-[#f0b90b]/20 px-2 py-0.5 rounded-full">
+                                <span>🔑</span> HD Wallet
+                              </span>
+                            )}
+                            {addrSource === 'custom' && (
+                              <span className="flex items-center gap-1 text-[10px] font-medium bg-[#627eea]/10 text-[#627eea] border border-[#627eea]/20 px-2 py-0.5 rounded-full">
+                                <span>✏️</span> Custom
+                              </span>
+                            )}
+                            {!addrSource && (
+                              <span className="flex items-center gap-1 text-[10px] font-medium bg-[#848e9c]/10 text-[#848e9c] border border-[#848e9c]/20 px-2 py-0.5 rounded-full">
+                                <span>⚙️</span> Admin Config
+                              </span>
+                            )}
+                          </div>
                           <div className="flex justify-center">
                             <div className="relative bg-white p-3 rounded-2xl inline-flex">
                               <QRCode value={depAddress} size={110} style={{ height: 'auto', maxWidth: '100%', width: '100%' }} />

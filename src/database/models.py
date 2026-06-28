@@ -83,6 +83,9 @@ class User(Base):
     trade_leverage = Column(Float, nullable=True, default=1.0)
     bot_leverage   = Column(Float, nullable=True, default=1.0)
 
+    # HD Wallet derivation index (NULL = use user.id as index)
+    hd_wallet_index = Column(Integer, nullable=True)
+
     # Security
     transfer_pin = Column(String(255), nullable=True)   # bcrypt-hashed PIN
     pending_deletion = Column(Boolean, default=False)   # flagged for admin deletion
