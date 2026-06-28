@@ -151,12 +151,6 @@ export default function ProfilePage() {
           <input ref={fileRef} type="file" accept="image/*" className="hidden" onChange={handlePhotoChange} />
         </div>
 
-        {/* Name + email */}
-        <div className="text-center">
-          <p className="text-base font-bold text-[#eaecef]">{firstName}{lastName ? ` ${lastName}` : ''}</p>
-          <p className="text-xs text-[#848e9c] mt-0.5">{user?.email}</p>
-        </div>
-
         {/* Tier badge — just label, no limits text */}
         <span className={`text-xs font-bold px-4 py-1.5 rounded-full border ${tier.bg} ${tier.color} ${tier.border}`}>
           {tier.label}
@@ -183,6 +177,17 @@ export default function ProfilePage() {
         </div>
       </div>
 
+      {/* ── KYC & Email Verification card ── */}
+      {(!emailVerified || (!kycApproved && !kycSubmitted)) && (
+        <KycEmailCard
+          user={user}
+          setUser={setUser}
+          emailVerified={emailVerified}
+          kycApproved={kycApproved}
+          kycSubmitted={kycSubmitted}
+        />
+      )}
+
       {/* ── Navigation list ── */}
       <div className="bg-[#161a1e] border border-[#2b3139] rounded-2xl overflow-hidden divide-y divide-[#2b3139]">
         {([
@@ -204,6 +209,133 @@ export default function ProfilePage() {
             </div>
             <ChevronRight size={16} className="text-[#848e9c] flex-shrink-0" />
           </button>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+
+/* ─────────────────────── KYC & EMAIL CARD ─────────────────────────── */
+function KycEmailCard({ user, setUser, emailVerified, kycApproved, kycSubmitted }: {
+  user: UserProfile | null
+  setUser: (u: any) => void
+  emailVerified: boolean
+  kycApproved: boolean
+  kycSubmitted: boolean
+}) {
+  const [sendingCode, setSendingCode] = useState(false)
+  const [showVerify, setShowVerify]   = useState(false)
+  const [verifyCode, setVerifyCode]   = useState('')
+  const [verifying, setVerifying]     = useState(false)
+
+  const handleSendCode = async () => {
+    setSendingCode(true)
+    try {
+      await sendVerifyEmail()
+      setShowVerify(true)
+      toast.success('Verification code sent to your email')
+    } catch { toast.error('Failed to send code') }
+    finally { setSendingCode(false) }
+  }
+
+  const handleVerify = async () => {
+    if (!verifyCode.trim()) return
+    setVerifying(true)
+    try {
+      await verifyEmail(verifyCode.trim())
+      const res = await getMe()
+      setUser(res.data)
+      toast.success('Email verified!')
+      setShowVerify(false)
+    } catch { toast.error('Invalid or expired code') }
+    finally { setVerifying(false) }
+  }
+
+  const handleSubmitKYC = async () => {
+    try {
+      await submitKYC()
+      const res = await getMe()
+      setUser(res.data)
+      toast.success('KYC submitted for admin review')
+    } catch (err: unknown) {
+      toast.error((err as { response?: { data?: { detail?: string } } }).response?.data?.detail || 'Complete all required fields first')
+    }
+  }
+
+  const rows: React.ReactNode[] = []
+
+  if (!emailVerified) {
+    rows.push(
+      <div key="email" className="flex flex-col sm:flex-row sm:items-center gap-3">
+        <div className="flex items-start gap-2 flex-1">
+          <Mail size={14} className="text-[#f6465d] flex-shrink-0 mt-0.5" />
+          <div>
+            <p className="text-xs font-semibold text-[#eaecef]">Verify your email address</p>
+            <p className="text-[11px] text-[#848e9c]">Required to create API keys and unlock features</p>
+          </div>
+        </div>
+        {!showVerify ? (
+          <button onClick={handleSendCode} disabled={sendingCode}
+            className="self-start sm:self-auto flex items-center gap-1.5 text-xs bg-[#f0b90b] hover:bg-[#d4a30a] text-black font-semibold px-3 py-2 rounded-lg transition disabled:opacity-60">
+            <Mail size={11} />{sendingCode ? 'Sending…' : 'Send Code'}
+          </button>
+        ) : (
+          <div className="flex flex-col gap-2">
+            <p className="text-[11px] text-[#848e9c]">Check your email for the 6-digit code</p>
+            <div className="flex items-center gap-2">
+              <input value={verifyCode} onChange={e => setVerifyCode(e.target.value)}
+                placeholder="6-digit code" maxLength={6}
+                className="w-28 bg-[#0b0e11] border border-[#2b3139] rounded-lg px-3 py-2 text-xs text-center text-[#eaecef] focus:outline-none focus:border-[#f0b90b]" />
+              <button onClick={handleVerify} disabled={verifying}
+                className="text-xs bg-[#f0b90b] hover:bg-[#d4a30a] text-black font-semibold px-3 py-2 rounded-lg transition disabled:opacity-60">
+                {verifying ? '…' : 'Verify'}
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
+    )
+  }
+
+  if (!kycApproved && !kycSubmitted) {
+    rows.push(
+      <div key="kyc" className="flex flex-wrap items-center justify-between gap-3">
+        <div className="flex items-start gap-2 flex-1">
+          <Shield size={14} className="text-[#f0b90b] flex-shrink-0 mt-0.5" />
+          <div>
+            <p className="text-xs font-semibold text-[#eaecef]">Complete KYC verification</p>
+            <p className="text-[11px] text-[#848e9c]">
+              {user?.kyc_status === 'pending'
+                ? 'Fill all required fields in Personal Information, then submit for review.'
+                : 'Submit your details to unlock higher tiers and withdrawal limits.'}
+            </p>
+          </div>
+        </div>
+        {user?.kyc_status === 'pending' && (
+          <button onClick={handleSubmitKYC}
+            className="text-xs bg-[#f0b90b] hover:bg-[#d4a30a] text-black font-semibold px-4 py-2 rounded-lg transition flex-shrink-0">
+            Submit KYC
+          </button>
+        )}
+      </div>
+    )
+  }
+
+  if (rows.length === 0) return null
+
+  return (
+    <div className="bg-[#161a1e] border border-[#2b3139] rounded-2xl overflow-hidden">
+      <div className="flex items-center gap-2 px-4 py-3 border-b border-[#2b3139] bg-[#1a1f25]">
+        <CheckCircle size={13} className="text-[#f0b90b]" />
+        <span className="text-xs font-semibold text-[#eaecef]">Account Verification</span>
+      </div>
+      <div className="p-4 space-y-4">
+        {rows.map((row, i) => (
+          <div key={i}>
+            {i > 0 && <div className="h-px bg-[#2b3139] mb-4" />}
+            {row}
+          </div>
         ))}
       </div>
     </div>
@@ -371,11 +503,7 @@ function PersonalTab({ user, setUser }: { user: UserProfile | null; setUser: (u:
     address:     user?.address     || '',
     country:     user?.country     || '',
   })
-  const [saving, setSaving]           = useState(false)
-  const [sendingCode, setSendingCode] = useState(false)
-  const [showVerify, setShowVerify]   = useState(false)
-  const [verifyCode, setVerifyCode]   = useState('')
-  const [verifying, setVerifying]     = useState(false)
+  const [saving, setSaving]             = useState(false)
   const [photoLoading, setPhotoLoading] = useState(false)
   const fileRef = useRef<HTMLInputElement>(null)
   const set = (k: string) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) =>
@@ -421,40 +549,6 @@ function PersonalTab({ user, setUser }: { user: UserProfile | null; setUser: (u:
       const msg = (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail
       toast.error(msg || 'Failed to upload photo')
     } finally { setPhotoLoading(false) }
-  }
-
-  const handleSendCode = async () => {
-    setSendingCode(true)
-    try {
-      await sendVerifyEmail()
-      setShowVerify(true)
-      toast.success('Verification code sent to your email')
-    } catch { toast.error('Failed to send code') }
-    finally { setSendingCode(false) }
-  }
-
-  const handleVerify = async () => {
-    if (!verifyCode.trim()) return
-    setVerifying(true)
-    try {
-      await verifyEmail(verifyCode.trim())
-      const res = await getMe()
-      setUser(res.data)
-      toast.success('Email verified!')
-      setShowVerify(false)
-    } catch { toast.error('Invalid or expired code') }
-    finally { setVerifying(false) }
-  }
-
-  const handleSubmitKYC = async () => {
-    try {
-      await submitKYC()
-      const res = await getMe()
-      setUser(res.data)
-      toast.success('KYC submitted for admin review')
-    } catch (err: unknown) {
-      toast.error((err as { response?: { data?: { detail?: string } } }).response?.data?.detail || 'Complete all required fields first')
-    }
   }
 
   const fullName = [user?.first_name, user?.middle_name, user?.last_name].filter(Boolean).join(' ') || user?.email || ''
@@ -523,59 +617,11 @@ function PersonalTab({ user, setUser }: { user: UserProfile | null; setUser: (u:
         </div>
       </div>
 
-      {/* 3. Verify email */}
-      {!user?.is_mail_verified && (
-        <div className="bg-[#f6465d]/5 border border-[#f6465d]/20 rounded-xl px-4 py-3">
-          <div className="flex flex-col sm:flex-row sm:items-center gap-3">
-            <div className="flex items-start gap-2 flex-1">
-              <Mail size={13} className="text-[#f6465d] flex-shrink-0 mt-0.5" />
-              <div>
-                <p className="text-xs font-semibold text-[#eaecef]">Verify your email address</p>
-                <p className="text-[11px] text-[#848e9c]">Required to create API keys and unlock features</p>
-              </div>
-            </div>
-            {!showVerify ? (
-              <button onClick={handleSendCode} disabled={sendingCode}
-                className="self-start sm:self-auto flex items-center gap-1.5 text-xs bg-[#f0b90b] hover:bg-[#d4a30a] text-black font-semibold px-3 py-2 rounded-lg transition disabled:opacity-60">
-                <Mail size={11}/>{sendingCode ? 'Sending…' : 'Send Code'}
-              </button>
-            ) : (
-              <div className="flex flex-col gap-2">
-                <p className="text-[11px] text-[#848e9c]">Check your email for the 6-digit code</p>
-                <div className="flex items-center gap-2">
-                  <input value={verifyCode} onChange={e => setVerifyCode(e.target.value)}
-                    placeholder="6-digit code" maxLength={6}
-                    className="w-28 bg-[#0b0e11] border border-[#2b3139] rounded-lg px-3 py-2 text-xs text-center text-[#eaecef] focus:outline-none focus:border-[#f0b90b]" />
-                  <button onClick={handleVerify} disabled={verifying}
-                    className="text-xs bg-[#f0b90b] hover:bg-[#d4a30a] text-black font-semibold px-3 py-2 rounded-lg transition disabled:opacity-60">
-                    {verifying ? '…' : 'Verify'}
-                  </button>
-                </div>
-              </div>
-            )}
-          </div>
-        </div>
-      )}
-
-      {/* 4. Profile locked */}
+      {/* Profile locked */}
       {user?.profile_locked && (
         <div className="flex items-center gap-2 bg-[#f6465d]/5 border border-[#f6465d]/20 rounded-xl px-4 py-3">
           <Lock size={13} className="text-[#f6465d] flex-shrink-0" />
           <p className="text-xs text-[#848e9c]">Your profile is locked by admin. Contact support to request changes.</p>
-        </div>
-      )}
-
-      {/* KYC submit */}
-      {user?.kyc_status === 'pending' && !user?.profile_locked && (
-        <div className="bg-[#f0b90b]/5 border border-[#f0b90b]/20 rounded-xl px-4 py-3 flex flex-wrap items-center justify-between gap-3">
-          <div>
-            <p className="text-xs font-semibold text-[#eaecef]">Complete KYC to unlock higher tiers</p>
-            <p className="text-[11px] text-[#848e9c]">Fill all required fields then submit for admin review.</p>
-          </div>
-          <button onClick={handleSubmitKYC}
-            className="text-xs bg-[#f0b90b] hover:bg-[#d4a30a] text-black font-semibold px-4 py-2 rounded-lg transition flex-shrink-0">
-            Submit KYC
-          </button>
         </div>
       )}
 
@@ -615,13 +661,10 @@ function PersonalTab({ user, setUser }: { user: UserProfile | null; setUser: (u:
           {/* ── Account Details ── */}
           <div className="space-y-3">
             <SectionHeader label="Account Details" />
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 gap-3">
               <Field label="Username">
                 <input value={form.username} onChange={set('username')}
                   disabled={!!user?.profile_locked} placeholder="@username" className={inp} />
-              </Field>
-              <Field label="Email">
-                <input value={user?.email || ''} disabled className={inp} />
               </Field>
             </div>
           </div>
