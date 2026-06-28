@@ -21,18 +21,18 @@ def start_bot_ui(ticker: str, paper: bool, initial_capital: float, risk_pct: flo
             risk_per_trade=risk_pct / 100,
             max_position_size=max_pos
         )
-        return f"✅ **Bot started successfully for {ticker}**\nPaper: {paper} | Capital: ${initial_capital:,.0f}"
+        return f" **Bot started successfully for {ticker}**\nPaper: {paper} | Capital: ${initial_capital:,.0f}"
     except Exception as e:
-        return f"❌ Error starting bot: {str(e)}"
+        return f" Error starting bot: {str(e)}"
 
 
 def stop_bot_ui(ticker: str):
     try:
         ticker = ticker.strip().upper()
         result = bot_manager.stop_bot(ticker)
-        return f"⛔ **Bot stopped for {ticker}**\n{result}"
+        return f" **Bot stopped for {ticker}**\n{result}"
     except Exception as e:
-        return f"❌ Error stopping bot: {str(e)}"
+        return f" Error stopping bot: {str(e)}"
 
 
 def get_multi_status():
@@ -41,7 +41,7 @@ def get_multi_status():
         return "No active bots."
     lines = ["## Active Bots\n"]
     for t, s in statuses.items():
-        color = "🟢" if s.get('running', False) else "🔴"
+        color = "" if s.get('running', False) else ""
         lines.append(f"{color} **{t}** — Portfolio: **${s.get('portfolio_value',0):,.2f}** | "
                      f"DD: **{s.get('current_drawdown_pct',0):.1f}%** | Pos: **{s.get('position',0):.4f}**")
     return "\n".join(lines)
