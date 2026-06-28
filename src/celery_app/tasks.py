@@ -16,7 +16,7 @@ def ingest_and_detect_events(self):
 
     db: Session = SessionLocal()
     try:
-        logger.info("🚀 Starting ingestion + event detection task")
+        logger.info("Starting ingestion + event detection task")
 
         fetcher = NewsFetcher()
         articles = fetcher.run()
@@ -52,7 +52,7 @@ def ingest_and_detect_events(self):
                 logger.warning(f"Notification failed: {e}")
 
         logger.success(
-            f"✅ Task completed | Articles: {len(articles)} → Events: {len(all_events)} → Saved: {saved_count}"
+            f"Task completed | Articles: {len(articles)} → Events: {len(all_events)} → Saved: {saved_count}"
         )
 
         return {
@@ -64,7 +64,7 @@ def ingest_and_detect_events(self):
         }
 
     except Exception as exc:
-        logger.error(f"❌ Celery task failed: {exc}", exc_info=True)
+        logger.error(f"Celery task failed: {exc}", exc_info=True)
         raise self.retry(exc=exc, countdown=60 * (self.request.retries + 1))
 
     finally:
