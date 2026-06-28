@@ -61,7 +61,8 @@ class FinEventBot:
         self.take_profit_pct    = float(take_profit_pct)
         self.stop_loss_pct      = float(stop_loss_pct)
         self.num_trades         = max(0, int(num_trades))  # 0 = unlimited
-        self.completed_trades   = 0
+        self.opened_trades      = 0   # counts new position opens
+        self.completed_trades   = 0   # counts closed positions
 
         self.running         = False
         self._thread         = None
@@ -123,6 +124,38 @@ class FinEventBot:
                 logger.error(f"FinEventAI loop error: {e}")
             time.sleep(self.POLL_SECONDS)
 
+    def _check_tp_sl(self):
+        """Monitor all open positions and close any that have hit TP or SL."""
+        if not self.open_positions:
+            return
+        for ticker in list(self.open_positions.keys()):
+            pos = self.open_positions.get(ticker)
+            if not pos:
+                continue
+            try:
+                price  = _fetch_live_price(ticker)
+            except Exception:
+                continue
+            entry  = pos.get("entry_price", 0)
+            side   = pos.get("side", "long")
+            lev    = pos.get("leverage", self.leverage)
+            tp_pct = pos.get("take_profit_pct", self.take_profit_pct)
+            sl_pct = pos.get("stop_loss_pct", self.stop_loss_pct)
+            if entry <= 0:
+                continue
+            if side == "long":
+                pct_chg = (price - entry) / entry * 100 * lev
+                hit_tp  = pct_chg >= tp_pct
+                hit_sl  = pct_chg <= -sl_pct
+            else:
+                pct_chg = (entry - price) / entry * 100 * lev
+                hit_tp  = pct_chg >= tp_pct
+                hit_sl  = pct_chg <= -sl_pct
+            if hit_tp or hit_sl:
+                reason = "TP" if hit_tp else "SL"
+                logger.info(f"FinEventAI {reason} hit: {ticker} @ ${price:,.4f} ({pct_chg:+.1f}%)")
+                self.close_position(ticker, price)
+
     def _poll_and_trade(self):
         now = datetime.utcnow()
 
@@ -131,13 +164,15 @@ class FinEventBot:
             self._trades_today = 0
             self._last_day     = now.date()
 
-        if self._trades_today >= self.max_trades_per_day:
-            return
+        # Always run TP/SL monitor on open positions — regardless of any limit
+        self._check_tp_sl()
 
-        # Stop bot after num_trades completed (0 = unlimited)
-        if self.num_trades > 0 and self.completed_trades >= self.num_trades:
-            logger.info(f"FinEventAI: reached num_trades limit ({self.num_trades}), stopping.")
-            self.running = False
+        # Gate new entries: num_trades limit reached → no more opens, bot stays running
+        at_trade_limit = self.num_trades > 0 and self.opened_trades >= self.num_trades
+        if at_trade_limit:
+            return  # keep running for TP/SL and manual closes; just skip new events
+
+        if self._trades_today >= self.max_trades_per_day:
             return
 
         with SessionLocal() as db:
@@ -160,6 +195,9 @@ class FinEventBot:
                     continue
                 if self._trades_today >= self.max_trades_per_day:
                     break
+                # Re-check limit inside loop in case it was reached mid-batch
+                if self.num_trades > 0 and self.opened_trades >= self.num_trades:
+                    break
 
                 action = self._event_to_action(ev)
                 if action is None:
@@ -175,6 +213,8 @@ class FinEventBot:
 
                 for ticker in trade_tickers[:2]:
                     if self._trades_today >= self.max_trades_per_day:
+                        break
+                    if self.num_trades > 0 and self.opened_trades >= self.num_trades:
                         break
                     self._execute_event_trade(db, ticker, action, ev)
                     self._trades_today += 1
@@ -378,6 +418,9 @@ class FinEventBot:
                     self.open_positions.pop(ticker)
                     self.completed_trades += 1
                 elif not existing:
+                    # Gate: respect num_trades limit before opening
+                    if self.num_trades > 0 and self.opened_trades >= self.num_trades:
+                        return
                     # Open new long position (deduct margin from balance)
                     self.open_positions[ticker] = {
                         "side":            "long",
@@ -390,6 +433,7 @@ class FinEventBot:
                         "stop_loss_pct":   self.stop_loss_pct,
                     }
                     self._update_user_balance(-margin)
+                    self.opened_trades += 1
             elif action == "SELL":
                 if existing and existing.get("side") == "long":
                     # Close existing long on bearish event
@@ -400,6 +444,9 @@ class FinEventBot:
                     self.open_positions.pop(ticker)
                     self.completed_trades += 1
                 elif not existing:
+                    # Gate: respect num_trades limit before opening
+                    if self.num_trades > 0 and self.opened_trades >= self.num_trades:
+                        return
                     # Open new short position (deduct margin from balance)
                     self.open_positions[ticker] = {
                         "side":            "short",
@@ -412,6 +459,7 @@ class FinEventBot:
                         "stop_loss_pct":   self.stop_loss_pct,
                     }
                     self._update_user_balance(-margin)
+                    self.opened_trades += 1
 
             log = TradeLog(
                 user_id      = self.user_id,
@@ -578,8 +626,10 @@ class FinEventBot:
             "max_trades_per_day": self.max_trades_per_day,
             "trades_today":       self._trades_today,
             "total_trades":       len(self.trades),
+            "opened_trades":      self.opened_trades,
             "completed_trades":   self.completed_trades,
             "num_trades":         self.num_trades,
+            "trade_limit_reached": self.num_trades > 0 and self.opened_trades >= self.num_trades,
             "total_pnl":          self.total_pnl,
             "sentiment_filter":   self.sentiment_filter,
             "leverage":           self.leverage,

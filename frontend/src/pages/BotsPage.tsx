@@ -1281,7 +1281,19 @@ export default function BotsPage() {
                         ))}
                       </div>
                       <div className="flex flex-wrap items-center gap-2 text-[10px] text-[#848e9c]">
-                        <span>Trades: <span className="text-[#eaecef] font-mono">{bot.trades_today ?? 0}/{bot.max_trades_per_day ?? 10}</span></span>
+                        {/* num_trades progress — most important, shown first */}
+                        {(bot.num_trades ?? 0) > 0 ? (
+                          <span className={`font-mono font-semibold px-1.5 py-0.5 rounded ${
+                            bot.trade_limit_reached
+                              ? 'bg-[#f6465d]/10 text-[#f6465d]'
+                              : 'bg-[#f0b90b]/10 text-[#f0b90b]'
+                          }`}>
+                            {bot.trade_limit_reached ? '🔒 Limit reached' : `Opened ${bot.opened_trades ?? 0}/${bot.num_trades}`}
+                          </span>
+                        ) : (
+                          <span>Opened: <span className="text-[#eaecef] font-mono">{bot.opened_trades ?? 0}</span></span>
+                        )}
+                        <span>Today: <span className="text-[#eaecef] font-mono">{bot.trades_today ?? 0}/{bot.max_trades_per_day ?? 10}</span></span>
                         <span>Events: <span className="text-[#f0b90b] font-mono">{bot.events_generated ?? 0}</span></span>
                         <span>Impact ≥<span className="text-[#eaecef] font-mono">{bot.min_impact_score ?? 7}</span></span>
                         <span className="font-mono text-[#f0b90b]">{bot.leverage ?? 10}x</span>
