@@ -297,8 +297,11 @@ export const finEventStart = (data: {
   tickers?: string[]
   capital_per_trade?: number
   max_trades_per_day?: number
-  paper?: boolean
   sentiment_filter?: string
+  leverage?: number
+  take_profit_pct?: number
+  stop_loss_pct?: number
+  num_trades?: number
 }) => api.post('/bots/finevent/start', data)
 
 export const finEventStop = (botName = 'default') => api.post(`/bots/finevent/stop?bot_name=${encodeURIComponent(botName)}`)

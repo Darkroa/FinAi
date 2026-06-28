@@ -6007,8 +6007,11 @@ class FinEventBotStartRequest(BaseModel):
     tickers:            list  = ["BTC-USD", "ETH-USD"]
     capital_per_trade:  float = 500.0
     max_trades_per_day: int   = 10
-    paper:              bool  = True
     sentiment_filter:   str   = "both"   # "bullish" | "bearish" | "both"
+    leverage:           float = 10.0
+    take_profit_pct:    float = 50.0
+    stop_loss_pct:      float = 30.0
+    num_trades:         int   = 0        # 0 = unlimited
 
 
 @router.post("/bots/finevent/start")
@@ -6035,7 +6038,7 @@ async def start_fin_event_bot(
 
     # Balance check — must have at least capital_per_trade available
     required = float(body.capital_per_trade or 500.0)
-    if not body.paper and (user.balance_usdt or 0) < required:
+    if (user.balance_usdt or 0) < required:
         raise HTTPException(
             status_code=400,
             detail=f"Insufficient balance. FinEventAI needs at least ${required:,.2f} USDT (capital per trade). Your balance: ${(user.balance_usdt or 0):,.2f} USDT."
@@ -6067,8 +6070,12 @@ async def start_fin_event_bot(
         tickers            = body.tickers,
         capital_per_trade  = body.capital_per_trade,
         max_trades_per_day = body.max_trades_per_day,
-        paper              = body.paper,
+        paper              = False,
         sentiment_filter   = body.sentiment_filter,
+        leverage           = body.leverage,
+        take_profit_pct    = body.take_profit_pct,
+        stop_loss_pct      = body.stop_loss_pct,
+        num_trades         = body.num_trades,
     )
     return {"status": "started", "message": result, "bot_name": body.bot_name}
 

@@ -42,8 +42,12 @@ class FinEventBot:
         tickers: List[str] = None,
         capital_per_trade: float = 500.0,
         max_trades_per_day: int = 10,
-        paper: bool = True,
+        paper: bool = False,
         sentiment_filter: str = "both",  # "bullish" | "bearish" | "both"
+        leverage: float = 10.0,
+        take_profit_pct: float = 50.0,
+        stop_loss_pct: float = 30.0,
+        num_trades: int = 0,             # 0 = unlimited
     ):
         self.user_id            = user_id
         self.user_email         = user_email
@@ -51,8 +55,13 @@ class FinEventBot:
         self.tickers            = [t.upper() for t in (tickers or ["BTC-USD", "ETH-USD"])]
         self.capital_per_trade  = capital_per_trade
         self.max_trades_per_day = max_trades_per_day
-        self.paper              = paper
+        self.paper              = False   # always live — no paper trading
         self.sentiment_filter   = sentiment_filter.lower()
+        self.leverage           = max(1.0, float(leverage))
+        self.take_profit_pct    = float(take_profit_pct)
+        self.stop_loss_pct      = float(stop_loss_pct)
+        self.num_trades         = max(0, int(num_trades))  # 0 = unlimited
+        self.completed_trades   = 0
 
         self.running         = False
         self._thread         = None
@@ -64,7 +73,7 @@ class FinEventBot:
         self.total_pnl       = 0.0
         self.started_at      = None
         self.events_generated = 0
-        # key: ticker → {side: "long"|"short", entry_price, qty, margin, opened_at}
+        # key: ticker → {side: "long"|"short", entry_price, qty, margin, opened_at, leverage, take_profit_pct, stop_loss_pct}
         self.open_positions: Dict[str, dict] = {}
 
     # ── Control ──────────────────────────────────────────────────────────────
@@ -123,6 +132,12 @@ class FinEventBot:
             self._last_day     = now.date()
 
         if self._trades_today >= self.max_trades_per_day:
+            return
+
+        # Stop bot after num_trades completed (0 = unlimited)
+        if self.num_trades > 0 and self.completed_trades >= self.num_trades:
+            logger.info(f"FinEventAI: reached num_trades limit ({self.num_trades}), stopping.")
+            self.running = False
             return
 
         with SessionLocal() as db:
@@ -338,8 +353,11 @@ class FinEventBot:
     def _execute_event_trade(self, db: Session, ticker: str, action: str, event):
         """Log a trade driven by a financial event."""
         try:
-            price = _fetch_live_price(ticker)
-            qty   = round(self.capital_per_trade / price, 8) if price > 0 else 0.0
+            price  = _fetch_live_price(ticker)
+            # Leveraged position sizing: capital_per_trade is margin, notional is margin * leverage
+            margin = self.capital_per_trade
+            notional = margin * self.leverage
+            qty    = round(notional / price, 8) if price > 0 else 0.0
 
             reason = (
                 f"FinEventAI | {event.event_type} | {event.title[:60]} | "
@@ -353,43 +371,47 @@ class FinEventBot:
             if action == "BUY":
                 if existing and existing.get("side") == "short":
                     # Close existing short on bullish event
-                    pnl_value = round((existing["entry_price"] - price) * existing["qty"], 4)
+                    pnl_value = round((existing["entry_price"] - price) * existing["qty"] * self.leverage, 4)
                     self.total_pnl = round(self.total_pnl + pnl_value, 4)
-                    margin = existing.get("margin", self.capital_per_trade)
-                    if not self.paper:
-                        self._update_user_balance(max(0.0, margin + pnl_value))
+                    pos_margin = existing.get("margin", margin)
+                    self._update_user_balance(max(0.0, pos_margin + pnl_value))
                     self.open_positions.pop(ticker)
+                    self.completed_trades += 1
                 elif not existing:
-                    # Open new long position
+                    # Open new long position (deduct margin from balance)
                     self.open_positions[ticker] = {
-                        "side":        "long",
-                        "entry_price": price,
-                        "qty":         qty,
-                        "margin":      self.capital_per_trade,
-                        "opened_at":   datetime.utcnow().isoformat(),
+                        "side":            "long",
+                        "entry_price":     price,
+                        "qty":             qty,
+                        "margin":          margin,
+                        "opened_at":       datetime.utcnow().isoformat(),
+                        "leverage":        self.leverage,
+                        "take_profit_pct": self.take_profit_pct,
+                        "stop_loss_pct":   self.stop_loss_pct,
                     }
-                    if not self.paper:
-                        self._update_user_balance(-self.capital_per_trade)
+                    self._update_user_balance(-margin)
             elif action == "SELL":
                 if existing and existing.get("side") == "long":
                     # Close existing long on bearish event
-                    pnl_value = round((price - existing["entry_price"]) * existing["qty"], 4)
+                    pnl_value = round((price - existing["entry_price"]) * existing["qty"] * self.leverage, 4)
                     self.total_pnl = round(self.total_pnl + pnl_value, 4)
-                    margin = existing.get("margin", self.capital_per_trade)
-                    if not self.paper:
-                        self._update_user_balance(max(0.0, margin + pnl_value))
+                    pos_margin = existing.get("margin", margin)
+                    self._update_user_balance(max(0.0, pos_margin + pnl_value))
                     self.open_positions.pop(ticker)
+                    self.completed_trades += 1
                 elif not existing:
-                    # Open new short position
+                    # Open new short position (deduct margin from balance)
                     self.open_positions[ticker] = {
-                        "side":        "short",
-                        "entry_price": price,
-                        "qty":         qty,
-                        "margin":      self.capital_per_trade,
-                        "opened_at":   datetime.utcnow().isoformat(),
+                        "side":            "short",
+                        "entry_price":     price,
+                        "qty":             qty,
+                        "margin":          margin,
+                        "opened_at":       datetime.utcnow().isoformat(),
+                        "leverage":        self.leverage,
+                        "take_profit_pct": self.take_profit_pct,
+                        "stop_loss_pct":   self.stop_loss_pct,
                     }
-                    if not self.paper:
-                        self._update_user_balance(-self.capital_per_trade)
+                    self._update_user_balance(-margin)
 
             log = TradeLog(
                 user_id      = self.user_id,
@@ -490,16 +512,17 @@ class FinEventBot:
         side   = pos.get("side", "long")
         qty    = pos.get("qty", 0)
         margin = pos.get("margin", self.capital_per_trade)
+        lev    = pos.get("leverage", self.leverage)
         if side == "long":
-            pnl = round((price - pos["entry_price"]) * qty, 4)
+            pnl = round((price - pos["entry_price"]) * qty * lev, 4)
         else:
-            pnl = round((pos["entry_price"] - price) * qty, 4)
+            pnl = round((pos["entry_price"] - price) * qty * lev, 4)
         self.total_pnl = round(self.total_pnl + pnl, 4)
+        self.completed_trades += 1
         self.open_positions.pop(ticker)
 
-        # Credit margin + PnL back to user balance (live only)
-        if not self.paper:
-            self._update_user_balance(max(0.0, margin + pnl))
+        # Credit margin + PnL back to user balance (always live)
+        self._update_user_balance(max(0.0, margin + pnl))
 
         action_label = "SELL" if side == "long" else "BUY"
         with SessionLocal() as db:
@@ -535,28 +558,33 @@ class FinEventBot:
             entry = pos.get("entry_price", 0)
             qty   = pos.get("qty", 0)
             side  = pos.get("side", "long")
+            lev   = pos.get("leverage", self.leverage)
             try:
                 current = _fetch_live_price(ticker)
             except Exception:
                 current = entry
             if side == "long":
-                upnl = round((current - entry) * qty, 4)
+                upnl = round((current - entry) * qty * lev, 4)
             else:
-                upnl = round((entry - current) * qty, 4)
+                upnl = round((entry - current) * qty * lev, 4)
             enriched[ticker] = {**pos, "current_price": current, "unrealized_pnl": upnl}
 
         return {
             "running":            self.running,
             "open_positions":     enriched,
-            "paper":              self.paper,
             "min_impact_score":   self.min_impact_score,
             "tickers":            self.tickers,
             "capital_per_trade":  self.capital_per_trade,
             "max_trades_per_day": self.max_trades_per_day,
             "trades_today":       self._trades_today,
             "total_trades":       len(self.trades),
+            "completed_trades":   self.completed_trades,
+            "num_trades":         self.num_trades,
             "total_pnl":          self.total_pnl,
             "sentiment_filter":   self.sentiment_filter,
+            "leverage":           self.leverage,
+            "take_profit_pct":    self.take_profit_pct,
+            "stop_loss_pct":      self.stop_loss_pct,
             "started_at":         self.started_at.isoformat() if self.started_at else None,
             "events_generated":   self.events_generated,
             "recent_trades": [
@@ -567,7 +595,6 @@ class FinEventBot:
                     "qty":    t["qty"],
                     "reason": t["reason"],
                     "time":   t["time"].strftime("%H:%M:%S") if isinstance(t["time"], datetime) else str(t["time"]),
-                    "paper":  t["paper"],
                 }
                 for t in self.trades[-20:]
             ],
