@@ -2992,6 +2992,36 @@ async def admin_health_check(db: Session = Depends(get_db)):
     except Exception as e:
         checks["alpaca"] = {"status": "error", "error": str(e)[:120]}
 
+    # ── SMTP ──────────────────────────────────────────────────────────────────
+    try:
+        import smtplib as _smtp, time as _st
+        _smtp_host = os.getenv("SMTP_HOST", "smtp.gmail.com")
+        _smtp_port = int(os.getenv("SMTP_PORT", "587"))
+        _smtp_user = os.getenv("SMTP_USER", "").strip()
+        _smtp_pass = os.getenv("SMTP_PASSWORD", "").strip()
+        _configured = bool(_smtp_user and _smtp_pass)
+        _t0 = _st.time()
+        with _smtp.SMTP(_smtp_host, _smtp_port, timeout=5) as _srv:
+            _srv.ehlo()
+            _srv.starttls()
+            if _configured:
+                _srv.login(_smtp_user, _smtp_pass)
+        _lat = round((_st.time() - _t0) * 1000)
+        checks["smtp"] = {
+            "status":     "healthy" if _configured else "degraded",
+            "host":       f"{_smtp_host}:{_smtp_port}",
+            "configured": _configured,
+            "latency_ms": _lat,
+        }
+        if not _configured:
+            checks["smtp"]["note"] = "SMTP_USER / SMTP_PASSWORD not set — email disabled"
+    except Exception as e:
+        checks["smtp"] = {
+            "status": "error",
+            "host":   f"{os.getenv('SMTP_HOST','smtp.gmail.com')}:{os.getenv('SMTP_PORT','587')}",
+            "error":  str(e)[:120],
+        }
+
     overall = "healthy" if all(c["status"] == "healthy" for c in checks.values()) else "degraded"
     return {"overall": overall, "checks": checks, "timestamp": datetime.utcnow().isoformat()}
 
