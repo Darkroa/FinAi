@@ -44,10 +44,8 @@ function ApiConsoleTab({ apiMethod, setApiMethod, apiUrl, setApiUrl, apiBody, se
   apiLoading: boolean; apiResponse: any; apiTime: number | null
   onSend: () => void
 }) {
-  const [view, setView] = useState<'request' | 'console'>('request')
   const [consoleLogs, setConsoleLogs] = useState<string[]>([])
   const [consoleLoading, setConsoleLoading] = useState(false)
-  const consoleRef = useState<HTMLPreElement | null>(null)
 
   const fetchLogs = async () => {
     setConsoleLoading(true)
@@ -62,6 +60,8 @@ function ApiConsoleTab({ apiMethod, setApiMethod, apiUrl, setApiUrl, apiBody, se
     setConsoleLoading(false)
   }
 
+  useEffect(() => { fetchLogs() }, [])
+
   const methodColor: Record<string, string> = { GET: '#0ecb81', POST: '#f0b90b', PUT: '#a78bfa', DELETE: '#f6465d', PATCH: '#22d3ee' }
 
   const lineColor = (line: string) => {
@@ -74,135 +74,118 @@ function ApiConsoleTab({ apiMethod, setApiMethod, apiUrl, setApiUrl, apiBody, se
 
   return (
     <div className="space-y-4">
-      {/* Sub-tab bar */}
-      <div className="flex items-center gap-1 bg-[#161a1e] border border-[#2b3139] rounded-xl p-1 w-fit">
-        <button
-          onClick={() => setView('request')}
-          className={`flex items-center gap-1.5 px-4 py-1.5 rounded-lg text-xs font-semibold transition-all ${view === 'request' ? 'bg-[#1e2329] text-[#f0b90b]' : 'text-[#848e9c] hover:text-[#eaecef]'}`}
-        >
-          <Terminal size={11} /> API Request
-        </button>
-        <button
-          onClick={() => { setView('console'); if (consoleLogs.length === 0) fetchLogs() }}
-          className={`flex items-center gap-1.5 px-4 py-1.5 rounded-lg text-xs font-semibold transition-all ${view === 'console' ? 'bg-[#1e2329] text-[#0ecb81]' : 'text-[#848e9c] hover:text-[#eaecef]'}`}
-        >
-          <Monitor size={11} /> Server Console
-        </button>
+      {/* Server Console — top */}
+      <div className="bg-[#0b0e11] border border-[#2b3139] rounded-2xl overflow-hidden">
+        <div className="flex items-center justify-between px-4 py-2.5 border-b border-[#2b3139] bg-[#161a1e]">
+          <div className="flex items-center gap-2">
+            <Monitor size={13} className="text-[#0ecb81]" />
+            <span className="text-xs font-semibold text-[#eaecef]">Server Console</span>
+            <span className="text-[10px] text-[#848e9c]">last {consoleLogs.length} lines</span>
+          </div>
+          <button
+            onClick={fetchLogs}
+            className="flex items-center gap-1.5 text-[10px] text-[#848e9c] hover:text-[#eaecef] border border-[#2b3139] px-2.5 py-1 rounded-lg transition"
+          >
+            <RefreshCw size={10} className={consoleLoading ? 'animate-spin' : ''} /> Refresh
+          </button>
+        </div>
+        <div className="h-64 overflow-y-auto p-3 font-mono text-[11px] leading-relaxed space-y-0.5">
+          {consoleLoading ? (
+            <div className="flex items-center justify-center h-full text-[#848e9c] animate-pulse">Loading logs…</div>
+          ) : consoleLogs.length === 0 ? (
+            <div className="flex items-center justify-center h-full text-[#848e9c]">No log lines captured yet</div>
+          ) : (
+            consoleLogs.map((line, i) => (
+              <div key={i} style={{ color: lineColor(line) }} className="whitespace-pre-wrap break-all">{line}</div>
+            ))
+          )}
+        </div>
       </div>
 
-      {view === 'request' && (
-        <>
-          {/* Response — shown ABOVE the request form when available */}
-          {apiResponse && (
-            <div className="bg-[#0b0e11] border border-[#2b3139] rounded-2xl overflow-hidden">
-              <div className="flex items-center justify-between px-4 py-2.5 border-b border-[#2b3139] bg-[#161a1e]">
-                <div className="flex items-center gap-2">
-                  <div className={`w-2 h-2 rounded-full ${apiResponse.ok ? 'bg-[#0ecb81]' : 'bg-[#f6465d]'}`} />
-                  <span className="text-xs font-bold font-mono" style={{ color: apiResponse.ok ? '#0ecb81' : '#f6465d' }}>
-                    {apiResponse.status} {apiResponse.ok ? 'OK' : 'ERROR'}
-                  </span>
-                  <span className="text-[10px] text-[#848e9c]">Response</span>
-                </div>
-                {apiTime != null && <span className="text-[10px] text-[#848e9c] font-mono">{apiTime}ms</span>}
-              </div>
-              <pre className="text-[11px] font-mono text-[#eaecef] overflow-auto max-h-72 p-4 whitespace-pre-wrap leading-relaxed">
-                {typeof apiResponse.body === 'string' ? apiResponse.body : JSON.stringify(apiResponse.body, null, 2)}
-              </pre>
-            </div>
-          )}
-
-          {/* Request form */}
-          <div className="bg-[#161a1e] border border-[#2b3139] rounded-2xl p-4 space-y-3">
-            <div className="flex flex-col gap-2">
-              <div className="flex gap-2">
-                <select
-                  value={apiMethod}
-                  onChange={e => setApiMethod(e.target.value)}
-                  className="shrink-0 bg-[#0b0e11] border border-[#2b3139] rounded-xl px-3 py-2 text-sm font-mono font-bold focus:outline-none focus:border-[#f0b90b] transition"
-                  style={{ color: methodColor[apiMethod] || '#eaecef' }}
-                >
-                  {['GET', 'POST', 'PUT', 'PATCH', 'DELETE'].map(m => <option key={m} value={m}>{m}</option>)}
-                </select>
-                <input
-                  value={apiUrl}
-                  onChange={e => setApiUrl(e.target.value)}
-                  onKeyDown={e => e.key === 'Enter' && onSend()}
-                  placeholder="/api/admin/users"
-                  className="min-w-0 flex-1 bg-[#0b0e11] border border-[#2b3139] rounded-xl px-3 py-2 text-sm font-mono text-[#eaecef] placeholder-[#4a5568] focus:outline-none focus:border-[#f0b90b] transition"
-                />
-              </div>
-              <button onClick={onSend} disabled={apiLoading}
-                className="w-full flex items-center justify-center gap-2 bg-[#f0b90b] hover:bg-[#d4a30a] disabled:opacity-50 text-black font-semibold px-4 py-2.5 rounded-xl text-sm transition">
-                {apiLoading ? <RefreshCw size={13} className="animate-spin" /> : <Play size={13} />}
-                {apiLoading ? 'Sending…' : 'Send Request'}
-              </button>
-            </div>
-
-            <div>
-              <p className="text-[10px] text-[#848e9c] mb-1.5 font-medium">Quick Endpoints</p>
-              <div className="flex flex-wrap gap-1.5">
-                {[
-                  { m: 'GET', u: '/api/admin/users' },
-                  { m: 'GET', u: '/api/admin/transactions' },
-                  { m: 'GET', u: '/api/admin/health' },
-                  { m: 'GET', u: '/api/admin/server-metrics' },
-                  { m: 'GET', u: '/api/admin/server-logs' },
-                  { m: 'GET', u: '/api/admin/subscriptions' },
-                  { m: 'GET', u: '/api/admin/api-key-users' },
-                  { m: 'GET', u: '/api/admin/wallet-config' },
-                  { m: 'GET', u: '/api/admin/referrals' },
-                  { m: 'GET', u: '/api/users/me' },
-                ].map(ep => (
-                  <button key={ep.u} onClick={() => { setApiMethod(ep.m); setApiUrl(ep.u) }}
-                    className="text-[10px] font-mono px-2 py-1 rounded-lg bg-[#1e2329] border border-[#2b3139] hover:border-[#f0b90b]/40 text-[#848e9c] hover:text-[#eaecef] transition">
-                    <span style={{ color: methodColor[ep.m] }}>{ep.m}</span> {ep.u.replace('/api', '')}
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            {['POST', 'PUT', 'PATCH'].includes(apiMethod) && (
-              <div>
-                <p className="text-[10px] text-[#848e9c] mb-1.5 font-medium">Request Body (JSON)</p>
-                <textarea
-                  value={apiBody}
-                  onChange={e => setApiBody(e.target.value)}
-                  rows={4}
-                  placeholder='{"key": "value"}'
-                  className="w-full bg-[#0b0e11] border border-[#2b3139] rounded-xl px-3 py-2 text-sm font-mono text-[#eaecef] placeholder-[#4a5568] focus:outline-none focus:border-[#f0b90b] transition resize-none"
-                />
-              </div>
-            )}
+      {/* API Request form — below */}
+      <div className="bg-[#161a1e] border border-[#2b3139] rounded-2xl p-4 space-y-3">
+        <div className="flex items-center gap-2 mb-1">
+          <Terminal size={13} className="text-[#f0b90b]" />
+          <span className="text-xs font-semibold text-[#eaecef]">API Request</span>
+        </div>
+        <div className="flex flex-col gap-2">
+          <div className="flex gap-2">
+            <select
+              value={apiMethod}
+              onChange={e => setApiMethod(e.target.value)}
+              className="shrink-0 bg-[#0b0e11] border border-[#2b3139] rounded-xl px-3 py-2 text-sm font-mono font-bold focus:outline-none focus:border-[#f0b90b] transition"
+              style={{ color: methodColor[apiMethod] || '#eaecef' }}
+            >
+              {['GET', 'POST', 'PUT', 'PATCH', 'DELETE'].map(m => <option key={m} value={m}>{m}</option>)}
+            </select>
+            <input
+              value={apiUrl}
+              onChange={e => setApiUrl(e.target.value)}
+              onKeyDown={e => e.key === 'Enter' && onSend()}
+              placeholder="/api/admin/users"
+              className="min-w-0 flex-1 bg-[#0b0e11] border border-[#2b3139] rounded-xl px-3 py-2 text-sm font-mono text-[#eaecef] placeholder-[#4a5568] focus:outline-none focus:border-[#f0b90b] transition"
+            />
           </div>
-        </>
-      )}
+          <button onClick={onSend} disabled={apiLoading}
+            className="w-full flex items-center justify-center gap-2 bg-[#f0b90b] hover:bg-[#d4a30a] disabled:opacity-50 text-black font-semibold px-4 py-2.5 rounded-xl text-sm transition">
+            {apiLoading ? <RefreshCw size={13} className="animate-spin" /> : <Play size={13} />}
+            {apiLoading ? 'Sending…' : 'Send Request'}
+          </button>
+        </div>
 
-      {view === 'console' && (
+        <div>
+          <p className="text-[10px] text-[#848e9c] mb-1.5 font-medium">Quick Endpoints</p>
+          <div className="flex flex-wrap gap-1.5">
+            {[
+              { m: 'GET', u: '/api/admin/users' },
+              { m: 'GET', u: '/api/admin/transactions' },
+              { m: 'GET', u: '/api/admin/health' },
+              { m: 'GET', u: '/api/admin/server-metrics' },
+              { m: 'GET', u: '/api/admin/server-logs' },
+              { m: 'GET', u: '/api/admin/subscriptions' },
+              { m: 'GET', u: '/api/admin/api-key-users' },
+              { m: 'GET', u: '/api/admin/wallet-config' },
+              { m: 'GET', u: '/api/admin/referrals' },
+              { m: 'GET', u: '/api/users/me' },
+            ].map(ep => (
+              <button key={ep.u} onClick={() => { setApiMethod(ep.m); setApiUrl(ep.u) }}
+                className="text-[10px] font-mono px-2 py-1 rounded-lg bg-[#1e2329] border border-[#2b3139] hover:border-[#f0b90b]/40 text-[#848e9c] hover:text-[#eaecef] transition">
+                <span style={{ color: methodColor[ep.m] }}>{ep.m}</span> {ep.u.replace('/api', '')}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {['POST', 'PUT', 'PATCH'].includes(apiMethod) && (
+          <div>
+            <p className="text-[10px] text-[#848e9c] mb-1.5 font-medium">Request Body (JSON)</p>
+            <textarea
+              value={apiBody}
+              onChange={e => setApiBody(e.target.value)}
+              rows={4}
+              placeholder='{"key": "value"}'
+              className="w-full bg-[#0b0e11] border border-[#2b3139] rounded-xl px-3 py-2 text-sm font-mono text-[#eaecef] placeholder-[#4a5568] focus:outline-none focus:border-[#f0b90b] transition resize-none"
+            />
+          </div>
+        )}
+      </div>
+
+      {/* Response output — below request */}
+      {apiResponse && (
         <div className="bg-[#0b0e11] border border-[#2b3139] rounded-2xl overflow-hidden">
           <div className="flex items-center justify-between px-4 py-2.5 border-b border-[#2b3139] bg-[#161a1e]">
             <div className="flex items-center gap-2">
-              <Monitor size={13} className="text-[#0ecb81]" />
-              <span className="text-xs font-semibold text-[#eaecef]">Server Console</span>
-              <span className="text-[10px] text-[#848e9c]">last {consoleLogs.length} lines</span>
+              <div className={`w-2 h-2 rounded-full ${apiResponse.ok ? 'bg-[#0ecb81]' : 'bg-[#f6465d]'}`} />
+              <span className="text-xs font-bold font-mono" style={{ color: apiResponse.ok ? '#0ecb81' : '#f6465d' }}>
+                {apiResponse.status} {apiResponse.ok ? 'OK' : 'ERROR'}
+              </span>
+              <span className="text-[10px] text-[#848e9c]">Response</span>
             </div>
-            <button
-              onClick={fetchLogs}
-              className="flex items-center gap-1.5 text-[10px] text-[#848e9c] hover:text-[#eaecef] border border-[#2b3139] px-2.5 py-1 rounded-lg transition"
-            >
-              <RefreshCw size={10} className={consoleLoading ? 'animate-spin' : ''} /> Refresh
-            </button>
+            {apiTime != null && <span className="text-[10px] text-[#848e9c] font-mono">{apiTime}ms</span>}
           </div>
-          <div className="h-[60vh] overflow-y-auto p-3 font-mono text-[11px] leading-relaxed space-y-0.5">
-            {consoleLoading ? (
-              <div className="flex items-center justify-center h-full text-[#848e9c] animate-pulse">Loading logs…</div>
-            ) : consoleLogs.length === 0 ? (
-              <div className="flex items-center justify-center h-full text-[#848e9c]">No log lines captured yet</div>
-            ) : (
-              consoleLogs.map((line, i) => (
-                <div key={i} style={{ color: lineColor(line) }} className="whitespace-pre-wrap break-all">{line}</div>
-              ))
-            )}
-          </div>
+          <pre className="text-[11px] font-mono text-[#eaecef] overflow-auto max-h-72 p-4 whitespace-pre-wrap leading-relaxed">
+            {typeof apiResponse.body === 'string' ? apiResponse.body : JSON.stringify(apiResponse.body, null, 2)}
+          </pre>
         </div>
       )}
     </div>
@@ -215,36 +198,24 @@ function VisitorsActivityTab({ activityLogs, activityLoading, setActivityLoading
   setActivityLoading: (v: boolean) => void
   setActivityLogs: (v: any[]) => void
 }) {
-  const [subTab, setSubTab] = useState<'visitors' | 'activity'>('visitors')
-
   return (
-    <div className="space-y-4">
-      {/* Sub-tab switcher */}
-      <div className="flex items-center gap-1 bg-[#161a1e] border border-[#2b3139] rounded-xl p-1 w-fit">
-        <button
-          onClick={() => setSubTab('visitors')}
-          className={`flex items-center gap-1.5 px-4 py-1.5 rounded-lg text-xs font-semibold transition-all ${subTab === 'visitors' ? 'bg-[#1e2329] text-[#22d3ee]' : 'text-[#848e9c] hover:text-[#eaecef]'}`}
-        >
-          <Eye size={12} /> Live Visitors
-        </button>
-        <button
-          onClick={() => setSubTab('activity')}
-          className={`flex items-center gap-1.5 px-4 py-1.5 rounded-lg text-xs font-semibold transition-all ${subTab === 'activity' ? 'bg-[#1e2329] text-[#f0b90b]' : 'text-[#848e9c] hover:text-[#eaecef]'}`}
-        >
-          <Clock size={12} /> Activity Log
-        </button>
+    <div className="space-y-6">
+      {/* Live Visitors — top */}
+      <div className="space-y-3">
+        <div className="flex items-center gap-2">
+          <Eye size={14} className="text-[#22d3ee]" />
+          <h2 className="text-sm font-semibold text-[#eaecef]">Live Visitors</h2>
+          <span className="text-[10px] text-[#848e9c]">Real-time session data · refreshes every 30s</span>
+        </div>
+        <AdminLiveVisitors />
       </div>
 
-      {subTab === 'visitors' && (
-        <div className="space-y-3">
-          <p className="text-xs text-[#848e9c]">Real-time session data · refreshes every 30s</p>
-          <AdminLiveVisitors />
-        </div>
-      )}
+      {/* Divider */}
+      <div className="border-t border-[#2b3139]" />
 
-      {subTab === 'activity' && (
-        <div className="space-y-4">
-          <div className="bg-[#161a1e] border border-[#2b3139] rounded-xl p-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+      {/* Activity Log — below */}
+      <div className="space-y-4">
+        <div className="bg-[#161a1e] border border-[#2b3139] rounded-xl p-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
             <div>
               <h2 className="text-sm font-semibold text-[#eaecef] flex items-center gap-2">
                 <Clock size={14} className="text-[#f0b90b]" /> User Activity Log
@@ -350,7 +321,6 @@ function VisitorsActivityTab({ activityLogs, activityLoading, setActivityLoading
             )}
           </div>
         </div>
-      )}
     </div>
   )
 }
