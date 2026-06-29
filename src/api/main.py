@@ -16,10 +16,17 @@ from loguru import logger
 # ── In-memory circular log buffer (last 500 lines) ──────────────────────────
 LOG_BUFFER: deque = deque(maxlen=500)
 
+
 def _log_sink(message: str) -> None:
     LOG_BUFFER.append(message.rstrip())
 
-logger.add(_log_sink, format="{time:HH:mm:ss} | {level:<8} | {message}", level="DEBUG", colorize=False)
+
+logger.add(
+    _log_sink,
+    format="{time:HH:mm:ss} | {level:<8} | {message}",
+    level="DEBUG",
+    colorize=False,
+)
 # ────────────────────────────────────────────────────────────────────────────
 
 from src.api.routes import router
@@ -35,7 +42,7 @@ app = FastAPI(
     version="1.0.0",
     description="AI-Powered Financial News Ingestion & Automated Trading Platform",
     docs_url="/docs",
-    redoc_url="/redoc"
+    redoc_url="/redoc",
 )
 
 # ===================== Middleware =====================
@@ -51,6 +58,7 @@ app.add_middleware(APIRateLimitMiddleware)
 # ===================== Prometheus Metrics =====================
 try:
     from prometheus_fastapi_instrumentator import Instrumentator
+
     Instrumentator(
         should_group_status_codes=True,
         should_ignore_untemplated=True,
@@ -59,7 +67,9 @@ try:
         excluded_handlers=["/metrics", "/docs", "/redoc", "/openapi.json"],
         inprogress_name="finai_inprogress",
         inprogress_labels=True,
-    ).instrument(app).expose(app, endpoint="/metrics", include_in_schema=True, tags=["monitoring"])
+    ).instrument(app).expose(
+        app, endpoint="/metrics", include_in_schema=True, tags=["monitoring"]
+    )
     logger.info("Prometheus metrics exposed at /metrics")
 except Exception as _prom_err:
     logger.warning(f"Prometheus instrumentation skipped: {_prom_err}")
@@ -68,10 +78,12 @@ except Exception as _prom_err:
 # Include API routes
 app.include_router(router, prefix="/api")
 
+
 # ===================== Monitoring Proxies =====================
 @app.api_route("/prom/{path:path}", methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"])
 async def proxy_prometheus(path: str, request: Request):
     from src.utils.config import config
+
     base = config.PROMETHEUS_URL.rstrip("/")
     async with httpx.AsyncClient(timeout=10.0) as client:
         try:
@@ -80,8 +92,11 @@ async def proxy_prometheus(path: str, request: Request):
                 url=f"{base}/prom/{path}",
                 params=request.query_params,
                 content=await request.body(),
-                headers={k: v for k, v in request.headers.items()
-                         if k.lower() not in ("host", "content-length", "transfer-encoding")},
+                headers={
+                    k: v
+                    for k, v in request.headers.items()
+                    if k.lower() not in ("host", "content-length", "transfer-encoding")
+                },
                 follow_redirects=True,
             )
             return Response(
@@ -90,11 +105,17 @@ async def proxy_prometheus(path: str, request: Request):
                 media_type=resp.headers.get("content-type", "text/plain"),
             )
         except Exception:
-            return Response(content=b"<h2>Prometheus is starting up...</h2>", status_code=503, media_type="text/html")
+            return Response(
+                content=b"<h2>Prometheus is starting up...</h2>",
+                status_code=503,
+                media_type="text/html",
+            )
+
 
 @app.api_route("/graf/{path:path}", methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"])
 async def proxy_grafana(path: str, request: Request):
     from src.utils.config import config
+
     base = config.GRAFANA_URL.rstrip("/")
     async with httpx.AsyncClient(timeout=10.0) as client:
         try:
@@ -103,8 +124,11 @@ async def proxy_grafana(path: str, request: Request):
                 url=f"{base}/{path}",
                 params=request.query_params,
                 content=await request.body(),
-                headers={k: v for k, v in request.headers.items()
-                         if k.lower() not in ("host", "content-length", "transfer-encoding")},
+                headers={
+                    k: v
+                    for k, v in request.headers.items()
+                    if k.lower() not in ("host", "content-length", "transfer-encoding")
+                },
                 follow_redirects=True,
             )
             return Response(
@@ -113,7 +137,12 @@ async def proxy_grafana(path: str, request: Request):
                 media_type=resp.headers.get("content-type", "text/plain"),
             )
         except Exception:
-            return Response(content=b"<h2>Grafana is starting up...</h2>", status_code=503, media_type="text/html")
+            return Response(
+                content=b"<h2>Grafana is starting up...</h2>",
+                status_code=503,
+                media_type="text/html",
+            )
+
 
 # ===================== Static Frontend Serving =====================
 FRONTEND_DIST = Path(__file__).parent.parent.parent / "frontend" / "dist"
@@ -124,7 +153,11 @@ app.mount("/uploads", StaticFiles(directory=str(UPLOADS_DIR)), name="uploads")
 
 # ── Server admin panel served at /server ──────────────────────────
 if SERVER_DIST.exists():
-    app.mount("/server/assets", StaticFiles(directory=str(SERVER_DIST / "assets")), name="server_assets")
+    app.mount(
+        "/server/assets",
+        StaticFiles(directory=str(SERVER_DIST / "assets")),
+        name="server_assets",
+    )
 
     @app.get("/server", include_in_schema=False)
     async def serve_server_root():
@@ -136,6 +169,7 @@ if SERVER_DIST.exists():
         if candidate.exists() and candidate.is_file():
             return FileResponse(str(candidate))
         return FileResponse(str(SERVER_DIST / "index.html"))
+
 
 # ── Finapp (Expo web static export) served at /app ────────────────
 if FINAPP_DIST.exists():
@@ -152,9 +186,12 @@ if FINAPP_DIST.exists():
             return FileResponse(str(candidate))
         return FileResponse(str(FINAPP_DIST / "index.html"))
 
+
 # ── React dashboard served at / ───────────────────────────────────
 if FRONTEND_DIST.exists():
-    app.mount("/assets", StaticFiles(directory=str(FRONTEND_DIST / "assets")), name="assets")
+    app.mount(
+        "/assets", StaticFiles(directory=str(FRONTEND_DIST / "assets")), name="assets"
+    )
 
     @app.get("/")
     async def serve_root():
@@ -166,6 +203,7 @@ if FRONTEND_DIST.exists():
         if robots.exists():
             return FileResponse(str(robots), media_type="text/plain")
         from fastapi.responses import PlainTextResponse
+
         return PlainTextResponse("User-agent: *\nAllow: /\nDisallow: /api/\n")
 
     @app.get("/favicon.svg", include_in_schema=False)
@@ -174,19 +212,37 @@ if FRONTEND_DIST.exists():
         if favicon.exists():
             return FileResponse(str(favicon), media_type="image/svg+xml")
         from fastapi import HTTPException
+
         raise HTTPException(status_code=404)
 
     @app.get("/{full_path:path}")
     async def serve_spa(full_path: str):
-        if full_path.startswith(("api/", "docs", "redoc", "openapi.json", "metrics", "prom/", "prom", "graf/", "graf", "assets/", "app/")):
+        if full_path.startswith(
+            (
+                "api/",
+                "docs",
+                "redoc",
+                "openapi.json",
+                "metrics",
+                "prom/",
+                "prom",
+                "graf/",
+                "graf",
+                "assets/",
+                "app/",
+            )
+        ):
             from fastapi import HTTPException
+
             raise HTTPException(status_code=404)
         index = FRONTEND_DIST / "index.html"
         if index.exists():
             return FileResponse(str(index))
         from fastapi import HTTPException
+
         raise HTTPException(status_code=404)
 else:
+
     @app.get("/")
     async def root():
         return {
@@ -196,16 +252,16 @@ else:
             "docs": "/docs",
             "metrics": "/metrics",
             "api_prefix": "/api",
-            "mobile_app": "/app"
+            "mobile_app": "/app",
         }
 
 
 # ===================== Startup & Shutdown Events =====================
 @app.on_event("startup")
 async def startup_event():
-
     # ── Log which database is active ─────────────────────────────────────────
     from src.database.session import SUPABASE_DB_URL, DATABASE_URL
+
     if SUPABASE_DB_URL:
         logger.success("🗄️  Database → Supabase PostgreSQL (SUPABASE_DB_URL)")
     else:
@@ -214,6 +270,7 @@ async def startup_event():
     # ── DB schema + migrations (create_all + incremental ALTER TABLE) ─────────
     Base.metadata.create_all(bind=engine)
     from sqlalchemy import text as _text
+
     try:
         with engine.connect() as _conn:
             for stmt in [
@@ -396,15 +453,24 @@ async def startup_event():
             _conn.commit()
 
             import secrets as _sec, string as _str
+
             _alphabet = _str.ascii_uppercase + _str.digits
-            _rows = _conn.execute(_text("SELECT id FROM users WHERE referral_code IS NULL")).fetchall()
+            _rows = _conn.execute(
+                _text("SELECT id FROM users WHERE referral_code IS NULL")
+            ).fetchall()
             for _row in _rows:
                 while True:
-                    _code = ''.join(_sec.choice(_alphabet) for _ in range(8))
-                    _exists = _conn.execute(_text(f"SELECT 1 FROM users WHERE referral_code = '{_code}'")).fetchone()
+                    _code = "".join(_sec.choice(_alphabet) for _ in range(8))
+                    _exists = _conn.execute(
+                        _text(f"SELECT 1 FROM users WHERE referral_code = '{_code}'")
+                    ).fetchone()
                     if not _exists:
                         break
-                _conn.execute(_text(f"UPDATE users SET referral_code = '{_code}' WHERE id = {_row[0]}"))
+                _conn.execute(
+                    _text(
+                        f"UPDATE users SET referral_code = '{_code}' WHERE id = {_row[0]}"
+                    )
+                )
             _conn.commit()
     except Exception:
         pass
@@ -414,22 +480,23 @@ async def startup_event():
         from src.database.session import SessionLocal as _SL
         from src.users.crud import get_user_by_email as _gube, create_user as _cu
         from src.users.schemas import UserCreate as _UC
+
         _ADMIN_EMAIL = "AdminfinAi@gmail.com"
-        _ADMIN_PASS  = "FineAdminpass1"
+        _ADMIN_PASS = "FineAdminpass1"
         with _SL() as _db:
             _existing = _gube(_db, _ADMIN_EMAIL)
             if not _existing:
                 _admin = _cu(_db, _UC(email=_ADMIN_EMAIL, password=_ADMIN_PASS))
-                _admin.is_admin        = True
+                _admin.is_admin = True
                 _admin.is_mail_verified = True
-                _admin.account_tier    = 3
+                _admin.account_tier = 3
                 _db.commit()
                 logger.success(f" Admin seeded: {_ADMIN_EMAIL}")
             else:
                 if not _existing.is_admin:
-                    _existing.is_admin        = True
+                    _existing.is_admin = True
                     _existing.is_mail_verified = True
-                    _existing.account_tier    = 3
+                    _existing.account_tier = 3
                     _db.commit()
                 logger.info(f"  Admin already exists: {_ADMIN_EMAIL}")
     except Exception as _seed_err:
@@ -439,11 +506,18 @@ async def startup_event():
     try:
         from src.database.session import SessionLocal as _SL2
         from src.database.models import WalletConfig as _WC
+
         _BTC_ADDR = "1LA4XUiQgTELjvDiRBQ41y4T2C5Y7L5Wmt"
         with _SL2() as _db2:
             _btc = _db2.query(_WC).filter(_WC.key == "btc_address").first()
             if not _btc:
-                _db2.add(_WC(key="btc_address", value=_BTC_ADDR, label="Bitcoin (BTC) Address"))
+                _db2.add(
+                    _WC(
+                        key="btc_address",
+                        value=_BTC_ADDR,
+                        label="Bitcoin (BTC) Address",
+                    )
+                )
                 _db2.commit()
                 logger.success(f" BTC deposit address seeded: {_BTC_ADDR}")
             elif not _btc.value:
@@ -458,11 +532,12 @@ async def startup_event():
         import json as _json
         from src.database.session import SessionLocal as _SL3
         from src.database.models import WalletConfig as _WC2
+
         _DEFAULT_VPS = '[{"id":1,"name":"DigitalOcean","price":6,"specs":"1 vCPU \u00b7 1GB RAM \u00b7 25GB SSD"},{"id":2,"name":"Linode","price":5,"specs":"1 vCPU \u00b7 1GB RAM \u00b7 25GB SSD"},{"id":3,"name":"Vultr","price":6,"specs":"1 vCPU \u00b7 1GB RAM \u00b7 25GB SSD"},{"id":4,"name":"Kamatera","price":4,"specs":"1 vCPU \u00b7 1GB RAM \u00b7 20GB SSD"},{"id":5,"name":"Liquid Web","price":15,"specs":"1 vCPU \u00b7 2GB RAM \u00b7 40GB SSD"},{"id":6,"name":"Hostinger","price":4,"specs":"1 vCPU \u00b7 1GB RAM \u00b7 20GB SSD"},{"id":7,"name":"IONOS","price":5,"specs":"1 vCPU \u00b7 1GB RAM \u00b7 25GB SSD"},{"id":8,"name":"ScalaHosting","price":10,"specs":"1 vCPU \u00b7 2GB RAM \u00b7 50GB SSD"},{"id":9,"name":"InMotion Hosting","price":20,"specs":"2 vCPU \u00b7 4GB RAM \u00b7 75GB SSD"},{"id":10,"name":"A2 Hosting","price":5,"specs":"1 vCPU \u00b7 1GB RAM \u00b7 25GB SSD"}]'
         _DEFAULT_ASSETS = '[{"id":1,"name":"Bitcoin (BTC)","price":67432,"icon":"\u20bf"},{"id":2,"name":"Ethereum (ETH)","price":3521,"icon":"\u039e"},{"id":3,"name":"BNB","price":598,"icon":"B"}]'
         with _SL3() as _db3:
             for _key, _val, _lbl in [
-                ("vps_plans",      _DEFAULT_VPS,    "VPS Plans"),
+                ("vps_plans", _DEFAULT_VPS, "VPS Plans"),
                 ("asset_products", _DEFAULT_ASSETS, "Asset Products"),
             ]:
                 _row = _db3.query(_WC2).filter(_WC2.key == _key).first()
@@ -481,17 +556,20 @@ async def startup_event():
     try:
         from src.database.session import SessionLocal as _SL_EVO
         from src.database.models import WalletConfig as _WC_EVO
+
         with _SL_EVO() as _ev_db:
             _EVO_MAP = [
-                ("evo_api_url",  "EVOLUTION_API_URL",  "Evolution API URL"),
-                ("evo_api_key",  "EVOLUTION_API_KEY",  "Evolution API Key"),
+                ("evo_api_url", "EVOLUTION_API_URL", "Evolution API URL"),
+                ("evo_api_key", "EVOLUTION_API_KEY", "Evolution API Key"),
                 ("evo_instance", "EVOLUTION_INSTANCE", "Evolution Instance Name"),
             ]
             _changed = False
             for _ev_db_key, _ev_env_key, _ev_label in _EVO_MAP:
                 _env_val = os.environ.get(_ev_env_key, "").strip()
-                _ev_row  = _ev_db.query(_WC_EVO).filter(_WC_EVO.key == _ev_db_key).first()
-                _db_val  = (_ev_row.value or "").strip() if _ev_row else ""
+                _ev_row = (
+                    _ev_db.query(_WC_EVO).filter(_WC_EVO.key == _ev_db_key).first()
+                )
+                _db_val = (_ev_row.value or "").strip() if _ev_row else ""
 
                 if _env_val:
                     # Env var is set (start.sh / secrets) — it must match the running
@@ -500,8 +578,14 @@ async def startup_event():
                         if _ev_row:
                             _ev_row.value = _env_val
                         else:
-                            _ev_db.add(_WC_EVO(key=_ev_db_key, value=_env_val,
-                                               label=_ev_label, updated_by=None))
+                            _ev_db.add(
+                                _WC_EVO(
+                                    key=_ev_db_key,
+                                    value=_env_val,
+                                    label=_ev_label,
+                                    updated_by=None,
+                                )
+                            )
                         _changed = True
                 elif _db_val:
                     # No env var — fall back to DB value.
@@ -514,7 +598,9 @@ async def startup_event():
             if _has_evo:
                 logger.success(" Evolution API config loaded from database")
             else:
-                logger.info("  EVOLUTION_API_KEY not set — WhatsApp via Evolution disabled")
+                logger.info(
+                    "  EVOLUTION_API_KEY not set — WhatsApp via Evolution disabled"
+                )
     except Exception as _ev_err:
         logger.warning(f"Evolution API config load skipped: {_ev_err}")
 
@@ -527,6 +613,7 @@ async def _deferred_init():
     """Start scheduler and register Telegram webhook after server is ready."""
     try:
         from src.notifications.scheduler import scheduler
+
         scheduler.start()
         logger.success(" Scheduler started")
     except Exception as _sch_err:
@@ -540,10 +627,7 @@ async def _deferred_init():
         _wh_secret = os.getenv("TELEGRAM_WEBHOOK_SECRET", "")
 
         # Prioritize custom domain from env, fallback to hardcoded
-        WEBHOOK_URL = os.getenv(
-            "WEBHOOK_URL", 
-            "/api/telegram/webhook"
-        )
+        WEBHOOK_URL = os.getenv("WEBHOOK_URL", "/api/telegram/webhook")
         logger.info(f"Webhook URL: {WEBHOOK_URL}")
         if _bot_token:
             payload = {"url": WEBHOOK_URL}
@@ -569,6 +653,7 @@ async def _deferred_init():
 async def shutdown_event():
     try:
         from src.notifications.scheduler import scheduler
+
         scheduler.shutdown()
         logger.info(" Scheduler shut down gracefully")
     except Exception as e:
@@ -577,10 +662,5 @@ async def shutdown_event():
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run(
-        "main:app",
-        host="0.0.0.0",
-        port=8000,
-        reload=True,
-        log_level="info"
-    )
+
+    uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=True, log_level="info")
