@@ -341,7 +341,7 @@ Sign-off: Always close trade suggestions with: "Analysis Calculation by FinAi.Tr
 
 def chat_with_agent(
     message: str,
-    user_email: str = None,
+    user_email: str | None = None,
     market_context: str = "",
 ) -> str:
     """
