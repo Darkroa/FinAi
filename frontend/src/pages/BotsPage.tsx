@@ -955,9 +955,13 @@ export default function BotsPage() {
                         <span className="text-[10px] text-[#848e9c]">·</span>
                         <span className="text-[10px] capitalize text-[#848e9c]">{bot.direction}</span>
                         <span className="text-[10px] text-[#848e9c]">·</span>
-                        <span className="text-[10px] font-mono text-[#0ecb81]">TP +{bot.take_profit_pct}%</span>
+                        <span className="text-[10px] font-mono text-[#0ecb81]">TP {bot.take_profit_pct}%</span>
                         <span className="text-[10px] text-[#848e9c]">·</span>
-                        <span className="text-[10px] font-mono text-[#f6465d]">SL -{bot.stop_loss_pct ?? 50}%</span>
+                        <span className="text-[10px] font-mono text-[#f6465d]">SL {bot.stop_loss_pct ?? 50}%</span>
+                        <span className="text-[10px] text-[#848e9c]">·</span>
+                        <span className="text-[10px] font-mono text-[#f0b90b]">Lev {bot.leverage ?? 1}x</span>
+                        <span className="text-[10px] text-[#848e9c]">·</span>
+                        <span className="text-[10px] font-mono text-[#eaecef]">NOE {(bot.num_trades ?? 0) === 0 ? '∞' : bot.num_trades}</span>
                         {bot.running && <span className="text-[10px] text-[#0ecb81] animate-pulse">● Live</span>}
                       </div>
                     </div>
