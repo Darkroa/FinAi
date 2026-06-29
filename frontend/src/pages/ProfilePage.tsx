@@ -9,7 +9,7 @@ import {
 } from '../lib/api'
 import toast from 'react-hot-toast'
 import {
-  User, Camera, Shield, CheckCircle,
+  User, Camera, Shield, CheckCircle, ShieldCheck,
   Mail, Lock, Key, Eye, EyeOff,
   Copy, AlertCircle, Send, MessageCircle, LogOut, ChevronDown,
   RefreshCw, Gift, Share2, Users as UsersIcon, TrendingUp,
@@ -148,6 +148,17 @@ export default function ProfilePage() {
 
   return (
     <div className="max-w-md mx-auto space-y-3">
+
+      {/* Admin Panel shortcut — admins only */}
+      {user?.is_admin && (
+        <button
+          onClick={() => navigate('/admin')}
+          className="flex items-center gap-1 px-1.5 py-1 rounded-lg bg-[#f6465d]/10 border border-[#f6465d]/20 hover:bg-[#f6465d]/20 transition"
+        >
+          <ShieldCheck size={11} className="text-[#f6465d]" />
+          <span className="text-[10px] font-semibold text-[#f6465d]">Admin Panel</span>
+        </button>
+      )}
 
       {/* ── Premium Profile Card ── */}
       <div className="relative bg-[#161a1e] border border-[#2b3139] rounded-2xl overflow-hidden">
