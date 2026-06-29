@@ -6901,6 +6901,99 @@ async def admin_delete_testimonial(testimonial_id: int, db: Session = Depends(ge
 
 
 
+# ===================== Macro / Economic Data (OpenBB + yfinance + FRED) =====================
+
+@router.get("/public/macro/indicators")
+async def macro_indicators():
+    """
+    Live snapshot: VIX, DXY, S&P 500, Nasdaq, Dow, Russell 2000,
+    Gold, Oil (WTI & Brent), Natural Gas, Silver, Copper, BTC, ETH,
+    10Y & 30Y Treasury yields.
+    No API key required — powered by yfinance.  Cached 5 min.
+    """
+    from src.utils.openbb_data import get_market_indicators
+    try:
+        return {"ok": True, "data": get_market_indicators()}
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=str(exc))
+
+
+@router.get("/public/macro/indicators/list")
+async def macro_indicators_list():
+    """List all available market indicator slugs."""
+    from src.utils.openbb_data import available_indicators
+    return {"ok": True, "data": available_indicators()}
+
+
+@router.get("/public/macro/yield-curve")
+async def macro_yield_curve():
+    """
+    Treasury yield curve: 13W / 5Y / 10Y / 30Y always available (yfinance).
+    Full curve (1M-30Y) added automatically when FRED_API_KEY env var is set.
+    Includes inverted-yield-curve flag.  Cached 5 min.
+    """
+    from src.utils.openbb_data import get_yield_curve
+    try:
+        return {"ok": True, "data": get_yield_curve()}
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=str(exc))
+
+
+@router.get("/public/macro/history/{symbol}")
+async def macro_ohlcv_history(symbol: str, days: int = 90):
+    """
+    OHLCV history for any equity / ETF / index symbol.
+    Examples: SPY, QQQ, AAPL, ^GSPC, BTC-USD.
+    days = lookback window (2–365, default 90).
+    No API key required — powered by OpenBB/yfinance.  Cached 2 h.
+    """
+    from src.utils.openbb_data import get_historical_ohlcv
+    try:
+        data = get_historical_ohlcv(symbol.upper(), min(max(days, 2), 365))
+        return {"ok": True, "data": data}
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=str(exc))
+
+
+@router.get("/public/macro/overview")
+async def macro_overview():
+    """
+    Latest FRED economic values: Fed Funds Rate, CPI, GDP, Unemployment,
+    M2, Retail Sales, PCE, Industrial Production.
+    Requires FRED_API_KEY env var (free key from fred.stlouisfed.org).
+    Cached 1 h.
+    """
+    from src.utils.openbb_data import get_macro_overview
+    try:
+        return {"ok": True, "data": get_macro_overview()}
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=str(exc))
+
+
+@router.get("/public/macro/series")
+async def macro_series_list():
+    """List all available FRED series slugs (require FRED_API_KEY)."""
+    from src.utils.openbb_data import available_series
+    return {"ok": True, "data": available_series()}
+
+
+@router.get("/public/macro/series/{slug}")
+async def macro_series_history(slug: str, periods: int = 24):
+    """
+    Historical observations for one FRED series.
+    Requires FRED_API_KEY env var.  periods = 2-120 (default 24).
+    Available slugs: fed_rate, cpi, core_cpi, gdp, unemployment,
+                     yield_spread, m2_supply, retail_sales, pce, industrial
+    """
+    from src.utils.openbb_data import get_series_history
+    try:
+        return {"ok": True, "data": get_series_history(slug, min(max(periods, 2), 120))}
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=str(exc))
+
+
 # ===================== WebSocket — Live Balance Push =====================
 
 @router.websocket("/ws/live")
